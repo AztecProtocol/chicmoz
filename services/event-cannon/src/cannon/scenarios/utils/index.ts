@@ -295,6 +295,7 @@ export const registerContractClassArtifact = async (
   artifactObj: { default: NoirCompiledContract } | NoirCompiledContract,
   contractClassId: string,
   _instanceVersion: number,
+  options?: { throwOnError?: boolean },
 ) => {
   const url = generateVerifyArtifactUrl(
     EXPLORER_API_URL,
@@ -302,13 +303,21 @@ export const registerContractClassArtifact = async (
     AZTEC_CONTRACT_CLASS_VERSION,
   );
   const postData = JSON.stringify(generateVerifyArtifactPayload(artifactObj));
-  await callExplorerApi({
+  const res = await callExplorerApi({
     loggingString: `📜 registerContractClassArtifact ${contractLoggingName}`,
     urlStr: url,
     postData,
     method: "POST",
     waitForIndexing: true,
   });
+  if (
+    options?.throwOnError &&
+    !(res.statusCode === 200 || res.statusCode === 201 || res.statusCode === 202)
+  ) {
+    throw new Error(
+      `registerContractClassArtifact failed (${contractLoggingName}): ${res.statusCode} ${res.statusMessage} ${res.data}`,
+    );
+  }
 };
 
 export const registerStandardContractArtifact = async (
