@@ -35,6 +35,7 @@ import { Fr } from "@aztec/aztec.js/fields";
 import { L2Block } from "@aztec/aztec.js/block";
 import { ProtocolContractAddress } from "@aztec/aztec.js/protocol";
 import { BlockNumber } from "@aztec/foundation/branded-types";
+import { getAllPendingTxs } from "./pending-txs.js";
 
 type AwaitedNodeReturn<K extends keyof AztecNode> = Awaited<
   ReturnType<AztecNode[K]>
@@ -244,7 +245,12 @@ export const getL2Tips = async () => {
   return await callNodeFunction("getChainTips");
 };
 
-export const getPendingTxs = async () => callNodeFunction("getPendingTxs");
+export const getPendingTxs = async () => {
+  const node = getRpcNode();
+  return getAllPendingTxs((limit, after) =>
+    callNodeFunction("getPendingTxs", [limit, after], node),
+  );
+};
 
 export const getBalanceOf = async (
   blockNumber: bigint | "latest",
