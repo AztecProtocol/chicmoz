@@ -71,6 +71,7 @@ yarn build
 | `SCENARIO_DEPLOY_AND_UPDATE`                     | `false`                                   | Enable as needed               | Deploy and update contract                                                    |
 | `SCENARIO_AZTEC_STANDARD_TOKEN_CONTRACT_LEGACY`  | `false`                                   | Enable as needed               | Deploy and register legacy standard token                                     |
 | `SCENARIO_AZTEC_STANDARD_TOKEN_CONTRACT_CURRENT` | `false`                                   | Enable as needed               | Deploy and validate current standard tokens (`mockEUR`, `mockUSD`, `mockGBP`) |
+| `SCENARIO_V5_CONTRACT_VERIFICATION`              | `false`                                   | Enable as needed               | Strictly verify the official v5 `PublicChecks` class and instance             |
 
 The `EXPLORER_API_URL` requires the API key in the path because the ingress uses the URL pattern `/v1/<api-key>/<path>`. The auth service validates the key and the ingress rewrites the URL to strip it before forwarding to the backend. Use `dev-api-key` for local development.
 

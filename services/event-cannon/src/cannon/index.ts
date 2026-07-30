@@ -13,6 +13,7 @@ import {
   SCENARIO_TOKEN_CONTRACT,
   SCENARIO_VERIFY_SOURCE_CODE,
   SCENARIO_EXPLORER_SHOWCASE,
+  SCENARIO_V5_CONTRACT_VERIFICATION,
 } from "../environment.js";
 import { logger } from "../logger.js";
 import { setup } from "./pxe.js";
@@ -22,6 +23,7 @@ let isShutdown = false;
 const scenariosToRun: {
   envVar: string;
   scenario: () => Promise<void>;
+  failOnError?: boolean;
 }[] = [];
 
 export async function init() {
@@ -109,6 +111,14 @@ export async function init() {
     });
   }
 
+  if (SCENARIO_V5_CONTRACT_VERIFICATION) {
+    scenariosToRun.push({
+      envVar: "SCENARIO_V5_CONTRACT_VERIFICATION",
+      scenario: scenarios.verifyV5ReferenceContract,
+      failOnError: true,
+    });
+  }
+
   logger.info(`
 SCENARIO_DELAY:                  ${SCENARIO_DELAY / 1000} seconds
 INIFINITE_LOOP:                  ${INIFINITE_LOOP ? "✅" : "❌"}
@@ -127,6 +137,7 @@ SCENARIO_AZTEC_STANDARD_TOKEN_CONTRACT_LEGACY: ${SCENARIO_AZTEC_STANDARD_TOKEN_C
 SCENARIO_AZTEC_STANDARD_TOKEN_CONTRACT_CURRENT: ${SCENARIO_AZTEC_STANDARD_TOKEN_CONTRACT_CURRENT ? "✅" : "❌"}
 SCENARIO_VERIFY_SOURCE_CODE:            ${SCENARIO_VERIFY_SOURCE_CODE ? "✅" : "❌"}
 SCENARIO_EXPLORER_SHOWCASE:             ${SCENARIO_EXPLORER_SHOWCASE ? "✅" : "❌"}
+SCENARIO_V5_CONTRACT_VERIFICATION:      ${SCENARIO_V5_CONTRACT_VERIFICATION ? "✅" : "❌"}
 `);
 
   await setup();
@@ -151,6 +162,9 @@ const runScenarios = async () => {
     } catch (e) {
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       logger.error(`Error running scenario: ${(e as Error).stack ?? e}`);
+      if (scenario.failOnError) {
+        throw e;
+      }
     }
     logger.info(
       `waiting ${SCENARIO_DELAY / 1000} seconds before next scenario...`,
