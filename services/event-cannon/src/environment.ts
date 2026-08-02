@@ -42,3 +42,5 @@ export const SCENARIO_VERIFY_SOURCE_CODE =
   process.env.SCENARIO_VERIFY_SOURCE_CODE === "true";
 export const SCENARIO_EXPLORER_SHOWCASE =
   process.env.SCENARIO_EXPLORER_SHOWCASE === "true";
+export const SCENARIO_V5_CONTRACT_VERIFICATION =
+  process.env.SCENARIO_V5_CONTRACT_VERIFICATION === "true";

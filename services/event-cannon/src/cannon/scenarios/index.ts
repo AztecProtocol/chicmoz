@@ -22,3 +22,4 @@ export async function deployAztecStandardTokenContractLegacy() {
 export { run as verifySourceCode } from "./verify-source-code.js";
 export { run as deployAndInteractWithFpc } from "./deploy-and-interact-with-fpc.js";
 export { run as deployAndInteractExplorerShowcase } from "./deploy-and-interact-explorer-showcase.js";
+export { run as verifyV5ReferenceContract } from "./verify-v5-reference-contract.js";

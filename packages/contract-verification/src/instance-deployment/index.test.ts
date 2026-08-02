@@ -1,68 +1,64 @@
+import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { loadContractArtifact } from "@aztec/aztec.js/abi";
 import {
-  NoirCompiledContract,
-  loadContractArtifact,
-} from "@aztec/aztec.js/abi";
-import contractArtifactJson from "@aztec/noir-contracts.js/artifacts/private_voting_contract-PrivateVoting" with { type: "json" };
-import { beforeAll, describe, expect, test } from "vitest";
-import { VerifyInstanceDeploymentPayload } from "../types.js";
+  getContractClassFromArtifact,
+  getContractInstanceFromInstantiationParams,
+} from "@aztec/aztec.js/contracts";
+import { Fr } from "@aztec/aztec.js/fields";
+import publicChecksArtifactJson from "@aztec/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
+import { describe, expect, test } from "vitest";
 import { generateVerifyInstancePayload } from "./generate-payload.js";
 import { verifyInstanceDeploymentPayload } from "./verify-payload.js";
-import { getContractClassFromArtifact } from "@aztec/aztec.js/contracts";
 
-const salt =
-  "0x22a286727cc52b2af208b884a01858793d29d20e897df4b2a80237d96528c8de";
-const adminAddress =
-  "0x2e16425c902f899df2b77bacc911e75e9acb5f0d4e3866303e372b2ed44545d9";
-const publicKeyValues =
-  "0x01498945581e0eb9f8427ad6021184c700ef091d570892c437d12c7d90364bbd170ae506787c5c43d6ca9255d571c10fa9ffa9d141666e290c347c5c9ab7e34400c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb1511b00316144359e9a3ec8e49c1cdb7eeb0cedd190dfd9dc90eea5115aa779e287080ffc74d7a8b0bccb88ac11f45874172f3847eb8b92654aaa58a3d2b8dc7833019c111f36ad3fc1d9b7a7a14344314d2864b94f030594cd67f753ef774a1efb2039907fe37f08d10739255141bb066c506a12f7d1e8dfec21abc58494705b6f";
-const instanceAddress =
-  "0x02a8a8fd9e12fb24265a20109f42fa1afd51d7a1bc88dd163673e91ba38698c0";
-const immutablesHash =
-  "0x0000000000000000000000000000000000000000000000000000000000000000";
+describe("v5 instance deployment verification", () => {
+  test("verifies an official Aztec v5 contract instance", async () => {
+    const artifact = loadContractArtifact(publicChecksArtifactJson);
+    const contractClass = await getContractClassFromArtifact(artifact);
+    const instance = await getContractInstanceFromInstantiationParams(artifact, {
+      constructorArgs: [],
+      deployer: AztecAddress.ZERO,
+      salt: Fr.random(),
+    });
+    const payload = generateVerifyInstancePayload({
+      publicKeysString: instance.publicKeys.toString(),
+      deployer: instance.deployer.toString(),
+      salt: instance.salt.toString(),
+      constructorArgs: [],
+    });
 
-describe.skip("verify instance deployment", () => {
-  let payload: VerifyInstanceDeploymentPayload;
-  let generatingPayloadError: Error;
-  let verifyInstanceDeploymentPayloadResult: boolean;
-  let verifyInstanceDeploymentPayloadError: Error;
-  let contractClass;
-  beforeAll(async () => {
-    const loadedArtifact = loadContractArtifact(contractArtifactJson);
-    contractClass = await getContractClassFromArtifact(loadedArtifact);
-    try {
-      payload = generateVerifyInstancePayload({
-        publicKeysString: publicKeyValues,
-        deployer: adminAddress,
-        salt,
-        constructorArgs: [adminAddress],
-        artifactObj: contractArtifactJson,
-      });
-    } catch (error) {
-      generatingPayloadError = error as Error;
-    }
+    await expect(
+      verifyInstanceDeploymentPayload({
+        ...payload,
+        stringifiedArtifactJson: JSON.stringify(publicChecksArtifactJson),
+        instanceAddress: instance.address.toString(),
+        contractClassId: contractClass.id.toString(),
+        immutablesHash: instance.immutablesHash.toString(),
+      }),
+    ).resolves.toBe(true);
+  });
 
-    try {
-      verifyInstanceDeploymentPayloadResult =
-        await verifyInstanceDeploymentPayload({
-          ...payload,
-          stringifiedArtifactJson: JSON.stringify(
-            contractArtifactJson as unknown as NoirCompiledContract,
-          ),
-          instanceAddress,
-          contractClassId: contractClass.id.toString(),
-          immutablesHash,
-        });
-    } catch (error) {
-      verifyInstanceDeploymentPayloadError = error as Error;
-    }
-  });
-  test("generate payload without error", () => {
-    expect(generatingPayloadError).toBeUndefined();
-  });
-  test("verify payload without error", () => {
-    expect(verifyInstanceDeploymentPayloadError).toBeUndefined();
-  });
-  test("verify payload result", () => {
-    expect(verifyInstanceDeploymentPayloadResult).toBe(true);
+  test("rejects the current class id when it differs from the original class id", async () => {
+    const artifact = loadContractArtifact(publicChecksArtifactJson);
+    const instance = await getContractInstanceFromInstantiationParams(artifact, {
+      constructorArgs: [],
+      deployer: AztecAddress.ZERO,
+      salt: Fr.random(),
+    });
+    const payload = generateVerifyInstancePayload({
+      publicKeysString: instance.publicKeys.toString(),
+      deployer: instance.deployer.toString(),
+      salt: instance.salt.toString(),
+      constructorArgs: [],
+    });
+
+    await expect(
+      verifyInstanceDeploymentPayload({
+        ...payload,
+        stringifiedArtifactJson: JSON.stringify(publicChecksArtifactJson),
+        instanceAddress: instance.address.toString(),
+        contractClassId: Fr.ZERO.toString(),
+        immutablesHash: instance.immutablesHash.toString(),
+      }),
+    ).resolves.toBe(false);
   });
 });

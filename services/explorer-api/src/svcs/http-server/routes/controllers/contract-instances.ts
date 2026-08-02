@@ -382,14 +382,15 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       res.status(400).send("Uploaded deployer does not match the DB");
       return;
     }
+    const deploymentContractClassId = dbContractInstance.originalContractClassId;
     const contractClassString = await dbWrapper.get(
       contractClassWithArtifactKeys(
-        dbContractInstance.currentContractClassId,
+        deploymentContractClassId,
         dbContractInstance.version,
       ),
       () =>
         db.l2Contract.getL2RegisteredContractClass(
-          dbContractInstance.currentContractClassId,
+          deploymentContractClassId,
           dbContractInstance.version,
         ),
     );
@@ -407,7 +408,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       res
         .status(400)
         .send(
-          `artifactJson is missing in the request and could not be found for contract class ${dbContractInstance.currentContractClassId} version ${dbContractInstance.version}`,
+          `artifactJson is missing in the request and could not be found for contract class ${deploymentContractClassId} version ${dbContractInstance.version}`,
         );
       return;
     }
@@ -450,7 +451,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
 
       setEntry(
         contractClassWithArtifactKeys(
-          dbContractInstance.currentContractClassId,
+          deploymentContractClassId,
           dbContractInstance.version,
         ),
         JSON.stringify(completeContractClass),
@@ -501,7 +502,9 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         ...verificationPayload,
         stringifiedArtifactJson: artifactString,
         instanceAddress: address,
-        contractClassId: dbContractInstance.currentContractClassId,
+        // V5 contract addresses stay anchored to the originally deployed class,
+        // even after an instance updates its current class.
+        contractClassId: deploymentContractClassId,
         immutablesHash: dbContractInstance.immutablesHash,
       });
     } catch (error) {

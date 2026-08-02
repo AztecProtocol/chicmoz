@@ -43,10 +43,10 @@ export async function run() {
     contractArtifactJson,
     contractInstance.currentContractClassId.toString(),
     contractInstance.version,
+    { throwOnError: true },
   );
 
-  // Fire-and-forget verification; do not block scenario execution.
-  void verifyContractInstanceDeployment({
+  await verifyContractInstanceDeployment({
     contractLoggingName,
     contractInstanceAddress: contract.address.toString(),
     verifyArgs: {
@@ -65,6 +65,7 @@ export async function run() {
       repoUrl: "https://github.com/AztecProtocol/aztec-packages",
       reviewedAt: new Date(),
     },
+    throwOnError: true,
   });
 
   const votingContractAlice = Contract.at(
