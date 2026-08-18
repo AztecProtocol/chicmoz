@@ -73,12 +73,42 @@ export const IMAGE_PULL_SECRET = z
   .optional()
   .parse(process.env.IMAGE_PULL_SECRET);
 
+// --- Execution backend selection ---
+
+export const EXECUTION_BACKEND = z
+  .enum(["k8s", "aws-batch"])
+  .default("k8s")
+  .parse(process.env.EXECUTION_BACKEND);
+
+// AWS Batch backend configuration (required when EXECUTION_BACKEND=aws-batch).
+// Network placement (subnets, security groups) comes from the Batch compute
+// environment, not from here.
+export const AWS_BATCH_JOB_QUEUE = z
+  .string()
+  .default("")
+  .parse(process.env.AWS_BATCH_JOB_QUEUE);
+
+export const AWS_BATCH_JOB_DEF_PREFIX = z
+  .string()
+  .default("chicmoz-compiler")
+  .parse(process.env.AWS_BATCH_JOB_DEF_PREFIX);
+
+export const AWS_BATCH_EXECUTION_ROLE_ARN = z
+  .string()
+  .default("")
+  .parse(process.env.AWS_BATCH_EXECUTION_ROLE_ARN);
+
+export const AWS_BATCH_LOG_GROUP = z
+  .string()
+  .default("/chicmoz/compiler")
+  .parse(process.env.AWS_BATCH_LOG_GROUP);
+
 export const SERVICE_NAME = "compiler-orchestrator";
 
 export const getConfigStr = () => `COMPILER ORCHESTRATOR
 L2_NETWORK_ID:                ${L2_NETWORK_ID}
 COMPILER_IMAGE:               ${COMPILER_IMAGE}
-K8S_NAMESPACE:                ${K8S_NAMESPACE}
+K8S_NAMESPACE:                ${K8S_NAMESPACE}\nEXECUTION_BACKEND:            ${EXECUTION_BACKEND}\nAWS_BATCH_JOB_QUEUE:          ${AWS_BATCH_JOB_QUEUE || "(unset)"}
 MAX_CONCURRENT_JOBS:          ${MAX_CONCURRENT_JOBS}
 JOB_TIMEOUT_SECONDS:          ${JOB_TIMEOUT_SECONDS}
 JOB_POLL_INTERVAL_MS:         ${JOB_POLL_INTERVAL_MS}
