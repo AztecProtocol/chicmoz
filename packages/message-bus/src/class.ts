@@ -232,13 +232,26 @@ export class MessageBus {
             : typeof messageValue === "string"
               ? new TextEncoder().encode(messageValue)
               : new Uint8Array(0);
-        const deserializedObj = BSON.deserialize(valueAsUint8Array);
-        if (typeof deserializedObj?.data !== "object") {
-          throw new Error(
-            `Deserialized message does not contain a valid data object`,
+        // A message that cannot be deserialized is a poison pill: retrying
+        // it can never succeed, so log it and move on rather than
+        // crash-looping the whole partition.
+        let data: object;
+        try {
+          const deserializedObj = BSON.deserialize(valueAsUint8Array);
+          if (typeof deserializedObj?.data !== "object") {
+            throw new Error(
+              `Deserialized message does not contain a valid data object`,
+            );
+          }
+          data = deserializedObj.data as object;
+        } catch (e) {
+          this.logger.error(
+            `Skipping undeserializable message on topic ${topic}: ${
+              e instanceof Error ? e.stack : String(e)
+            }`,
           );
+          return;
         }
-        const data = deserializedObj.data as object;
         const cb = this.#consumers[groupId]?.topicCallbacks[topic];
         if (cb) {
           // Send a heartbeat before invoking the handler so the broker knows
@@ -251,16 +264,22 @@ export class MessageBus {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
             await cb(data);
           } catch (e) {
+            // Rethrow so kafkajs does NOT resolve this offset. Swallowing
+            // here acknowledged messages whose handler (typically a database
+            // write) had failed, silently losing the event; rethrowing makes
+            // kafkajs redeliver it, giving at-least-once semantics. Handlers
+            // are id-keyed upserts, so redelivery is safe.
             if (e instanceof Error) {
               this.logger.error(
-                `Provided callback for topic ${topic} failed: ${e.stack}`,
+                `Provided callback for topic ${topic} failed (message will be redelivered): ${e.stack}`,
               );
             } else {
               this.logger.warn(
                 // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-                `Provided callback for topic ${topic} failed with non-Error: ${e}`,
+                `Provided callback for topic ${topic} failed with non-Error (message will be redelivered): ${e}`,
               );
             }
+            throw e;
           }
         }
       },
