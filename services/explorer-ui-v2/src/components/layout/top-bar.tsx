@@ -27,7 +27,6 @@ export type TopBarActive =
   | "ecosystem"
   | "l1events"
   | "governance"
-  | "staking"
   | "health";
 
 interface Props {
@@ -70,7 +69,6 @@ const MORE_NAV_ITEMS: NavItem[] = [
     to: "/governance",
     group: "aztec",
   },
-  { key: "staking", label: "Staking", to: "/staking", group: "dev" },
   {
     key: "fee-recipients",
     label: "Fee Recipients",

@@ -4,6 +4,5 @@ metadata:
   name: multi_network
 requires:
   - path: ./skaffold.sandbox_no_ui.components.yaml
-  - path: ./explorer-ui/skaffold.sandbox.yaml
   - path: ./skaffold.testnet.components.yaml
   - path: ./gateways/skaffold.sandbox-testnet.yaml

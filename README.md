@@ -43,11 +43,11 @@ Default settings is to set up a sandbox in the local cluster.
 
 ### 1
 
-if you run the explorer with `skaffold run -f k8s/local/skaffold.no_ui.yaml` you can run the explorer-ui locally for even faster frontend development:
+if you run the explorer with `skaffold run -f k8s/local/skaffold.sandbox_no_ui.yaml` you can run the explorer-ui-v2 locally for even faster frontend development:
 
 ```
 yarn build:packages
-cd /services/explorer-ui
+cd /services/explorer-ui-v2
 yarn
 yarn build
 yarn dev
@@ -164,9 +164,9 @@ The `explorer-api` service provides a RESTful API for querying blockchain data. 
 - Contract classes and instances
 - Chain statistics
 
-### services/explorer-ui
+### services/explorer-ui-v2
 
-The `explorer-ui` service provides a web interface for users to explore the Aztec blockchain data. It's a React-based frontend that communicates with the explorer-api.
+The `explorer-ui-v2` service provides a web interface for users to explore the Aztec blockchain data. It's a React-based frontend that communicates with the explorer-api.
 
 **Key Features:**
 
@@ -255,7 +255,7 @@ Services are designed to fulfill specific roles in the blockchain data pipeline:
 
 - **Listeners** (aztec-listener, ethereum-listener): Watch blockchains and publish events
 - **Processors** (explorer-api): Consume events and transform data
-- **UI** (explorer-ui): Present data to users
+- **UI** (explorer-ui-v2): Present data to users
 - **Infrastructure** (websocket-event-publisher): Support real-time updates
 
 This architecture enables scalable processing of blockchain data and provides a robust platform for building blockchain explorer and analytics applications.
@@ -287,7 +287,7 @@ graph TD
 
     subgraph "Client Interfaces"
         WEP[websocket-event-publisher]
-        UI[explorer-ui]
+        UI[explorer-ui-v2]
         REST[REST API]
     end
 
@@ -329,7 +329,7 @@ The architecture follows an event-driven pattern:
 4. **Presentation Layer**:
 
    - `websocket-event-publisher` forwards real-time events to clients
-   - `explorer-ui` provides a user interface
+   - `explorer-ui-v2` provides a user interface
    - REST API endpoints for programmatic access
 
 5. **Testing & Development**:
@@ -382,7 +382,7 @@ The architecture follows an event-driven pattern:
 | `MAX_CONNECTIONS`       | Maximum number of WebSocket connections | `1000`        |
 | `HEARTBEAT_INTERVAL_MS` | Interval for sending heartbeat messages | `30000`       |
 
-### explorer-ui Configuration
+### explorer-ui-v2 Configuration
 
 | Environment Variable | Description                     | Default Value |
 | -------------------- | ------------------------------- | ------------- |
@@ -449,7 +449,7 @@ The architecture follows an event-driven pattern:
 
 1. **Design the Component**:
 
-   - Create new React components in the explorer-ui service
+   - Create new React components in the explorer-ui-v2 service
    - Define the component's props and state
 
 2. **Add API Hooks**:
@@ -713,7 +713,7 @@ The `k8s` directory contains all Kubernetes configurations for deploying Chicmoz
 The k8s directory is divided into two main subdirectories:
 
 - **local/**: Configurations for local development environments
-- **production/**: Configurations for production deployments
+- **production/**: Legacy Kubernetes manifests from the previous hosting setup (reference only; see Production Deployment below)
 
 Within each environment directory, you'll find:
 
@@ -785,7 +785,7 @@ For local development, use the provided Skaffold configurations:
 skaffold run -f k8s/local/skaffold.default.yaml
 
 # Setup without UI (for frontend development)
-skaffold run -f k8s/local/skaffold.no_ui.yaml
+skaffold run -f k8s/local/skaffold.sandbox_no_ui.yaml
 
 # Full setup with additional monitoring tools
 skaffold run -f k8s/local/skaffold.deluxe.yaml
@@ -796,30 +796,12 @@ skaffold run -f k8s/local/skaffold.only_aztec-listener.yaml
 
 ### Production Deployment
 
-For production deployment, the process involves:
-
-1. **Set up environment variables**:
-
-   - Create a `.chicmoz.env` file with production settings
-   - Set appropriate API keys, URLs, and resource limits
-
-2. **Deploy infrastructure components**:
-
-   ```sh
-   skaffold run -f k8s/production/common/skaffold.infra.yaml
-   ```
-
-3. **Deploy certificates and TLS**:
-
-   ```sh
-   skaffold run -f k8s/production/common/skaffold.certs.yaml
-   ```
-
-4. **Deploy services**:
-
-   ```sh
-   skaffold run -f k8s/production/skaffold.testnet.yaml
-   ```
+Production (aztecscan.xyz) is operated by the Aztec Foundation on AWS. The
+infrastructure, image builds, and deploy pipeline live in the
+[foundation-iac](https://github.com/AztecProtocol/foundation-iac) repository
+(`aztecscan.xyz/`), which pins a commit of this repository and builds every
+service image from it. The `k8s/production` manifests here are retained for
+reference only and are not used by that pipeline.
 
 ### Monitoring and Observability
 

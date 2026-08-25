@@ -17,7 +17,6 @@ import { Route as rootRoute } from './routes/__root'
 // Create Virtual Routes
 
 const TermsAndConditionsLazyImport = createFileRoute('/terms-and-conditions')()
-const StakingLazyImport = createFileRoute('/staking')()
 const SearchLazyImport = createFileRoute('/search')()
 const PrivacyPolicyLazyImport = createFileRoute('/privacy-policy')()
 const FeeRecipientsLazyImport = createFileRoute('/fee-recipients')()
@@ -62,11 +61,6 @@ const TermsAndConditionsLazyRoute = TermsAndConditionsLazyImport.update({
 } as any).lazy(() =>
   import('./routes/terms-and-conditions.lazy').then((d) => d.Route),
 )
-
-const StakingLazyRoute = StakingLazyImport.update({
-  path: '/staking',
-  getParentRoute: () => rootRoute,
-} as any).lazy(() => import('./routes/staking.lazy').then((d) => d.Route))
 
 const SearchLazyRoute = SearchLazyImport.update({
   path: '/search',
@@ -286,13 +280,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchLazyImport
       parentRoute: typeof rootRoute
     }
-    '/staking': {
-      id: '/staking'
-      path: '/staking'
-      fullPath: '/staking'
-      preLoaderRoute: typeof StakingLazyImport
-      parentRoute: typeof rootRoute
-    }
     '/terms-and-conditions': {
       id: '/terms-and-conditions'
       path: '/terms-and-conditions'
@@ -432,7 +419,6 @@ export const routeTree = rootRoute.addChildren({
   FeeRecipientsLazyRoute,
   PrivacyPolicyLazyRoute,
   SearchLazyRoute,
-  StakingLazyRoute,
   TermsAndConditionsLazyRoute,
   AddressAddressLazyRoute,
   BlocksBlockNumberLazyRoute,
@@ -470,7 +456,6 @@ export const routeTree = rootRoute.addChildren({
         "/fee-recipients",
         "/privacy-policy",
         "/search",
-        "/staking",
         "/terms-and-conditions",
         "/address/$address",
         "/blocks/$blockNumber",
@@ -510,9 +495,6 @@ export const routeTree = rootRoute.addChildren({
     },
     "/search": {
       "filePath": "search.lazy.tsx"
-    },
-    "/staking": {
-      "filePath": "staking.lazy.tsx"
     },
     "/terms-and-conditions": {
       "filePath": "terms-and-conditions.lazy.tsx"
