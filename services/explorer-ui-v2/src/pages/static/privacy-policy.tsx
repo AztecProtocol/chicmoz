@@ -1,17 +1,17 @@
 import { type FC } from "react";
 import { StaticPage } from "./static-page";
 
-const CONTACT_EMAIL = "info@obscura.network";
+const CONTACT_EMAIL = "privacy@aztec.foundation";
 
 export const PrivacyPolicyPage: FC = () => (
   <StaticPage
     slug="privacy"
     title="Privacy notice"
-    subtitle="Last updated 21 September 2024"
+    subtitle="Last updated 25 August 2026"
     comment="how we collect, use, and share your information"
   >
     <p>
-      This privacy notice for Send Return B.V. (&ldquo;we,&rdquo; &ldquo;us,&rdquo;
+      This privacy notice for the Aztec Foundation (&ldquo;we,&rdquo; &ldquo;us,&rdquo;
       or &ldquo;our&rdquo;), describes how and why we might collect, store, use,
       and/or share (&ldquo;process&rdquo;) your information when you use our
       services (&ldquo;Services&rdquo;), such as when you:
@@ -64,23 +64,13 @@ export const PrivacyPolicyPage: FC = () => (
       </li>
     </ul>
 
-    <h3>Analytics</h3>
+    <h3>Analytics and cookies</h3>
     <p>
-      We use a self-hosted instance of Plausible Analytics to collect anonymous
-      usage statistics about our website. Because we self-host, your data is
-      not shared with any third-party analytics provider and remains under our
-      control on our servers located in the EU.
+      We do not run third-party analytics or advertising scripts, and the
+      Services do not set tracking cookies. Aggregate request metrics (such as
+      request counts, error rates, and latency) are derived from our own
+      infrastructure logs and are not used to identify individual visitors.
     </p>
-    <p>Plausible Analytics is privacy-focused and:</p>
-    <ul>
-      <li>Does not use cookies</li>
-      <li>Does not collect personal information</li>
-      <li>Does not track users across websites</li>
-      <li>
-        Collects only minimal, aggregated usage data (page views, referrer
-        sources, and anonymous device information)
-      </li>
-    </ul>
 
     <h2>2. How do we process your information?</h2>
     <p>
@@ -163,10 +153,12 @@ export const PrivacyPolicyPage: FC = () => (
 
     <h2>6. International transfers</h2>
     <p>
-      Our servers are located in France. If you are accessing our Services
-      from outside France, please be aware that your information may be
-      transferred to, stored, and processed by us and our third parties in
-      France and other countries. We will take all necessary measures to
+      Our servers are hosted by Amazon Web Services in the United Kingdom
+      (London), and static content is delivered through a global content
+      delivery network. If you are accessing our Services from elsewhere,
+      please be aware that your information may be transferred to, stored, and
+      processed by us and our service providers in the United Kingdom and other
+      countries. We will take all necessary measures to
       protect your personal information in accordance with this notice and
       applicable law.
     </p>
@@ -176,7 +168,7 @@ export const PrivacyPolicyPage: FC = () => (
       We keep your information for as long as necessary to fulfil the purposes
       outlined in this notice unless otherwise required by law. No purpose in
       this notice will require us to keep your personal information for longer
-      than 6 months past the termination of the user&apos;s account.
+      than 6 months. The Services do not offer user accounts.
     </p>
 
     <h2>8. How do we keep your information safe?</h2>
@@ -252,7 +244,7 @@ export const PrivacyPolicyPage: FC = () => (
       If you have questions or comments about this notice, email us at{" "}
       <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or write to:
     </p>
-    <p>Send Return B.V.</p>
+    <p>Aztec Foundation</p>
 
     <h2>15. Review, update, or delete your data</h2>
     <p>

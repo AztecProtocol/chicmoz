@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { type FC } from "react";
 import { StaticPage } from "./static-page";
 
@@ -52,11 +51,10 @@ export const AboutUsPage: FC = () => (
       on the ground. Because Web3 is simply too valuable to be used carelessly.
       This is the future we are forging, after all.
     </p>
-    <div className="static-cta">
-      <Link to="/staking" className="cta-primary">
-        <span>Support Aztec-Scan by delegating to us</span>
-        <span className="arrow">→</span>
-      </Link>
-    </div>
+    <p>
+      Aztec-Scan was created by its original builders and is now operated by
+      the Aztec Foundation as a public good for the Aztec ecosystem. The
+      source remains open under the same licence.
+    </p>
   </StaticPage>
 );
