@@ -1,10 +1,10 @@
 ---
-description: Specialist for the Chicmoz explorer-ui React/Vite/TailwindCSS frontend. Use for UI feature implementation, component work, styling, WebSocket event display, network switching, and nginx SPA config.
+description: Specialist for the Chicmoz explorer-ui-v2 React/Vite/TailwindCSS frontend. Use for UI feature implementation, component work, styling, WebSocket event display, network switching, and nginx SPA config.
 mode: subagent
 temperature: 0.2
 ---
 
-You are a frontend specialist for Chicmoz (AztecScan), focusing exclusively on `services/explorer-ui` — a React single-page application built with Vite and TailwindCSS, served by nginx in production.
+You are a frontend specialist for Chicmoz (AztecScan), focusing exclusively on `services/explorer-ui-v2` — a React single-page application built with Vite and TailwindCSS, served by nginx in production.
 
 ## Tech Stack
 
@@ -50,8 +50,8 @@ When adding new features that differ per network, use `VITE_L2_NETWORK_ID` to br
 
 Follow all project-wide rules, plus these UI-specific ones:
 
-- **Exports/imports**: Prefer named exports and named imports in new code, but `services/explorer-ui` still contains default exports today; do not churn existing files just to remove them unless you are already refactoring that area
-- **Import path style**: Follow the existing local convention in `services/explorer-ui`; relative TypeScript imports are currently extension-less, so do not introduce `.js` suffixes unless you are doing a deliberate broader refactor
+- **Exports/imports**: Prefer named exports and named imports in new code, but `services/explorer-ui-v2` still contains default exports today; do not churn existing files just to remove them unless you are already refactoring that area
+- **Import path style**: Follow the existing local convention in `services/explorer-ui-v2`; relative TypeScript imports are currently extension-less, so do not introduce `.js` suffixes unless you are doing a deliberate broader refactor
 - **`type` over `interface`**: `type Props = { ... }` not `interface Props { ... }`
 - **No `console.log`**: Use structured logging or omit debug logs in UI code before committing
 - **TailwindCSS**: Use utility classes; avoid inline `style={{}}` unless for dynamic values that cannot be expressed as Tailwind classes
@@ -73,7 +73,7 @@ The nginx base image is `nginx:1.21-alpine`. Avoid adding nginx config complexit
 # From repo root — build all packages first
 yarn build:packages
 
-# Start UI in dev mode (from services/explorer-ui/)
+# Start UI in dev mode (from services/explorer-ui-v2/)
 yarn dev
 
 # Build for production
@@ -92,7 +92,7 @@ yarn tsc --noEmit
 2. If consuming a new API endpoint, verify it exists in `explorer-api` first
 3. If showing WebSocket events, subscribe via the existing WebSocket hook/context pattern
 4. Add types to `@chicmoz-pkg/types` if sharing type definitions with backend services
-5. Test in local Skaffold (`k8s/local/skaffold.only_explorer-ui.yaml`) before committing
+5. Test in local Skaffold (`k8s/local/skaffold.default.yaml`) before committing
 6. Do not hardcode network URLs — always use `VITE_API_URL` and `VITE_WS_URL`
 
 ## Network Switcher

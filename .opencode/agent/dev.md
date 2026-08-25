@@ -46,7 +46,7 @@ You are a development specialist for Chicmoz (AztecScan), a block explorer for t
 | explorer-api              | REST API (Express + Drizzle ORM), serves `/v1/{apiKey}/...` endpoints |
 | aztec-listener            | Polls Aztec L2 nodes, publishes to Kafka                              |
 | ethereum-listener         | Listens to Ethereum L1 via viem, publishes to Kafka                   |
-| explorer-ui               | React SPA (Vite + TailwindCSS)                                        |
+| explorer-ui-v2            | React SPA (Vite + TailwindCSS)                                        |
 | websocket-event-publisher | Kafka consumer pushing events via WebSocket                           |
 | auth                      | API key validation (Sequelize + Redis + LRU cache)                    |
 | event-cannon              | Dev/test synthetic event producer                                     |

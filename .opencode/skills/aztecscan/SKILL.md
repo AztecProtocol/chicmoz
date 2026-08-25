@@ -28,7 +28,7 @@ Gives you instant orientation to the Chicmoz (AztecScan) codebase — what lives
 | L1 chain client  | `viem` — pinned at root                                                        |
 | Frontend         | React 18, Vite, TailwindCSS, TanStack Router/Query/Table, shadcn/ui            |
 | Real-time        | Native `WebSocket` (server: `ws` library; client: browser WebSocket API)       |
-| Infrastructure   | Kubernetes (DigitalOcean), Skaffold, GitHub Actions                            |
+| Infrastructure   | AWS (see AztecProtocol/foundation-iac); local dev via Kubernetes + Skaffold    |
 | Logging          | Winston via `@chicmoz-pkg/logger-server` — **no `console.log` anywhere**       |
 
 ---
@@ -44,7 +44,7 @@ aztecscan/
 │   ├── staging/            Staging configs (self-hosted runner)
 │   └── production/         Production configs (mainnet / devnet / testnet)
 ├── scripts/                Bash ops scripts (deploy, scale, DB backup, registry cleanup)
-├── .github/workflows/      6 GitHub Actions workflows
+├── .github/workflows/      PR build workflow
 ├── .opencode/              AI agent + skill definitions
 │   ├── agents/             Specialist subagent configs (dev, devops, frontend, etc.)
 │   └── skills/             Procedural skill guides (this file + kafka, react, aztec-types, etc.)
@@ -67,7 +67,7 @@ aztecscan/
 | `ethereum-listener`         | Watches Ethereum L1 for rollup contract events (block proposed, proof verified, validator changes) | `viem`, `@aztec/l1-artifacts`, Drizzle                                            | Yes (`ethereum_listener_{network}`) | **Publishes** 6 event types                                                                   |
 | `explorer-api`              | Central REST API — consumes all Kafka events, stores in DB, serves UI + external consumers         | Express, Drizzle, Redis, `@aztec/aztec.js`, Zod, `@anatine/zod-openapi`           | Yes (`explorer_api_{network}`)      | **Subscribes** to all 14 event types; also **publishes** `L2_BLOCK_FINALIZATION_UPDATE_EVENT` |
 | `websocket-event-publisher` | Bridges Kafka → WebSocket — broadcasts live block/tx updates to browser clients                    | `ws@8`                                                                            | No                                  | **Subscribes** to 3 event types                                                               |
-| `explorer-ui`               | Public-facing React SPA block explorer                                                             | React 18, Vite, TanStack Router/Query/Table, Axios, Zod                           | No                                  | No                                                                                            |
+| `explorer-ui-v2`            | Public-facing React SPA block explorer                                                             | React 18, Vite, TanStack Router/Query/Table, Axios, Zod                           | No                                  | No                                                                                            |
 | `auth`                      | API key validation gateway — rate limiting, key lifecycle management. **Mainnet only.**            | Express, Sequelize, Redis, `express-oauth2-jwt-bearer`                            | Yes (`auth`, `apikey`)              | No                                                                                            |
 | `event-cannon`              | Dev/test-only synthetic transaction firer. **Never deployed in production.**                       | `@aztec/accounts`, `@aztec/noir-contracts.js`, `@defi-wonderland/aztec-standards` | No                                  | No                                                                                            |
 | `compiler-orchestrator`     | Stub — no source code present                                                                      | —                                                                                 | No                                  | No                                                                                            |
@@ -78,7 +78,7 @@ aztecscan/
 
 | Package                 | What It Provides                                                                                                                                                             | Primary Consumers                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `types`                 | All domain Zod schemas + inferred TS types: blocks, tx effects, contracts, validators, pending txs, WebSocket message types, network ID enums, `jsonStringify` (BigInt-safe) | All services + `explorer-ui`                                                       |
+| `types`                 | All domain Zod schemas + inferred TS types: blocks, tx effects, contracts, validators, pending txs, WebSocket message types, network ID enums, `jsonStringify` (BigInt-safe) | All services + `explorer-ui-v2`                                                    |
 | `message-registry`      | Kafka topic name generators (`generateL2TopicName`, `generateL1TopicName`), all message payload type maps (`L2_MESSAGES`, `L1_MESSAGES`), `getConsumerGroupId()`             | `aztec-listener`, `ethereum-listener`, `explorer-api`, `websocket-event-publisher` |
 | `message-bus`           | Kafka abstraction: `MessageBus` class, `publishMessage()`, `startSubscribe()`, BSON serialization, auto-reconnect, heartbeat-before-handler pattern                          | All Kafka-using services                                                           |
 | `microservice-base`     | Service bootstrap framework: `startMicroservice()`, `shutdownMicroservice()`, `MicroserviceBaseSvc` interface, SIGINT/SIGTERM handlers, health check primitives              | All backend services                                                               |
@@ -114,9 +114,9 @@ Kafka ──► explorer-api          (subscribes to all of the above)
 explorer-api         ──► Kafka (BSON): L2_BLOCK_FINALIZATION_UPDATE_EVENT
                                         (published when L1 proof arrives and updates block status)
 
-websocket-event-publisher  ──► WebSocket (JSON, bigints → strings)  ──►  explorer-ui (browser)
+websocket-event-publisher  ──► WebSocket (JSON, bigints → strings)  ──►  explorer-ui-v2 (browser)
 
-explorer-ui  ──► HTTP REST (Axios)  ──►  auth (mainnet) / explorer-api (direct on devnet/testnet)
+explorer-ui-v2  ──► HTTP REST (Axios)  ──►  auth (mainnet) / explorer-api (direct on devnet/testnet)
 auth         ──► HTTP proxy         ──►  explorer-api
 ```
 
@@ -138,7 +138,7 @@ These are non-obvious decisions already made in this codebase. Do not deviate fr
   ```ts
   import { something } from "./utils.js"; // correct — even for .ts source
   ```
-- **Prefer named exports; default exports are not repo-wide forbidden** — backend/shared packages enforce `import/no-default-export`, so use named exports there. `services/explorer-ui` is an explicit exception and may use default exports where the local ESLint config allows them.
+- **Prefer named exports; default exports are not repo-wide forbidden** — backend/shared packages enforce `import/no-default-export`, so use named exports there. `services/explorer-ui-v2` is an explicit exception and may use default exports where the local ESLint config allows them.
 - **`type` imports** — use the `type` keyword for type-only imports to keep bundles clean:
   ```ts
   import { type ChicmozL2Block } from "@chicmoz-pkg/types";
@@ -147,8 +147,8 @@ These are non-obvious decisions already made in this codebase. Do not deviate fr
 ### Types & Validation
 
 - **Zod schemas first** — define a Zod schema, then derive the TypeScript type with `z.infer<>`. Never define domain types manually.
-- **`@chicmoz-pkg/types` is the single source of truth** for all shared domain types and schemas. Do not redefine types locally in a service or in `explorer-ui`.
-- **Validate at the boundary** — API responses in `explorer-ui` are Zod-parsed by `validateResponse()` before entering React Query. Kafka message payloads are typed by the `@chicmoz-pkg/message-registry` type map.
+- **`@chicmoz-pkg/types` is the single source of truth** for all shared domain types and schemas. Do not redefine types locally in a service or in `explorer-ui-v2`.
+- **Validate at the boundary** — API responses in `explorer-ui-v2` are Zod-parsed by `validateResponse()` before entering React Query. Kafka message payloads are typed by the `@chicmoz-pkg/message-registry` type map.
 
 ### Kafka
 
@@ -166,7 +166,7 @@ These are non-obvious decisions already made in this codebase. Do not deviate fr
 
 - **Winston only via `@chicmoz-pkg/logger-server`** — never use `console.log`, `console.error`, or `console.warn` in service code.
 
-### Frontend (`explorer-ui`)
+### Frontend (`explorer-ui-v2`)
 
 - **Build-time env vars** — all `VITE_*` variables are baked into the Docker image at build time. There is no runtime env injection. To change a URL you must rebuild the image.
 - **Per-network images** — each network (mainnet/testnet/devnet) has its own Docker image with different baked-in `VITE_API_URL`, `VITE_WS_URL`, and `VITE_L2_NETWORK_ID`.
@@ -195,13 +195,13 @@ These are non-obvious decisions already made in this codebase. Do not deviate fr
 
 Load these after this foundation skill when working on a specific area:
 
-| Task                                                                      | Load skill             |
-| ------------------------------------------------------------------------- | ---------------------- |
-| Adding a new Kafka topic or message type                                  | `kafka-message-design` |
-| Working with Aztec SDK types (`Fr`, `AztecAddress`, block structures)     | `aztec-types-guide`    |
-| Writing/reviewing React components, hooks, data fetching in `explorer-ui` | `react-best-practices` |
-| UI layout, styling, design conventions in `explorer-ui`                   | `frontend-design`      |
-| Creating a release, writing a changelog, bumping Aztec versions           | `git-release`          |
+| Task                                                                         | Load skill             |
+| ---------------------------------------------------------------------------- | ---------------------- |
+| Adding a new Kafka topic or message type                                     | `kafka-message-design` |
+| Working with Aztec SDK types (`Fr`, `AztecAddress`, block structures)        | `aztec-types-guide`    |
+| Writing/reviewing React components, hooks, data fetching in `explorer-ui-v2` | `react-best-practices` |
+| UI layout, styling, design conventions in `explorer-ui-v2`                   | `frontend-design`      |
+| Creating a release, writing a changelog, bumping Aztec versions              | `git-release`          |
 
 ---
 
@@ -222,14 +222,14 @@ Load these after this foundation skill when working on a specific area:
 | Aztec L2 Kafka publishers                       | `services/aztec-listener/src/events/emitted/`                                                   |
 | L1 event watchers                               | `services/ethereum-listener/src/svcs/events-watcher/`                                           |
 | WebSocket broadcast logic                       | `services/websocket-event-publisher/src/ws-server/`                                             |
-| Frontend API layer (Axios calls)                | `services/explorer-ui/src/api/`                                                                 |
-| Frontend React Query hooks                      | `services/explorer-ui/src/hooks/api/`                                                           |
-| Frontend WebSocket hook                         | `services/explorer-ui/src/hooks/websocket/`                                                     |
-| Frontend route definitions                      | `services/explorer-ui/src/routes/`                                                              |
-| Frontend page components                        | `services/explorer-ui/src/pages/`                                                               |
-| Frontend shared UI primitives (shadcn/ui)       | `services/explorer-ui/src/components/ui/`                                                       |
-| All query key definitions                       | `services/explorer-ui/src/hooks/api/utils.ts`                                                   |
-| API + WebSocket URL constants (frontend)        | `services/explorer-ui/src/service/constants.ts`                                                 |
+| Frontend API layer (Axios calls)                | `services/explorer-ui-v2/src/api/`                                                              |
+| Frontend React Query hooks                      | `services/explorer-ui-v2/src/hooks/api/`                                                        |
+| Frontend WebSocket hook                         | `services/explorer-ui-v2/src/hooks/websocket/`                                                  |
+| Frontend route definitions                      | `services/explorer-ui-v2/src/routes/`                                                           |
+| Frontend page components                        | `services/explorer-ui-v2/src/pages/`                                                            |
+| Frontend shared UI primitives (shadcn/ui)       | `services/explorer-ui-v2/src/components/ui/`                                                    |
+| All query key definitions                       | `services/explorer-ui-v2/src/hooks/api/utils.ts`                                                |
+| API + WebSocket URL constants (frontend)        | `services/explorer-ui-v2/src/service/constants.ts`                                              |
 | Production K8s manifests                        | `k8s/production/{service}/{network}/`                                                           |
 | Skaffold entry points                           | `k8s/production/skaffold.light.yaml` (mainnet), `skaffold.devnet.yaml`, `skaffold.testnet.yaml` |
 | Deploy scripts                                  | `scripts/production/deploy.sh` (mainnet), `deploy-devnet.sh`, `deploy-testnet.sh`               |

@@ -1,6 +1,6 @@
 ---
 name: react-best-practices
-description: React best practices for the Chicmoz explorer-ui (React + Vite + TanStack Router/Query + shadcn/ui). Use when writing, reviewing, or refactoring frontend code — components, hooks, data fetching, WebSocket handling, or performance optimisation.
+description: React best practices for the Chicmoz explorer-ui-v2 (React + Vite + TanStack Router/Query + shadcn/ui). Use when writing, reviewing, or refactoring frontend code — components, hooks, data fetching, WebSocket handling, or performance optimisation.
 license: MIT
 compatibility: opencode
 metadata:
@@ -8,9 +8,9 @@ metadata:
   workflow: frontend
 ---
 
-# React Best Practices — Chicmoz `explorer-ui`
+# React Best Practices — Chicmoz `explorer-ui-v2`
 
-Guidelines for writing and reviewing frontend code in `services/explorer-ui/`. This is a **pure client-side React SPA** (Vite + React 18) — there is no Next.js, no RSC, no SSR, no server actions. All guidance below is scoped to what actually runs in this project.
+Guidelines for writing and reviewing frontend code in `services/explorer-ui-v2/`. This is a **pure client-side React SPA** (Vite + React 18) — there is no Next.js, no RSC, no SSR, no server actions. All guidance below is scoped to what actually runs in this project.
 
 ## Stack at a Glance
 
@@ -353,7 +353,7 @@ Do not use `as any` or `: any`. If a Zod schema covers the data, use `z.infer<ty
 
 ### Domain types come from `@chicmoz-pkg/types`
 
-All L2 block, transaction, contract, and L1 types are defined in the shared workspace package. Do not redefine them locally in `explorer-ui`.
+All L2 block, transaction, contract, and L1 types are defined in the shared workspace package. Do not redefine them locally in `explorer-ui-v2`.
 
 ---
 

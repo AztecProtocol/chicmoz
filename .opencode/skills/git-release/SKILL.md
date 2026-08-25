@@ -75,7 +75,7 @@ v1.11.0  v1.10.0  v1.9.0  v1.8.0  ...  v1.0.0
   ```bash
   git describe --tags  # → "v1.11.0" on tag, "v1.11.0-42-gabc1234" ahead of tag
   ```
-- This becomes `VITE_VERSION_STRING` in the `explorer-ui` build
+- This becomes `VITE_VERSION_STRING` in the `explorer-ui-v2` build
 
 ### Bump rules
 

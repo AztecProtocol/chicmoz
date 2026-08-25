@@ -71,13 +71,13 @@ This package (`packages/types/`) is the **source of truth for all cross-service 
 - L2 transaction types (pending, mined, dropped)
 - L1 contract types (registered classes, deployed instances)
 - Network configuration types
-- API response shapes (used by both `explorer-api` and `explorer-ui`)
+- API response shapes (used by both `explorer-api` and `explorer-ui-v2`)
 
 ### When to add types here
 
 Add to `@chicmoz-pkg/types` when:
 
-- The type is shared between two or more services (e.g., `explorer-api` produces it, `explorer-ui` consumes it)
+- The type is shared between two or more services (e.g., `explorer-api` produces it, `explorer-ui-v2` consumes it)
 - The type is used in a Kafka message (define it here, import it into `@chicmoz-pkg/message-registry`)
 - The type represents an Aztec domain concept (block, tx, contract) that you want decoupled from the SDK version
 
