@@ -2,7 +2,6 @@
 name: react-best-practices
 description: React best practices for the Chicmoz explorer-ui-v2 (React + Vite + TanStack Router/Query + shadcn/ui). Use when writing, reviewing, or refactoring frontend code — components, hooks, data fetching, WebSocket handling, or performance optimisation.
 license: MIT
-compatibility: opencode
 metadata:
   audience: developers
   workflow: frontend

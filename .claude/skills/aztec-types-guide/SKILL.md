@@ -2,7 +2,6 @@
 name: aztec-types-guide
 description: Reference for working with Aztec SDK types and the @chicmoz-pkg/types package in Chicmoz. Covers pinned package versions, key type patterns for blocks, transactions, contracts, and notes on viem compatibility.
 license: MIT
-compatibility: opencode
 metadata:
   audience: developers
   workflow: backend
@@ -22,26 +21,10 @@ metadata:
 
 All `@aztec/*` packages are pinned globally via Yarn resolutions in the root `package.json`. **Do not change individual service package.json versions without updating resolutions too.**
 
-### Current pins (as of last update)
+### Current pins
 
-| Package                     | Version (main/production) | Version (production-devnet) |
-| --------------------------- | ------------------------- | --------------------------- |
-| `@aztec/aztec.js`           | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/stdlib`             | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/accounts`           | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/bb.js`              | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/bb-prover`          | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/builder`            | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/constants`          | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/entrypoints`        | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/ethereum`           | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/foundation`         | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/l1-artifacts`       | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/noir-contracts.js`  | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/protocol-contracts` | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/pxe`                | `4.1.1`                   | `4.0.3`                     |
-| `@aztec/simulator`          | `4.1.1`                   | `4.0.3`                     |
-| `viem`                      | `2.20.0`                  | `2.20.0`                    |
+Read them from the `resolutions` block in the root `package.json` (all
+`@aztec/*` packages share one version). Devnet is no longer served.
 
 ### Additional non-Aztec dependency
 
@@ -185,6 +168,4 @@ When bumping `@aztec/*` versions:
 3. Update `packages/types/` if the Aztec domain model changed (new fields, renamed fields)
 4. Update `services/event-cannon/Dockerfile.compile-contracts` to match: `FROM aztecprotocol/aztec:NEW_VERSION`
 5. Run `yarn build:packages && yarn build && yarn test` to catch type errors early
-6. The devnet branch may be on a different version — apply changes independently per branch
-
-See the `git-release` skill for the full Aztec version bump procedure.
+6. Production is pinned by commit from `AztecProtocol/foundation-iac`; bump `CHICMOZ_REF` there (and the compiler image versions) after merging

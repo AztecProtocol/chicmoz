@@ -2,7 +2,6 @@
 name: kafka-message-design
 description: Step-by-step guide for designing and registering new Kafka topics and message types in Chicmoz. Covers message-registry structure, topic naming, schema definition, SASL auth context, and wiring producers and consumers.
 license: MIT
-compatibility: opencode
 metadata:
   audience: developers
   workflow: backend
