@@ -1,7 +1,7 @@
 import { type FC } from "react";
 import { StaticPage } from "./static-page";
 
-const CONTACT_EMAIL = "privacy@aztec.foundation";
+const CONTACT_EMAIL = "hello@aztec.foundation";
 
 export const PrivacyPolicyPage: FC = () => (
   <StaticPage
