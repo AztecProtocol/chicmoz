@@ -14,7 +14,7 @@ export const Footer: FC = () => (
       <Link to="/terms-and-conditions">Terms</Link>
       <span className="sep">·</span>
       <a
-        href="https://github.com/aztec-scan/chicmoz"
+        href="https://github.com/AztecProtocol/chicmoz"
         target="_blank"
         rel="noreferrer"
       >

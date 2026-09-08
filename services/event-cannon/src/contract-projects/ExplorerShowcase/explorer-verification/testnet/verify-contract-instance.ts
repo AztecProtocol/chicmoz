@@ -17,7 +17,7 @@ const body = {
     creatorName: "AztecScan",
     creatorContact: "admin@aztecscan.xyz",
     appUrl: "https://testnet.aztecscan.xyz",
-    repoUrl: "https://github.com/aztec-scan/chicmoz",
+    repoUrl: "https://github.com/AztecProtocol/chicmoz",
     contractType: "showcase",
   },
   verifiedDeploymentArguments: {
