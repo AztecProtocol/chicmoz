@@ -15,7 +15,7 @@ import {
   SOURCE_VERIFICATION_GIT_REF,
 } from "../../environment.js";
 
-const GITHUB_URL = "https://github.com/aztec-scan/chicmoz";
+const GITHUB_URL = "https://github.com/AztecProtocol/chicmoz";
 const SUB_PATH = "services/event-cannon/src/contract-projects/SimpleLogging";
 const POLL_INTERVAL_MS = 10_000;
 const MAX_POLL_ATTEMPTS = 60; // 10 minutes max

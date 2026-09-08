@@ -12,7 +12,7 @@ import {
 import { truncateHashString } from "~/lib/utils";
 
 const PROJECT_PR_URL =
-  "https://github.com/aztec-scan/chicmoz/blob/main/services/explorer-api/src/constants.ts";
+  "https://github.com/AztecProtocol/chicmoz/blob/main/services/explorer-api/src/constants.ts";
 const SDK_URL = "https://github.com/aztec-scan/aztec-scan-sdk";
 const METADATA_DOC_HASHES = new Set([
   "#aztec-scan-notes",

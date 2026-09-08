@@ -16,7 +16,7 @@ This is also subject to change, and the latest updates on this will always be av
 Experimental SDK can be found here: [aztec-scan-sdk](https://github.com/aztec-scan/aztec-scan-sdk)`,
     contact: {
       name: "Github",
-      url: "https://github.com/aztec-scan/chicmoz",
+      url: "https://github.com/AztecProtocol/chicmoz",
     },
   },
   servers: [
