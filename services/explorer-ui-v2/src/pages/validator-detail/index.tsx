@@ -1,5 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import { type FC } from "react";
+import { isNotFoundError } from "~/api/client";
 import {
   AddressEtherscanLink,
   DetailEmptyState,
@@ -25,7 +26,14 @@ import { validatorStatusToDisplay } from "~/lib/validator-status";
 
 export const ValidatorDetailPage: FC = () => {
   const { attesterAddress = "" } = useParams({ strict: false });
-  const { data: validator, isLoading } = useL1L2Validator(attesterAddress);
+  const {
+    data: validator,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useL1L2Validator(attesterAddress);
   const { data: history } = useL1L2ValidatorHistory(attesterAddress);
   const { data: chainInfo } = useChainInfo();
 
@@ -40,6 +48,17 @@ export const ValidatorDetailPage: FC = () => {
         active="validators"
         crumbs={stubCrumbs}
         message="loading validator…"
+      />
+    );
+  }
+  if (isError && !isNotFoundError(error)) {
+    return (
+      <DetailEmptyState
+        active="validators"
+        crumbs={stubCrumbs}
+        message="couldn't load validator"
+        onRetry={() => void refetch()}
+        retrying={isFetching}
       />
     );
   }

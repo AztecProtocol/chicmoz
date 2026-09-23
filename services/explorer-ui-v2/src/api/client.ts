@@ -99,6 +99,11 @@ export const validateResponse = <T extends z.ZodType>(
   }
 };
 
+// Only a 404 means the resource doesn't exist. Anything else (network drop,
+// 5xx, schema mismatch) is a failed load and must not render as "not found".
+export const isNotFoundError = (error: unknown): boolean =>
+  error instanceof ApiError && error.status === 404;
+
 export const getLastSuccessfulRequest = () => lastSuccessfulRequest;
 export const getLastError = () => lastError;
 
