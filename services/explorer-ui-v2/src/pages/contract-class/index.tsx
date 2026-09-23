@@ -1,6 +1,7 @@
 import { getContractClassVerificationStatus } from "@chicmoz-pkg/types";
 import { Link, Outlet, useLocation, useParams } from "@tanstack/react-router";
 import { type FC, useState } from "react";
+import { isNotFoundError } from "~/api/client";
 import {
   DetailEmptyState,
   DetailField,
@@ -29,7 +30,14 @@ export const ContractClassPage: FC = () => {
     "/submit-standard-contract",
   );
 
-  const { data: classData, isLoading } = useContractClass({
+  const {
+    data: classData,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useContractClass({
     classId,
     version,
   });
@@ -56,6 +64,17 @@ export const ContractClassPage: FC = () => {
         active="contracts"
         crumbs={stubCrumbs}
         message="loading contract class…"
+      />
+    );
+  }
+  if (isError && !isNotFoundError(error)) {
+    return (
+      <DetailEmptyState
+        active="contracts"
+        crumbs={stubCrumbs}
+        message="couldn't load contract class"
+        onRetry={() => void refetch()}
+        retrying={isFetching}
       />
     );
   }

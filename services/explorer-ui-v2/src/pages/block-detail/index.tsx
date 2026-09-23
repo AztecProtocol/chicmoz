@@ -1,5 +1,6 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { type FC, useState } from "react";
+import { isNotFoundError } from "~/api/client";
 import {
   AddressEtherscanLink,
   DetailEmptyState,
@@ -36,6 +37,9 @@ export const BlockDetailPage: FC = () => {
     data: block,
     isLoading,
     isError,
+    error,
+    isFetching,
+    refetch,
   } = useGetBlockByIdentifier(blockNumber);
   const { data: chainInfo } = useChainInfo();
   const height = block?.height ? Number(block.height) : undefined;
@@ -58,7 +62,18 @@ export const BlockDetailPage: FC = () => {
       />
     );
   }
-  if (isError || !block) {
+  if (isError && !isNotFoundError(error)) {
+    return (
+      <DetailEmptyState
+        active="blocks"
+        crumbs={stubCrumbs}
+        message="couldn't load block"
+        onRetry={() => void refetch()}
+        retrying={isFetching}
+      />
+    );
+  }
+  if (!block) {
     return (
       <DetailEmptyState
         active="blocks"

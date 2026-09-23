@@ -1,6 +1,7 @@
 import { getContractInstanceVerificationStatus } from "@chicmoz-pkg/types";
 import { Link, useParams } from "@tanstack/react-router";
 import { type FC, useMemo, useState } from "react";
+import { isNotFoundError } from "~/api/client";
 import {
   DetailEmptyState,
   DetailField,
@@ -50,7 +51,14 @@ type TimelineEntry = {
 
 export const ContractInstancePage: FC = () => {
   const { address = "" } = useParams({ strict: false });
-  const { data: instance, isLoading } = useContractInstance(address);
+  const {
+    data: instance,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useContractInstance(address);
   const { data: balance } = useContractInstanceBalance(address);
   const { data: history } = useContractInstanceBalanceHistory(address);
   const { data: fpcRelationships } = useContractInstanceFpcRelationships(address);
@@ -101,6 +109,17 @@ export const ContractInstancePage: FC = () => {
         active="contracts"
         crumbs={stubCrumbs}
         message="loading instance…"
+      />
+    );
+  }
+  if (isError && !isNotFoundError(error)) {
+    return (
+      <DetailEmptyState
+        active="contracts"
+        crumbs={stubCrumbs}
+        message="couldn't load contract instance"
+        onRetry={() => void refetch()}
+        retrying={isFetching}
       />
     );
   }

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { type FC, useMemo, useState } from "react";
 import {
   HashCell,
+  LoadStateMessage,
   Pagination,
   SkeletonRows,
   StatusPill,
@@ -47,7 +48,13 @@ export const BlocksPage: FC = () => {
   const [page, setPage] = useState(0);
   const backendStatusFilter = statusFilter === "all" ? undefined : statusFilter;
 
-  const { data: blocks, isPending: blocksLoading } = usePaginatedTableBlocks(
+  const {
+    data: blocks,
+    isPending: blocksLoading,
+    isError: blocksError,
+    isFetching: blocksFetching,
+    refetch: refetchBlocks,
+  } = usePaginatedTableBlocks(
     page,
     PAGE_SIZE,
     backendStatusFilter,
@@ -236,7 +243,14 @@ export const BlocksPage: FC = () => {
               cells={6}
             />
           )}
-          {(!blocksLoading && (!blocks || sortedBlocks.length === 0)) && (
+          {!blocksLoading && blocksError && !blocks && (
+            <LoadStateMessage
+              message="couldn't load blocks"
+              onRetry={() => void refetchBlocks()}
+              retrying={blocksFetching}
+            />
+          )}
+          {!blocksLoading && !blocksError && blocks?.length === 0 && (
             <div className="empty-state">no blocks found</div>
           )}
         </div>
