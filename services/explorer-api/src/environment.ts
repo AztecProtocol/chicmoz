@@ -1,5 +1,5 @@
 import {
-  ApiKey,
+  type ApiKey,
   apiKeySchema,
   l2NetworkIdSchema,
   type L2NetworkId,
@@ -41,6 +41,13 @@ export const L2_BLOCK_RECONCILIATION_SCAN_WINDOW = z.coerce
   .positive()
   .default(10_000)
   .parse(process.env.L2_BLOCK_RECONCILIATION_SCAN_WINDOW);
+// Blocks per range request. The aztec-listener silently truncates requests
+// past its own limits, and truncated heights still back off, so keep:
+//   MAX_BLOCKS <= the listener's L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS (200)
+//   MAX_RANGES <= the listener's L2_BLOCK_RANGE_REQUEST_MAX_RANGES (10)
+//   MAX_BLOCKS / MAX_RANGES (the gap row width) <=
+//     the listener's L2_BLOCK_RANGE_REQUEST_MAX_WIDTH (250)
+// The defaults on both sides satisfy this.
 export const L2_BLOCK_RECONCILIATION_MAX_BLOCKS = z.coerce
   .number()
   .int()
@@ -53,6 +60,14 @@ export const L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW = z.coerce
   .positive()
   .default(5)
   .parse(process.env.L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW);
+// Ranges per request; see L2_BLOCK_RECONCILIATION_MAX_BLOCKS for the
+// listener limits it must stay within.
+export const L2_BLOCK_RECONCILIATION_MAX_RANGES = z.coerce
+  .number()
+  .int()
+  .positive()
+  .default(10)
+  .parse(process.env.L2_BLOCK_RECONCILIATION_MAX_RANGES);
 
 export const L1_GOVERNANCE_URI_RECONCILIATION_ENABLED = z.coerce
   .boolean()

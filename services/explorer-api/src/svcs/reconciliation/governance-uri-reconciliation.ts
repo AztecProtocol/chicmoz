@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { L1GovernanceUriRequestEvent } from "@chicmoz-pkg/message-registry";
+import { type L1GovernanceUriRequestEvent } from "@chicmoz-pkg/message-registry";
 import {
   L1_GOVERNANCE_URI_RECONCILIATION_INTERVAL_MS,
   L1_GOVERNANCE_URI_RECONCILIATION_LOOKBACK_DAYS,
@@ -8,9 +8,7 @@ import {
 import { l1GovernanceUriRequest } from "../../events/emitted/index.js";
 import { logger } from "../../logger.js";
 import { queries } from "../database/controllers/l1/governance/index.js";
-
-let interval: NodeJS.Timeout | undefined;
-let running = false;
+import { createReconciliationLoop } from "./loop.js";
 
 export const buildGovernanceUriRequest = async (
   reason: L1GovernanceUriRequestEvent["reason"],
@@ -37,47 +35,19 @@ export const buildGovernanceUriRequest = async (
   };
 };
 
-export const buildStartupGovernanceUriRequest = async () =>
-  await buildGovernanceUriRequest("startup");
+const loop = createReconciliationLoop<L1GovernanceUriRequestEvent["reason"]>({
+  name: "governance URI reconciliation",
+  intervalMs: L1_GOVERNANCE_URI_RECONCILIATION_INTERVAL_MS,
+  cadenceReason: "cadence",
+  tick: async (reason) => {
+    await l1GovernanceUriRequest(await buildGovernanceUriRequest(reason));
+  },
+});
 
-export const runGovernanceUriReconciliationOnce = async () => {
-  if (running) {
-    logger.info(
-      "Skipping governance URI reconciliation tick: previous tick still running",
-    );
-    return;
-  }
-  running = true;
-  const startedAt = Date.now();
-  try {
-    await l1GovernanceUriRequest(await buildGovernanceUriRequest("cadence"));
-    logger.info(
-      `Governance URI reconciliation tick completed in ${Date.now() - startedAt}ms`,
-    );
-  } catch (error) {
-    logger.error(
-      `Governance URI reconciliation tick failed: ${(error as Error).message}`,
-    );
-  } finally {
-    running = false;
-  }
-};
-
-export const startGovernanceUriReconciliation = () => {
-  if (interval) {
-    return;
-  }
-  logger.info(
-    `Starting cadenced governance URI reconciliation every ${L1_GOVERNANCE_URI_RECONCILIATION_INTERVAL_MS}ms`,
-  );
-  interval = setInterval(() => {
-    void runGovernanceUriReconciliationOnce();
-  }, L1_GOVERNANCE_URI_RECONCILIATION_INTERVAL_MS);
-};
-
-export const stopGovernanceUriReconciliation = () => {
-  if (interval) {
-    clearInterval(interval);
-    interval = undefined;
-  }
-};
+/**
+ * Runs one reconciliation tick unless shut down or one is running. The
+ * startup request goes through here too, so shutdown waits for it.
+ */
+export const runGovernanceUriReconciliationOnce = loop.runOnce;
+export const startGovernanceUriReconciliation = loop.start;
+export const stopGovernanceUriReconciliation = loop.stop;

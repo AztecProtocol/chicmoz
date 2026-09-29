@@ -260,6 +260,13 @@
       "when": 1779960000009,
       "tag": "0036_tree_table_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1779960000010,
+      "tag": "0037_reset_open_gap_request_history",
+      "breakpoints": true
     }
   ]
 }
