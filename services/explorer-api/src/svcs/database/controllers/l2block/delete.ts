@@ -13,23 +13,17 @@ export const deleteAllBlocks = async (): Promise<void> => {
   logger.info(`🗑️ Deleted ${res} blocks`);
 };
 
-export const deleteL2BlockByHeight = async (height: bigint): Promise<void> => {
-  await db().delete(l2Block).where(eq(l2Block.height, height)).execute();
-};
-
-export const deleteL2BlockByHash = async (hash: HexString): Promise<void> => {
-  await db().delete(l2Block).where(eq(l2Block.hash, hash)).execute();
-};
-
 export type TxEffectOwner = {
   txHash: HexString;
   blockHash: HexString;
   blockHeight: bigint;
+  rollupVersion: number;
   isOrphaned: boolean;
 };
 
 export const getTxEffectOwners = async (
   txHashes: HexString[],
+  executor: ReturnType<typeof db> = db(),
 ): Promise<TxEffectOwner[]> => {
   if (txHashes.length === 0) {
     return [];
@@ -37,11 +31,12 @@ export const getTxEffectOwners = async (
 
   const uniqueTxHashes = [...new Set(txHashes)];
 
-  const owners = await db()
+  const owners = await executor
     .select({
       txHash: txEffect.txHash,
       blockHash: l2Block.hash,
       blockHeight: l2Block.height,
+      rollupVersion: l2Block.version,
       orphanTimestamp: l2Block.orphan_timestamp,
     })
     .from(txEffect)
@@ -53,6 +48,7 @@ export const getTxEffectOwners = async (
     txHash: owner.txHash,
     blockHash: owner.blockHash,
     blockHeight: owner.blockHeight,
+    rollupVersion: owner.rollupVersion,
     isOrphaned: owner.orphanTimestamp !== null,
   }));
 };

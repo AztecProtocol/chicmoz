@@ -1,5 +1,5 @@
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
-import { HexString } from "@chicmoz-pkg/types";
+import { type HexString } from "@chicmoz-pkg/types";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { logger } from "../../../../logger.js";
 import {
@@ -61,68 +61,60 @@ export const markHigherBlocksAsOrphaned = async (
   return orphanedCount;
 };
 
+type DbExecutor = ReturnType<typeof db>;
+
 /**
- * Handle a re-org by marking the specified block and all higher blocks as orphaned
- * Uses a transaction to ensure all operations are atomic
- *
- * @param originalBlockHash The hash of the block being replaced (original block at the height)
- * @param targetHeight The height at which the re-org occurred
- * @returns The number of total blocks orphaned (including the original)
+ * Orphans the blocks a replacement displaces, in the caller's transaction:
+ * the given blocks, and when `descendantsAbove` is set every active block of
+ * the rollup version above that height (they were built on the replaced
+ * block). Their txs are recorded as dropped.
  */
-export const handleReorgOrphaning = async (
-  originalBlockHash: HexString,
-  targetHeight: bigint,
-): Promise<number> => {
-  const now = new Date().getTime();
-
-  return await db().transaction(async (dbTx) => {
-    logger.info(
-      `Starting orphan transaction for re-org at height ${targetHeight}`,
-    );
-
-    // 1. Mark the original block as orphaned (root of orphaned chain)
+export const orphanReplacedBlocks = async (
+  dbTx: DbExecutor,
+  {
+    hashes,
+    descendantsAbove,
+    rollupVersion,
+  }: {
+    hashes: HexString[];
+    descendantsAbove: bigint | null;
+    rollupVersion: number;
+  },
+  now: number,
+): Promise<void> => {
+  for (const hash of hashes) {
+    logger.info(`Orphaning replaced block ${hash}`);
     await dbTx
       .update(l2Block)
-      .set({
-        orphan_timestamp: now,
-        orphan_hasOrphanedParent: false,
-      })
-      .where(eq(l2Block.hash, originalBlockHash));
+      .set({ orphan_timestamp: now, orphan_hasOrphanedParent: false })
+      .where(eq(l2Block.hash, hash));
+    await recordBlockTxsAsDropped(dbTx, hash, now);
+  }
+  if (descendantsAbove === null) {
+    return;
+  }
 
-    // Find transaction effects in the orphaned block and store them as dropped
-    await storeOrphanedTxEffectsAsDropped(dbTx, originalBlockHash, now);
-
-    // 2. Find and mark all higher blocks as orphaned with parent
-    const higherBlocks = await dbTx
-      .select({ hash: l2Block.hash })
-      .from(l2Block)
-      .where(
-        and(gt(l2Block.height, targetHeight), isNull(l2Block.orphan_timestamp)),
-      );
-
-    const orphanedChildrenCount = higherBlocks.length;
-
-    // Mark all children as orphaned with parent=true
-    for (const block of higherBlocks) {
-      await dbTx
-        .update(l2Block)
-        .set({
-          orphan_timestamp: now,
-          orphan_hasOrphanedParent: true,
-        })
-        .where(eq(l2Block.hash, block.hash));
-
-      // Store transaction effects from this block as dropped
-      await storeOrphanedTxEffectsAsDropped(dbTx, block.hash, now);
-    }
-
-    const totalOrphaned = orphanedChildrenCount + 1; // +1 for the original block
-    logger.info(
-      `Completed orphan transaction. Total orphaned: ${totalOrphaned} (1 root + ${orphanedChildrenCount} children)`,
+  // Only on the same rollup version: other rollups reuse the same heights.
+  const higherBlocks = await dbTx
+    .select({ hash: l2Block.hash })
+    .from(l2Block)
+    .where(
+      and(
+        gt(l2Block.height, descendantsAbove),
+        isNull(l2Block.orphan_timestamp),
+        eq(l2Block.version, rollupVersion),
+      ),
     );
-
-    return totalOrphaned;
-  });
+  for (const block of higherBlocks) {
+    await dbTx
+      .update(l2Block)
+      .set({ orphan_timestamp: now, orphan_hasOrphanedParent: true })
+      .where(eq(l2Block.hash, block.hash));
+    await recordBlockTxsAsDropped(dbTx, block.hash, now);
+  }
+  logger.info(
+    `Orphaned ${hashes.length} replaced block(s) and ${higherBlocks.length} block(s) above height ${descendantsAbove}`,
+  );
 };
 
 /**
@@ -130,9 +122,12 @@ export const handleReorgOrphaning = async (
  * This is used when we receive a block with the same hash as an already-orphaned block,
  * meaning the orphaned block is actually the canonical one.
  */
-export const unOrphanBlock = async (blockHash: HexString): Promise<void> => {
+export const unOrphanBlock = async (
+  dbTx: DbExecutor,
+  blockHash: HexString,
+): Promise<void> => {
   logger.info(`Un-orphaning block ${blockHash}`);
-  await db()
+  await dbTx
     .update(l2Block)
     .set({
       orphan_timestamp: null,
@@ -141,19 +136,15 @@ export const unOrphanBlock = async (blockHash: HexString): Promise<void> => {
     .where(eq(l2Block.hash, blockHash));
 };
 
-type DB = ReturnType<typeof db>;
-type DBTransactionFunction = DB["transaction"];
-type DBTransactionFunctionCallback = Parameters<DBTransactionFunction>[0];
-type DBTransactionFunctionCallbackParameter =
-  Parameters<DBTransactionFunctionCallback>[0];
-
 /**
- * Find transaction effects in an orphaned block and store them as dropped transactions
+ * Records a displaced block's txs as dropped, in the caller's transaction,
+ * except those in `keep` (txs the block replacing it includes).
  */
-const storeOrphanedTxEffectsAsDropped = async (
-  dbTx: DBTransactionFunctionCallbackParameter,
+export const recordBlockTxsAsDropped = async (
+  dbTx: DbExecutor,
   blockHash: HexString,
   timestamp: number,
+  keep: ReadonlySet<HexString> = new Set(),
 ): Promise<void> => {
   // Find the body ID for this block
   const blockBody = await dbTx
@@ -170,13 +161,15 @@ const storeOrphanedTxEffectsAsDropped = async (
   const bodyId = blockBody[0].id;
 
   // Find all transaction effects in this body
-  const txEffects = await dbTx
-    .select({
-      txHash: txEffect.txHash,
-      txBirthTimestamp: txEffect.txBirthTimestamp,
-    })
-    .from(txEffect)
-    .where(eq(txEffect.bodyId, bodyId));
+  const txEffects = (
+    await dbTx
+      .select({
+        txHash: txEffect.txHash,
+        txBirthTimestamp: txEffect.txBirthTimestamp,
+      })
+      .from(txEffect)
+      .where(eq(txEffect.bodyId, bodyId))
+  ).filter((tx) => !keep.has(tx.txHash));
 
   if (txEffects.length === 0) {
     logger.info(`No transaction effects found in orphaned block ${blockHash}`);
@@ -187,23 +180,20 @@ const storeOrphanedTxEffectsAsDropped = async (
     `Found ${txEffects.length} transaction effects to mark as dropped in block ${blockHash}`,
   );
 
-  // Store each transaction effect as a dropped transaction
+  // Store each transaction effect as a dropped transaction. In the caller's
+  // transaction, so a failure rolls the whole change back rather than being
+  // logged and ignored.
   for (const tx of txEffects) {
-    try {
-      await storeDroppedTx({
+    await storeDroppedTx(
+      {
         txHash: tx.txHash,
         createdAsPendingAt: tx.txBirthTimestamp,
         droppedAt: timestamp,
         // Block was reorged out — tx returns to dropped-state with this
         // reason so the UI can show "(reorg)" rather than just a timestamp.
         dropReason: "orphaned",
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      logger.error(
-        `Failed to store dropped transaction ${tx.txHash}: ${errorMessage}`,
-      );
-    }
+      },
+      dbTx,
+    );
   }
 };

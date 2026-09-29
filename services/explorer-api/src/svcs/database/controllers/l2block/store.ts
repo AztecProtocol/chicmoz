@@ -1,5 +1,5 @@
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
-import { HexString, type ChicmozL2Block } from "@chicmoz-pkg/types";
+import { type HexString, type ChicmozL2Block } from "@chicmoz-pkg/types";
 import { v4 as uuidv4 } from "uuid";
 import {
   archive,
@@ -19,8 +19,18 @@ import {
   txEffect,
 } from "../../../database/schema/l2block/index.js";
 
-export const store = async (block: ChicmozL2Block): Promise<void> => {
-  return await db().transaction(async (dbTx) => {
+type DbExecutor = ReturnType<typeof db>;
+
+/**
+ * Inserts the block and everything under it. Pass a transaction to commit or
+ * roll back together with the caller's other changes; otherwise the insert
+ * runs in its own.
+ */
+export const store = async (
+  block: ChicmozL2Block,
+  inTransaction?: DbExecutor,
+): Promise<void> => {
+  const insert = async (dbTx: DbExecutor) => {
     // Insert l2Block
     await dbTx.insert(l2Block).values({
       hash: block.hash,
@@ -170,5 +180,8 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
         });
       }
     }
-  });
+  };
+  return inTransaction
+    ? await insert(inTransaction)
+    : await db().transaction(insert);
 };
