@@ -1,5 +1,5 @@
 import {
-  ApiKey,
+  type ApiKey,
   apiKeySchema,
   l2NetworkIdSchema,
   type L2NetworkId,
@@ -53,6 +53,14 @@ export const L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW = z.coerce
   .positive()
   .default(5)
   .parse(process.env.L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW);
+// Ranges per request. Must not exceed the listener's
+// L2_BLOCK_RANGE_REQUEST_MAX_RANGES, which drops any ranges past it.
+export const L2_BLOCK_RECONCILIATION_MAX_RANGES = z.coerce
+  .number()
+  .int()
+  .positive()
+  .default(10)
+  .parse(process.env.L2_BLOCK_RECONCILIATION_MAX_RANGES);
 
 export const L1_GOVERNANCE_URI_RECONCILIATION_ENABLED = z.coerce
   .boolean()

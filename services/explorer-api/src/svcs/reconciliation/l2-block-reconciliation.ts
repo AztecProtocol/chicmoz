@@ -7,28 +7,47 @@ import {
 } from "../database/controllers/l2block/missing-ranges.js";
 
 let interval: NodeJS.Timeout | undefined;
-let running = false;
+let currentTick: Promise<void> | undefined;
+// Set by shutdown: no tick starts, and no interval is armed, afterwards.
+let stopped = false;
 
-export const runL2BlockReconciliationOnce = async () => {
-  if (running) {
-    logger.info("Skipping L2 block reconciliation tick: previous tick still running");
-    return;
-  }
-  running = true;
+const runTick = async (reason: "startup" | "cadence") => {
   const startedAt = Date.now();
   try {
-    await l2BlockRangeRequest(await buildMissingBlockRangeRequest({ reason: "cadence" }));
-    await l2BlockRangeRequest(await buildTipBoundaryRepairRequest());
+    await l2BlockRangeRequest(await buildMissingBlockRangeRequest({ reason }));
+    if (reason === "cadence") {
+      await l2BlockRangeRequest(await buildTipBoundaryRepairRequest());
+    }
     logger.info(`L2 block reconciliation tick completed in ${Date.now() - startedAt}ms`);
   } catch (error) {
     logger.error(`L2 block reconciliation tick failed: ${(error as Error).message}`);
+  }
+};
+
+/**
+ * Runs one reconciliation tick unless shut down or one is running. The
+ * startup request goes through here too, so shutdown waits for it.
+ */
+export const runL2BlockReconciliationOnce = async (
+  reason: "startup" | "cadence" = "cadence",
+) => {
+  if (stopped) {
+    return;
+  }
+  if (currentTick) {
+    logger.info("Skipping L2 block reconciliation tick: previous tick still running");
+    return;
+  }
+  currentTick = runTick(reason);
+  try {
+    await currentTick;
   } finally {
-    running = false;
+    currentTick = undefined;
   }
 };
 
 export const startL2BlockReconciliation = () => {
-  if (interval) {
+  if (stopped || interval !== undefined) {
     return;
   }
   logger.info(
@@ -39,9 +58,13 @@ export const startL2BlockReconciliation = () => {
   }, L2_BLOCK_RECONCILIATION_INTERVAL_MS);
 };
 
-export const stopL2BlockReconciliation = () => {
+// Resolves once no tick is running, so shutdown can stop ticks before the
+// message bus and database they use go away.
+export const stopL2BlockReconciliation = async () => {
+  stopped = true;
   if (interval) {
     clearInterval(interval);
     interval = undefined;
   }
+  await currentTick;
 };

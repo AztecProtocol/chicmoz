@@ -1,12 +1,26 @@
 import {
-  L2BlockRangeRequestEvent,
-  L2BlockRangeRequestReason,
+  type L2BlockRangeRequestEvent,
+  type L2BlockRangeRequestReason,
 } from "@chicmoz-pkg/message-registry";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
-import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  not,
+  or,
+  sql,
+} from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
+  L2_BLOCK_RECONCILIATION_INTERVAL_MS,
   L2_BLOCK_RECONCILIATION_MAX_BLOCKS,
+  L2_BLOCK_RECONCILIATION_MAX_RANGES,
   L2_BLOCK_RECONCILIATION_SCAN_WINDOW,
   L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW,
   L2_NETWORK_ID,
@@ -18,8 +32,18 @@ import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-c
 import { getTips } from "../l2/tips.js";
 import { getLatestBlockRollupVersion, getLatestHeight } from "./get-latest.js";
 
-const rangesFromHeights = (missingHeights: number[]) => {
-  const ranges: Array<{ from: number; to: number; statusHint: "proposed" }> = [];
+type GapRange = { from: number; to: number; statusHint: "proposed" };
+type OpenGap = typeof l2OpenGapTable.$inferSelect;
+
+export type PlannedRangeRequest = {
+  request: L2BlockRangeRequestEvent;
+  // Records the request against its gaps. Call it only once the request is
+  // published, so a failed publish is simply retried on the next tick.
+  markRequested: () => Promise<void>;
+};
+
+export const rangesFromHeights = (missingHeights: number[]) => {
+  const ranges: GapRange[] = [];
   for (const height of missingHeights) {
     const last = ranges[ranges.length - 1];
     if (last && last.to + 1 === height) {
@@ -29,6 +53,22 @@ const rangesFromHeights = (missingHeights: number[]) => {
     }
   }
   return ranges;
+};
+
+/**
+ * Gap rows are contiguous runs of at most this many heights: any row is then
+ * one range, and a full request of such rows fits the block budget, so a row
+ * is always requested whole or not at all.
+ */
+export const gapRowMaxWidth = (maxBlocks: number, maxRanges: number) =>
+  Math.max(1, Math.floor(maxBlocks / maxRanges));
+
+export const splitRange = (range: GapRange, maxWidth: number): GapRange[] => {
+  const chunks: GapRange[] = [];
+  for (let from = range.from; from <= range.to; from += maxWidth) {
+    chunks.push({ ...range, from, to: Math.min(range.to, from + maxWidth - 1) });
+  }
+  return chunks;
 };
 
 const gapId = ({
@@ -44,9 +84,11 @@ const gapId = ({
 const upsertOpenGaps = async ({
   ranges,
   reason,
+  resetOnReopen = true,
 }: {
-  ranges: Array<{ from: number; to: number; statusHint: "proposed" }>;
+  ranges: GapRange[];
   reason: L2BlockRangeRequestReason;
+  resetOnReopen?: boolean;
 }) => {
   for (const range of ranges) {
     const values = {
@@ -73,67 +115,225 @@ const upsertOpenGaps = async ({
           statusHint: values.statusHint,
           fulfilledAt: null,
           lastError: null,
+          // A row reopened after being fulfilled is a new gap: its earlier
+          // requests say nothing about it, so its backoff starts over.
+          ...(resetOnReopen
+            ? {
+                requestCount: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then 0 else ${l2OpenGapTable.requestCount} end`,
+                lastRequestedAt: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then null else ${l2OpenGapTable.lastRequestedAt} end`,
+              }
+            : {}),
         },
       });
   }
 };
 
-const getOpenGaps = async (maxBlocks: number, chainTip: number) => {
-  const rows = await db()
+// Backoff after a gap's Nth request: interval * 2^min(N, 8), capped at 6h.
+// 2^8 intervals already exceeds the cap, so rows with request counts from
+// before backoff existed (in the thousands) simply wait the maximum.
+const MAX_BACKOFF_EXPONENT = 8;
+const MAX_GAP_BACKOFF_MS = 6 * 60 * 60 * 1000;
+// Due gaps considered per tick, after the due filter, least recently
+// requested first.
+const CANDIDATE_GAP_LIMIT = 50;
+const TIP_BOUNDARY_REASON: L2BlockRangeRequestReason = "tip_boundary_mismatch";
+
+/**
+ * Whether a gap may be requested again at `now` (epoch ms): never requested,
+ * or its backoff has passed. In SQL so the candidate query can filter on it
+ * before ORDER BY and LIMIT. last_requested_at is stored as UTC wall-clock
+ * time (drizzle writes toISOString()), so its epoch is taken as UTC.
+ */
+export const gapDueSql = (now: number) =>
+  sql`(${l2OpenGapTable.lastRequestedAt} is null or extract(epoch from ${l2OpenGapTable.lastRequestedAt}) * 1000 + least(${L2_BLOCK_RECONCILIATION_INTERVAL_MS}::float8 * power(2, least(${l2OpenGapTable.requestCount}, ${MAX_BACKOFF_EXPONENT}::int)), ${MAX_GAP_BACKOFF_MS}::float8) <= ${now}::float8)`;
+
+// Gaps the cadence and startup requests may pick. They ignore tip-boundary
+// rows entirely; buildTipBoundaryRepairRequest owns those.
+export const requestableGapFilter = (chainTip: number, now: number) =>
+  and(
+    eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
+    eq(l2OpenGapTable.status, "open"),
+    ne(l2OpenGapTable.reason, TIP_BOUNDARY_REASON),
+    lte(l2OpenGapTable.fromHeight, chainTip),
+    gapDueSql(now),
+  );
+
+const getDueGaps = async (chainTip: number, now: number) =>
+  db()
+    .select()
+    .from(l2OpenGapTable)
+    .where(requestableGapFilter(chainTip, now))
+    .orderBy(
+      sql`${l2OpenGapTable.lastRequestedAt} asc nulls first`,
+      asc(l2OpenGapTable.firstSeenAt),
+    )
+    .limit(CANDIDATE_GAP_LIMIT);
+
+// Open cadence/startup gaps overlapping [from, to]: all of them for discovery
+// (heights they cover are already recorded), or only those still in backoff
+// (their heights are in flight).
+const getOpenGapsOverlapping = async (
+  from: number,
+  to: number,
+  { inFlightAt }: { inFlightAt?: number } = {},
+) =>
+  db()
     .select()
     .from(l2OpenGapTable)
     .where(
       and(
         eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
         eq(l2OpenGapTable.status, "open"),
-        lte(l2OpenGapTable.fromHeight, chainTip),
+        ne(l2OpenGapTable.reason, TIP_BOUNDARY_REASON),
+        lte(l2OpenGapTable.fromHeight, to),
+        gte(l2OpenGapTable.toHeight, from),
+        ...(inFlightAt === undefined ? [] : [not(gapDueSql(inFlightAt))]),
       ),
-    )
-    .orderBy(asc(l2OpenGapTable.firstSeenAt))
-    .limit(maxBlocks);
+    );
 
-  const ranges: Array<{ from: number; to: number; statusHint: "proposed" }> = [];
-  let remaining = maxBlocks;
-  for (const row of rows) {
-    const size = row.toHeight - row.fromHeight + 1;
-    if (size <= remaining) {
-      ranges.push({ from: row.fromHeight, to: row.toHeight, statusHint: row.statusHint });
-      remaining -= size;
-    } else if (remaining > 0) {
-      ranges.push({
-        from: row.fromHeight,
-        to: row.fromHeight + remaining - 1,
-        statusHint: row.statusHint,
-      });
-      remaining = 0;
-    }
-    if (remaining <= 0) {
-      break;
-    }
+const coversHeight = (gaps: OpenGap[]) => (height: number) =>
+  gaps.some((gap) => gap.fromHeight <= height && height <= gap.toHeight);
+
+const fulfilGaps = async (gapIds: string[]) => {
+  if (gapIds.length === 0) {
+    return;
   }
-
-  return ranges;
+  await db()
+    .update(l2OpenGapTable)
+    .set({ status: "fulfilled", fulfilledAt: new Date(), lastError: null })
+    .where(inArray(l2OpenGapTable.id, gapIds));
 };
 
-const markGapsRequested = async (
-  ranges: Array<{ from: number; to: number; statusHint: "proposed" }>,
-) => {
-  for (const range of ranges) {
-    await db()
-      .update(l2OpenGapTable)
-      .set({
-        requestCount: sql`${l2OpenGapTable.requestCount} + 1`,
-        lastRequestedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
-          eq(l2OpenGapTable.status, "open"),
-          lte(l2OpenGapTable.fromHeight, range.to),
-          gte(l2OpenGapTable.toHeight, range.from),
-        ),
-      );
+/**
+ * Replaces a row whose missing heights are no longer one run of at most the
+ * row width (partly filled, or recorded before rows were capped) by one row
+ * per run. The new rows keep the old row's request history.
+ */
+const splitGapRow = async (gap: OpenGap, runs: GapRange[]) => {
+  logger.info(
+    `Splitting L2 open gap ${gap.id} into ${runs.length} row(s) of its missing heights`,
+  );
+  await db().transaction(async (dbTx) => {
+    for (const run of runs) {
+      await dbTx
+        .insert(l2OpenGapTable)
+        .values({
+          id: gapId({ ...run, reason: gap.reason }),
+          l2NetworkId: gap.l2NetworkId,
+          fromHeight: run.from,
+          toHeight: run.to,
+          reason: gap.reason,
+          statusHint: gap.statusHint,
+          status: "open",
+          firstSeenAt: gap.firstSeenAt,
+          requestCount: gap.requestCount,
+          lastRequestedAt: gap.lastRequestedAt,
+        })
+        .onConflictDoNothing();
+    }
+    await dbTx.delete(l2OpenGapTable).where(eq(l2OpenGapTable.id, gap.id));
+  });
+};
+
+const markGapsRequested = async (gapIds: string[]) => {
+  if (gapIds.length === 0) {
+    return;
   }
+  await db()
+    .update(l2OpenGapTable)
+    .set({
+      requestCount: sql`${l2OpenGapTable.requestCount} + 1`,
+      lastRequestedAt: new Date(),
+    })
+    .where(inArray(l2OpenGapTable.id, gapIds));
+};
+
+/**
+ * Picks what to request: due gaps, least recently requested first, each
+ * requested whole while the range and block budgets last. A gap with every
+ * height present is fulfilled; one whose missing heights are no longer a
+ * single run of at most the row width is split for the next tick; one that
+ * overlaps heights already in flight waits.
+ */
+const selectGapRequest = async ({
+  chainTip,
+  maxBlocks,
+  maxRanges,
+}: {
+  chainTip: number;
+  maxBlocks: number;
+  maxRanges: number;
+}) => {
+  const now = Date.now();
+  const due = await getDueGaps(chainTip, now);
+  if (due.length === 0) {
+    return { ranges: [], gapIds: [] };
+  }
+
+  const spanFrom = Math.min(...due.map((gap) => gap.fromHeight));
+  const spanTo = Math.min(chainTip, Math.max(...due.map((gap) => gap.toHeight)));
+  const isInFlight = coversHeight(
+    await getOpenGapsOverlapping(spanFrom, spanTo, { inFlightAt: now }),
+  );
+  const present = await findPresentHeights(
+    due.map((gap) => ({
+      from: gap.fromHeight,
+      to: Math.min(gap.toHeight, chainTip),
+    })),
+  );
+
+  const maxWidth = gapRowMaxWidth(maxBlocks, maxRanges);
+  const ranges: GapRange[] = [];
+  const gapIds: string[] = [];
+  const fulfilled: string[] = [];
+  const toSplit: Array<{ gap: OpenGap; runs: GapRange[] }> = [];
+  const requestedHeights = new Set<number>();
+  let blocks = 0;
+  for (const gap of due) {
+    if (ranges.length >= maxRanges) {
+      break;
+    }
+    const upper = Math.min(gap.toHeight, chainTip);
+    const missing: number[] = [];
+    for (let height = gap.fromHeight; height <= upper; height++) {
+      if (!present.has(height)) {
+        missing.push(height);
+      }
+    }
+    if (missing.length === 0) {
+      if (gap.toHeight <= chainTip) {
+        fulfilled.push(gap.id);
+      }
+      continue;
+    }
+    const runs = rangesFromHeights(missing).flatMap((run) =>
+      splitRange(run, maxWidth),
+    );
+    const [run] = runs;
+    if (run.from !== gap.fromHeight || run.to !== gap.toHeight) {
+      toSplit.push({ gap, runs });
+      continue;
+    }
+    const size = run.to - run.from + 1;
+    const heights = Array.from({ length: size }, (_, i) => run.from + i);
+    // Rows are at most maxBlocks / maxRanges wide, so the range cap binds
+    // first; the block check only guards that invariant.
+    if (
+      blocks + size > maxBlocks ||
+      heights.some((height) => requestedHeights.has(height) || isInFlight(height))
+    ) {
+      continue;
+    }
+    ranges.push(run);
+    gapIds.push(gap.id);
+    blocks += size;
+    heights.forEach((height) => requestedHeights.add(height));
+  }
+  await fulfilGaps(fulfilled);
+  for (const { gap, runs } of toSplit) {
+    await splitGapRow(gap, runs);
+  }
+  return { ranges, gapIds };
 };
 
 const resolveReconciliationRollupVersion = async (): Promise<number | null> => {
@@ -178,6 +378,34 @@ export const findMissingHeightsInWindow = async ({
   return missing;
 };
 
+// Active, current-version heights present in any of the ranges, in one query.
+const findPresentHeights = async (ranges: Array<{ from: number; to: number }>) => {
+  if (ranges.length === 0) {
+    return new Set<number>();
+  }
+  const effectiveVersion = await resolveReconciliationRollupVersion();
+  const rows = await db()
+    .select({ height: l2Block.height })
+    .from(l2Block)
+    .where(
+      and(
+        or(
+          ...ranges.map((range) =>
+            and(
+              gte(l2Block.height, BigInt(range.from)),
+              lte(l2Block.height, BigInt(range.to)),
+            ),
+          ),
+        ),
+        isNull(l2Block.orphan_timestamp),
+        ...(effectiveVersion === null
+          ? []
+          : [eq(l2Block.version, effectiveVersion)]),
+      ),
+    );
+  return new Set(rows.map((row) => Number(row.height)));
+};
+
 const getReconciliationUpperBound = async () => {
   const tips = await getTips();
   const latestHeight = await getLatestHeight();
@@ -193,82 +421,133 @@ export const buildMissingBlockRangeRequest = async ({
   reason: Extract<L2BlockRangeRequestReason, "startup" | "cadence">;
   scanWindow?: number;
   maxBlocks?: number;
-}): Promise<L2BlockRangeRequestEvent | null> => {
+}): Promise<PlannedRangeRequest | null> => {
   const { upperBound } = await getReconciliationUpperBound();
   if (!Number.isSafeInteger(upperBound) || upperBound < 1) {
     logger.info(`Skipping ${reason} L2 block reconciliation: no upper bound`);
     return null;
   }
+  const maxRanges = L2_BLOCK_RECONCILIATION_MAX_RANGES;
 
+  // Record newly missing heights as gap rows. Heights an open gap already
+  // covers are skipped before the budget applies, and the newest are kept,
+  // so gaps that cannot be filled never crowd out discovery near the tip.
   const from = Math.max(1, upperBound - scanWindow + 1);
   const allMissing = await findMissingHeightsInWindow({ from, upperBound });
-  const missing = allMissing.slice(0, maxBlocks);
-
-  const ranges = rangesFromHeights(missing);
+  const isCovered = coversHeight(await getOpenGapsOverlapping(from, upperBound));
+  const uncovered = allMissing.filter((height) => !isCovered(height));
+  const missing = uncovered.slice(-maxBlocks);
+  const maxWidth = gapRowMaxWidth(maxBlocks, maxRanges);
+  const ranges = rangesFromHeights(missing).flatMap((range) =>
+    splitRange(range, maxWidth),
+  );
   if (ranges.length > 0) {
     await upsertOpenGaps({ ranges, reason });
   }
 
-  const openGapRanges = await getOpenGaps(maxBlocks, upperBound);
-  if (openGapRanges.length === 0) {
-    logger.info(`${reason} L2 block reconciliation found no missing blocks`);
+  const { ranges: requestRanges, gapIds } = await selectGapRequest({
+    chainTip: upperBound,
+    maxBlocks,
+    maxRanges,
+  });
+  if (requestRanges.length === 0) {
+    logger.info(`${reason} L2 block reconciliation found no open gaps due for a request`);
     return null;
   }
-  const requestRanges = openGapRanges.length > 0 ? openGapRanges : ranges;
-  await markGapsRequested(requestRanges);
   logger.info(
-    `${reason} L2 block reconciliation requesting ${requestRanges.length} open-gap ranges from ${from} to ${upperBound}; newlyDiscoveredMissing=${missing.length}; remainingScanWindowMissing=${Math.max(0, allMissing.length - missing.length)}`,
+    `${reason} L2 block reconciliation requesting ${requestRanges.length} open gaps; scanWindow=${from}-${upperBound}; newlyDiscoveredMissing=${missing.length}; notYetRecorded=${uncovered.length - missing.length}`,
   );
 
   return {
-    requestId: randomUUID(),
-    requestedAt: Date.now(),
-    reason,
-    ranges: requestRanges,
-    maxBlocks,
+    request: {
+      requestId: randomUUID(),
+      requestedAt: Date.now(),
+      reason,
+      ranges: requestRanges,
+      maxBlocks,
+    },
+    markRequested: () => markGapsRequested(gapIds),
   };
 };
 
-export const buildStartupMissingBlockRangeRequest = async () =>
-  buildMissingBlockRangeRequest({ reason: "startup" });
-
-const parseTipBoundaryHeight = (degradedReason: string | undefined) => {
+const parseTipBoundary = (degradedReason: string | undefined) => {
   if (!degradedReason) {
     return null;
   }
-  const match = /boundary block (\d+) (?:is missing|hash mismatch)/u.exec(degradedReason);
+  const match = /boundary block (\d+) (is missing|hash mismatch)/u.exec(
+    degradedReason,
+  );
   if (!match?.[1]) {
     return null;
   }
   const height = Number(match[1]);
-  return Number.isSafeInteger(height) && height > 0 ? height : null;
-};
-
-export const buildTipBoundaryRepairRequest = async (): Promise<L2BlockRangeRequestEvent | null> => {
-  const tips = await getTips();
-  const height = parseTipBoundaryHeight(tips?.degradedReason);
-  if (!height) {
+  if (!Number.isSafeInteger(height) || height <= 0) {
     return null;
   }
-  const repairWindow = L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW;
-  const from = Math.max(1, height - repairWindow);
-  const to = height + repairWindow;
-  await upsertOpenGaps({
-    reason: "tip_boundary_mismatch",
-    ranges: [{ from, to, statusHint: "proposed" }],
-  });
-  await markGapsRequested([{ from, to, statusHint: "proposed" }]);
-  logger.warn(
-    `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}; reason=${tips?.degradedReason}`,
-  );
   return {
-    requestId: randomUUID(),
-    requestedAt: Date.now(),
-    reason: "tip_boundary_mismatch",
-    ranges: [{ from, to, statusHint: "proposed" }],
-    maxBlocks: Math.min(L2_BLOCK_RECONCILIATION_MAX_BLOCKS, to - from + 1),
+    height,
+    kind: match[2] === "is missing" ? ("missing" as const) : ("mismatch" as const),
   };
 };
+
+export const buildTipBoundaryRepairRequest =
+  async (): Promise<PlannedRangeRequest | null> => {
+    const tips = await getTips();
+    const boundary = parseTipBoundary(tips?.degradedReason);
+    if (!boundary) {
+      return null;
+    }
+    const { height } = boundary;
+    const repairWindow = L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW;
+    const from = Math.max(1, height - repairWindow);
+    let to = height + repairWindow;
+    if (boundary.kind === "mismatch") {
+      // A wrong block is only replaced by a proven one, and range-request
+      // blocks above the proven tip arrive as proposed catch-ups, which never
+      // replace a block. A missing block, in contrast, is filled by any.
+      const provenTip = tips?.proven.block.number ?? 0;
+      if (height > provenTip) {
+        logger.info(
+          `Not requesting a repair for the tip-boundary hash mismatch at block ${height}: it is above the proven tip (${provenTip}), where the live stream and the proven blocks it re-publishes replace it`,
+        );
+        return null;
+      }
+      to = Math.min(to, provenTip);
+    }
+    const id = gapId({ from, to, reason: TIP_BOUNDARY_REASON });
+    // The window is re-sent whole while the tips stay degraded (its heights
+    // may be present but wrong), with the same backoff as other gaps,
+    // whatever the row's status: blocks landing in the window fulfil it
+    // without fixing a mismatch.
+    const [existing] = await db()
+      .select({ due: sql<boolean>`${gapDueSql(Date.now())}` })
+      .from(l2OpenGapTable)
+      .where(eq(l2OpenGapTable.id, id));
+    if (existing && !existing.due) {
+      return null;
+    }
+    const range = { from, to, statusHint: "proposed" as const };
+    // Reopening must not reset the backoff here: the row is "fulfilled" as
+    // soon as its heights are present, mismatch or not.
+    await upsertOpenGaps({
+      reason: TIP_BOUNDARY_REASON,
+      ranges: [range],
+      resetOnReopen: false,
+    });
+    logger.warn(
+      `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}; reason=${tips?.degradedReason}`,
+    );
+    return {
+      request: {
+        requestId: randomUUID(),
+        requestedAt: Date.now(),
+        reason: TIP_BOUNDARY_REASON,
+        ranges: [range],
+        maxBlocks: Math.min(L2_BLOCK_RECONCILIATION_MAX_BLOCKS, to - from + 1),
+      },
+      markRequested: () => markGapsRequested([id]),
+    };
+  };
 
 export const markOpenGapsFulfilledByHeight = async (height: bigint) => {
   const candidateGaps = await db()
