@@ -25,6 +25,7 @@ export type TxEffectOwner = {
   txHash: HexString;
   blockHash: HexString;
   blockHeight: bigint;
+  rollupVersion: number;
   isOrphaned: boolean;
 };
 
@@ -42,6 +43,7 @@ export const getTxEffectOwners = async (
       txHash: txEffect.txHash,
       blockHash: l2Block.hash,
       blockHeight: l2Block.height,
+      rollupVersion: l2Block.version,
       orphanTimestamp: l2Block.orphan_timestamp,
     })
     .from(txEffect)
@@ -53,6 +55,7 @@ export const getTxEffectOwners = async (
     txHash: owner.txHash,
     blockHash: owner.blockHash,
     blockHeight: owner.blockHeight,
+    rollupVersion: owner.rollupVersion,
     isOrphaned: owner.orphanTimestamp !== null,
   }));
 };

@@ -1,14 +1,14 @@
 import { blockFromBuffer, parseBlock } from "@chicmoz-pkg/backend-utils";
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { type EventHandler } from "@chicmoz-pkg/message-bus";
 import {
   generateL2TopicName,
   getConsumerGroupId,
-  NewBlockEvent,
+  type NewBlockEvent,
 } from "@chicmoz-pkg/message-registry";
 import {
   chicmozChainInfoSchema,
-  ChicmozL2Block,
-  ChicmozL2TxEffect,
+  type ChicmozL2Block,
+  type ChicmozL2TxEffect,
 } from "@chicmoz-pkg/types";
 import { SERVICE_NAME } from "../../../constants.js";
 import { L2_NETWORK_ID } from "../../../environment.js";
@@ -18,13 +18,14 @@ import {
   deleteL2BlockByHash,
   deleteL2BlockByHeight,
   getTxEffectOwners,
+  type TxEffectOwner,
 } from "../../../svcs/database/controllers/l2block/delete.js";
 import { unOrphanBlock } from "../../../svcs/database/controllers/l2block/orphan.js";
 import { controllers } from "../../../svcs/database/index.js";
-import { handleDuplicateBlockError } from "../utils.js";
+import { handleDuplicateBlockError, type PartialDbError } from "../utils.js";
 import { storeContracts } from "./contracts.js";
 import { detectReorg, handleReorg } from "./reorg-handler.js";
-import { L2Block } from "@aztec/aztec.js/block";
+import { type L2Block } from "@aztec/aztec.js/block";
 
 const truncateString = (value: string) => {
   const startHash = value.substring(0, 100);
@@ -76,7 +77,10 @@ const onBlock = async ({
     return;
   }
 
-  await storeBlock(parsedBlock);
+  const stored = await storeBlock(parsedBlock);
+  if (!stored) {
+    return;
+  }
   await controllers.l2Block.markOpenGapsFulfilledByHeight(parsedBlock.height);
   await observeRollupVersion({
     l2NetworkId: L2_NETWORK_ID,
@@ -89,12 +93,26 @@ const onBlock = async ({
   await pendingTxsHook(parsedBlock.body.txEffects);
 };
 
-const storeBlock = async (parsedBlock: ChicmozL2Block, haveRetried = false) => {
+/**
+ * @returns false when the block was skipped (see
+ * pruneConflictingOrphanedTxOwners); true when it is stored.
+ */
+const storeBlock = async (
+  parsedBlock: ChicmozL2Block,
+  haveRetried = false,
+): Promise<boolean> => {
   logger.info(
     `🧢 Storing block ${parsedBlock.height} (hash: ${parsedBlock.hash})`,
   );
 
   const reorgDetected = await detectReorg(parsedBlock);
+
+  // Decided before handleReorg writes anything, so a skip changes nothing.
+  const blockingOwners = await findBlockingTxOwners(parsedBlock, reorgDetected);
+  if (blockingOwners.length > 0) {
+    logSkippedTxConflict(parsedBlock, blockingOwners);
+    return false;
+  }
 
   if (reorgDetected) {
     await handleReorg(parsedBlock);
@@ -104,15 +122,24 @@ const storeBlock = async (parsedBlock: ChicmozL2Block, haveRetried = false) => {
   parsedBlock.orphan = undefined;
 
   // Store the new block
-  await controllers.l2Block.store(parsedBlock).catch(async (e) => {
+  try {
+    await controllers.l2Block.store(parsedBlock);
+    return true;
+  } catch (e) {
     if (haveRetried) {
       throw new Error(
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         `Failed to store block ${parsedBlock.height} after retry: ${e}`,
       );
     }
+    // Only duplicates are resolved below. Anything else propagates, so the
+    // message bus redelivers the block instead of it being lost.
+    if ((e as PartialDbError).code !== "23505") {
+      throw e;
+    }
 
     // If we still get an error, we'll try the old approach as fallback
-    const shouldRetry = await handleDuplicateBlockError(
+    const outcome = await handleDuplicateBlockError(
       e as Error,
       `block ${parsedBlock.height}`,
       async () => {
@@ -129,15 +156,70 @@ const storeBlock = async (parsedBlock: ChicmozL2Block, haveRetried = false) => {
       async () => pruneConflictingOrphanedTxOwners(parsedBlock),
     );
 
-    if (shouldRetry) {
+    if (outcome === "retry") {
       return storeBlock(parsedBlock, true);
     }
-  });
+    return outcome === "done";
+  }
 };
 
+const ownerSummary = (owners: TxEffectOwner[]) =>
+  owners
+    .map(
+      (owner) =>
+        `${owner.txHash} in active block ${owner.blockHeight} (${owner.blockHash})`,
+    )
+    .join(", ");
+
+const logSkippedTxConflict = (
+  parsedBlock: ChicmozL2Block,
+  activeOwners: TxEffectOwner[],
+) => {
+  logger.error(
+    `SKIPPED_BLOCK_TX_CONFLICT height=${parsedBlock.height} hash=${parsedBlock.hash} owners=${ownerSummary(activeOwners)}`,
+  );
+};
+
+/**
+ * Active blocks holding the block's txs that its own reorg would leave
+ * active. handleReorg orphans the active block at the block's height and
+ * the blocks above it; an active holder elsewhere (below the height, on
+ * another rollup version, or anywhere when there is no reorg) means the
+ * block is skipped, as deciding which of the two is canonical is out of
+ * scope here.
+ */
+const findBlockingTxOwners = async (
+  parsedBlock: ChicmozL2Block,
+  reorgDetected: boolean,
+) => {
+  const owners = await getTxEffectOwners(
+    parsedBlock.body.txEffects.map((txEffect) => txEffect.txHash),
+  );
+  const rollupVersion = parsedBlock.header.globalVariables.version;
+  return owners.filter(
+    (owner) =>
+      !owner.isOrphaned &&
+      owner.blockHash !== parsedBlock.hash &&
+      !(
+        reorgDetected &&
+        owner.rollupVersion === rollupVersion &&
+        owner.blockHeight >= parsedBlock.height
+      ),
+  );
+};
+
+/**
+ * Frees the block's txs from orphaned blocks still holding them, so the
+ * retry can store it (the multi-block reorg case).
+ *
+ * @returns false when an ACTIVE block holds one of its txs. The block is
+ * then skipped (the message is acked, not redelivered forever as before,
+ * which wedged mainnet for ~23h) and logged as SKIPPED_BLOCK_TX_CONFLICT;
+ * its height stays empty until something stores it.
+ */
 const pruneConflictingOrphanedTxOwners = async (
   parsedBlock: ChicmozL2Block,
-): Promise<void> => {
+): Promise<boolean> => {
   const incomingTxHashes = parsedBlock.body.txEffects.map(
     (txEffect) => txEffect.txHash,
   );
@@ -152,20 +234,12 @@ const pruneConflictingOrphanedTxOwners = async (
     );
   }
 
+  // Normally caught up front by findBlockingTxOwners; checked again in case
+  // a holder became active in between.
   const activeOwners = owners.filter((owner) => !owner.isOrphaned);
   if (activeOwners.length > 0) {
-    const ownerSummary = activeOwners
-      .map(
-        (owner) =>
-          `${owner.txHash} in active block ${owner.blockHeight} (${owner.blockHash})`,
-      )
-      .join(", ");
-    logger.error(
-      `Hard duplicate tx_hash conflict while storing block ${parsedBlock.height}: ${ownerSummary}`,
-    );
-    throw new Error(
-      `Duplicate tx_hash conflict while storing block ${parsedBlock.height}: ${ownerSummary}`,
-    );
+    logSkippedTxConflict(parsedBlock, activeOwners);
+    return false;
   }
 
   const orphanedOwnerHashes = [...new Set(owners.map((owner) => owner.blockHash))];
@@ -176,6 +250,7 @@ const pruneConflictingOrphanedTxOwners = async (
   for (const blockHash of orphanedOwnerHashes) {
     await deleteL2BlockByHash(blockHash);
   }
+  return true;
 };
 
 const pendingTxsHook = async (txEffects: ChicmozL2TxEffect[]) => {
