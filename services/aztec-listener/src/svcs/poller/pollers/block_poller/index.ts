@@ -17,6 +17,8 @@ import {
   getBlock,
   getLatestProposedHeight,
   getLatestProvenHeight,
+  pinRpcNode,
+  type RpcNode,
 } from "../../network-client/index.js";
 import { handleProvenTransactions } from "./handle-proven-block-txs.js";
 
@@ -51,8 +53,14 @@ const syncRecursivePolling = (isFirstRun: boolean) => {
 
 const recursivePolling = async (isFirstRun = false) => {
   try {
+    // One node per cycle: blocks published as proven must be proven on the
+    // node that served them.
+    const node = pinRpcNode();
     const [chainProposedBlockHeight, chainProvenBlockHeight] =
-      await Promise.all([getLatestProposedHeight(), getLatestProvenHeight()]);
+      await Promise.all([
+        getLatestProposedHeight(node),
+        getLatestProvenHeight(node),
+      ]);
     let heights = {
       ...(await getBlockHeights()),
       chainProposedBlockHeight: Number(chainProposedBlockHeight),
@@ -87,6 +95,7 @@ Proven height   PROCESSED ${heights.processedProvenBlockHeight} | CHAIN ${
         await pollProposedBlock(
           heights.processedProposedBlockHeight,
           isFirstRun,
+          node,
         );
       }
     } catch (e) {
@@ -101,7 +110,11 @@ Proven height   PROCESSED ${heights.processedProvenBlockHeight} | CHAIN ${
         !AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS
       ) {
         heights.processedProvenBlockHeight++;
-        await pollProvenBlock(heights.processedProvenBlockHeight, isFirstRun);
+        await pollProvenBlock(
+          heights.processedProvenBlockHeight,
+          isFirstRun,
+          node,
+        );
       }
     } catch (e) {
       logger.error(
@@ -110,7 +123,7 @@ Proven height   PROCESSED ${heights.processedProvenBlockHeight} | CHAIN ${
     }
     const nothingToProcess = proposedHeightDiff === 0 && provenHeightDiff === 0;
     if (nothingToProcess) {
-      await oneEternalCatchupFetch(chainProposedBlockHeight);
+      await oneEternalCatchupFetch(chainProposedBlockHeight, node);
     }
   } catch (e) {
     logger.error(`🐱 error while processing blocks: ${(e as Error).stack}`);
@@ -122,8 +135,12 @@ Proven height   PROCESSED ${heights.processedProvenBlockHeight} | CHAIN ${
   }
 };
 
-const pollProposedBlock = async (height: number, isCatchup: boolean) => {
-  const block = await internalGetBlock(height);
+const pollProposedBlock = async (
+  height: number,
+  isCatchup: boolean,
+  node: RpcNode,
+) => {
+  const block = await internalGetBlock(height, node);
   if (isCatchup) {
     await onCatchupBlock(
       block,
@@ -138,8 +155,12 @@ const pollProposedBlock = async (height: number, isCatchup: boolean) => {
   await storeProcessedProposedBlockHeight(height);
 };
 
-const pollProvenBlock = async (height: number, isCatchup: boolean) => {
-  const block = await internalGetBlock(height);
+const pollProvenBlock = async (
+  height: number,
+  isCatchup: boolean,
+  node: RpcNode,
+) => {
+  const block = await internalGetBlock(height, node);
 
   if (isCatchup) {
     await onCatchupBlock(block, "proven");
@@ -153,8 +174,8 @@ const pollProvenBlock = async (height: number, isCatchup: boolean) => {
   await storeProcessedProvenBlockHeight(height);
 };
 
-const internalGetBlock = async (height: number) => {
-  const blockRes = await getBlock(height);
+const internalGetBlock = async (height: number, node: RpcNode) => {
+  const blockRes = await getBlock(height, node);
   if (!blockRes) {
     throw new Error(`Block ${height} not found`);
   }
@@ -187,12 +208,15 @@ const ensureSaneValues = async (
 };
 
 let currentEternalCatchupHeight = 1;
-const oneEternalCatchupFetch = async (currentProposedHeight: number) => {
+const oneEternalCatchupFetch = async (
+  currentProposedHeight: number,
+  node: RpcNode,
+) => {
   if (!AZTEC_ENABLE_FULL_SWEEP_CATCHUP) {
     return;
   }
   // NOTE: if we have started the poller without catchup, we at least want it to eventually be in sync
-  const block = await internalGetBlock(currentEternalCatchupHeight);
+  const block = await internalGetBlock(currentEternalCatchupHeight, node);
   if (block) {
     await onCatchupBlock(block, "proposed");
     currentEternalCatchupHeight =

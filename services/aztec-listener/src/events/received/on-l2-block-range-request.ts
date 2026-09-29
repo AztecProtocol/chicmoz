@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { type EventHandler } from "@chicmoz-pkg/message-bus";
 import {
   generateL2TopicName,
   getConsumerGroupId,
@@ -21,6 +21,7 @@ import {
   getBlock,
   getLatestProposedHeight,
   getLatestProvenHeight,
+  pinRpcNode,
 } from "../../svcs/poller/network-client/index.js";
 
 const inFlightRequests = new Set<string>();
@@ -93,8 +94,11 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     );
     return;
   }
-  const proposedHeight = toSafeHeight(await getLatestProposedHeight());
-  const provenHeight = toSafeHeight(await getLatestProvenHeight());
+  // One node for the heights and every block, so a block labelled proven
+  // below is proven on the node that served it.
+  const node = pinRpcNode();
+  const proposedHeight = toSafeHeight(await getLatestProposedHeight(node));
+  const provenHeight = toSafeHeight(await getLatestProvenHeight(node));
   const maxBlocks = Math.min(
     event.maxBlocks ?? L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
     L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
@@ -118,15 +122,18 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     }
 
     for (let height = range.from; height <= range.to && publishedBlocks < maxBlocks; height++) {
-      const block = await getBlock(height);
+      const block = await getBlock(height, node);
       if (!block) {
         failedHeights++;
         logger.warn(`Requested catchup block ${height} not found for ${event.requestId}`);
         continue;
       }
+      // A block at or below the proven tip is final, and the explorer lets
+      // proven catch-up blocks displace stale ones; labelling it "proposed"
+      // would leave a gap blocked by a stale fork unfillable.
       await onCatchupBlock(
         block,
-        range.statusHint,
+        height <= provenHeight ? "proven" : range.statusHint,
         {
           requestId: event.requestId,
           catchupReason: event.reason === "tip_boundary_mismatch" ? "reorg_repair" : event.reason,

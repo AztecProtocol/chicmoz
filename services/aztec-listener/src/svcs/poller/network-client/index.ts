@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { deriveStorageSlotInMap } from "@aztec/stdlib/hash";
 import {
-  ChicmozChainInfo,
-  ChicmozL2RpcNode,
+  type ChicmozChainInfo,
+  type ChicmozL2RpcNode,
   NODE_ENV,
   NodeEnv,
 } from "@chicmoz-pkg/types";
@@ -22,15 +22,15 @@ import {
   getAmountOfOnlineNodes,
   getRpcNode,
   initPool,
-  RpcNode,
+  type RpcNode,
   setNodeOffline,
 } from "./pool.js";
 import {
   getChicmozChainInfoFromNodeInfo,
   getRpcNodeFromNodeInfo,
 } from "./utils.js";
-import { AztecNode, NodeInfo } from "@aztec/aztec.js/node";
-import { AztecAddress } from "@aztec/stdlib/aztec-address";
+import { type AztecNode, type NodeInfo } from "@aztec/aztec.js/node";
+import { type AztecAddress } from "@aztec/stdlib/aztec-address";
 import { Fr } from "@aztec/aztec.js/fields";
 import { L2Block } from "@aztec/aztec.js/block";
 import { ProtocolContractAddress } from "@aztec/aztec.js/protocol";
@@ -196,10 +196,20 @@ export const getFreshInfo = async (): Promise<{
   };
 };
 
-export const getBlock = async (height: number) => {
-  const block = await callNodeFunction("getBlock", [BlockNumber(height), {
-    includeTransactions: true,
-  }]);
+/**
+ * Picks one node for a set of calls that must agree, e.g. a proven height and
+ * the blocks labelled proven because of it: two nodes can disagree on a block
+ * the lagging one has not yet seen pruned.
+ */
+export const pinRpcNode = (): RpcNode => getRpcNode();
+export { type RpcNode };
+
+export const getBlock = async (height: number, node?: RpcNode) => {
+  const block = await callNodeFunction(
+    "getBlock",
+    [BlockNumber(height), { includeTransactions: true }],
+    node,
+  );
   if (!block) {
     return undefined;
   }
@@ -233,12 +243,12 @@ export const getBlocks = async (fromHeight: number, toHeight: number) => {
   return blocks;
 };
 
-export const getLatestProposedHeight = async () => {
-  return callNodeFunction("getBlockNumber");
+export const getLatestProposedHeight = async (node?: RpcNode) => {
+  return callNodeFunction("getBlockNumber", undefined, node);
 };
 
-export const getLatestProvenHeight = async () => {
-  return await callNodeFunction("getBlockNumber", ["proven"]);
+export const getLatestProvenHeight = async (node?: RpcNode) => {
+  return await callNodeFunction("getBlockNumber", ["proven"], node);
 };
 
 export const getL2Tips = async () => {

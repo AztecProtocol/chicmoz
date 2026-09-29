@@ -47,6 +47,8 @@ describe("block poller full-sweep behavior", () => {
   const getBlock = vi.fn();
   const getLatestProposedHeight = vi.fn();
   const getLatestProvenHeight = vi.fn();
+  const pinnedNode = { name: "pinned", url: "http://pinned" };
+  const pinRpcNode = vi.fn(() => pinnedNode);
   const onCatchupBlock = vi.fn();
   const onBlock = vi.fn();
   const handleProvenTransactions = vi.fn();
@@ -71,6 +73,7 @@ describe("block poller full-sweep behavior", () => {
       getBlock,
       getLatestProposedHeight,
       getLatestProvenHeight,
+      pinRpcNode,
     }));
     vi.doMock("../../src/events/emitted/index.js", () => ({
       onBlock,
@@ -122,13 +125,29 @@ describe("block poller full-sweep behavior", () => {
     poller.stopPolling();
   });
 
+  it("reads the proven height and fetches proven blocks from one node", async () => {
+    getLatestProvenHeight.mockResolvedValue(6);
+    getLatestProposedHeight.mockResolvedValue(6);
+    const poller = await importPoller(false);
+
+    poller.startPolling();
+    await vi.waitFor(() => expect(handleProvenTransactions).toHaveBeenCalled());
+
+    expect(pinRpcNode).toHaveBeenCalledOnce();
+    expect(getLatestProvenHeight).toHaveBeenCalledWith(pinnedNode);
+    expect(getLatestProposedHeight).toHaveBeenCalledWith(pinnedNode);
+    expect(getBlock).toHaveBeenCalledWith(6, pinnedNode);
+
+    poller.stopPolling();
+  });
+
   it("keeps manual full-sweep catchup working when enabled", async () => {
     const poller = await importPoller(true);
 
     poller.startPolling();
     await vi.waitFor(() => expect(onCatchupBlock).toHaveBeenCalled());
 
-    expect(getBlock).toHaveBeenCalledWith(1);
+    expect(getBlock).toHaveBeenCalledWith(1, pinnedNode);
     expect(logger.info).toHaveBeenCalledWith(
       "Full-sweep catchup is enabled; listener will sweep historical blocks when live head is idle.",
     );
