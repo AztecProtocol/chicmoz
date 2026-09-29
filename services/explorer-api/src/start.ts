@@ -8,10 +8,6 @@ import {
   L2_NETWORK_ID,
 } from "./environment.js";
 import { subscribeHandlers } from "./events/received/index.js";
-import {
-  l1GovernanceUriRequest,
-  l2BlockRangeRequest,
-} from "./events/emitted/index.js";
 import { logger } from "./logger.js";
 import { removeDroppedThatHaveTxEffects } from "./svcs/database/controllers/dropped-tx/remove.js";
 import { updateContractInstanceAztecScanNotes } from "./svcs/database/controllers/l2/aztec-scan-notes.js";
@@ -19,10 +15,12 @@ import { initializeRollupVersionCache } from "./svcs/database/controllers/l2/cha
 import { deleteAllTxs } from "./svcs/database/controllers/l2Tx/delete-all-txs.js";
 import { updateContractClassManualSourceCodeUrl } from "./svcs/database/controllers/l2contract/update.js";
 import { initializeProtocolContracts } from "./utils/protocol-contracts.js";
-import { buildStartupMissingBlockRangeRequest } from "./svcs/database/controllers/l2block/missing-ranges.js";
-import { startL2BlockReconciliation } from "./svcs/reconciliation/l2-block-reconciliation.js";
 import {
-  buildStartupGovernanceUriRequest,
+  runL2BlockReconciliationOnce,
+  startL2BlockReconciliation,
+} from "./svcs/reconciliation/l2-block-reconciliation.js";
+import {
+  runGovernanceUriReconciliationOnce,
   startGovernanceUriReconciliation,
 } from "./svcs/reconciliation/governance-uri-reconciliation.js";
 
@@ -60,8 +58,10 @@ URL: ${sourceCodeUrl}`);
   }
 
   await subscribeHandlers();
-  await l2BlockRangeRequest(await buildStartupMissingBlockRangeRequest());
-  await l1GovernanceUriRequest(await buildStartupGovernanceUriRequest());
+  // Through the reconciliation ticks, so a shutdown during startup waits for
+  // these requests and no interval is armed after it.
+  await runL2BlockReconciliationOnce("startup");
+  await runGovernanceUriReconciliationOnce("startup");
   if (L2_BLOCK_RECONCILIATION_ENABLED) {
     startL2BlockReconciliation();
   } else {
