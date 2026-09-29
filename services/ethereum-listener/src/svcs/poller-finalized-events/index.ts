@@ -1,4 +1,5 @@
-import { MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
+import { isDatabaseNotReadyError } from "@chicmoz-pkg/postgres-helper";
+import { type MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
 import { logger } from "../../logger.js";
 import { DEFAULT_BLOCK_CHUNK_SIZE } from "../../network-client/contracts/get-events.js";
 import { getFinalizedContractEvents } from "../../network-client/contracts/index.js";
@@ -73,7 +74,7 @@ const runCatchup = async (): Promise<boolean> => {
       const errMsg = e instanceof Error ? e.message : "";
       if (
         errMsg === "L1 contracts not initialized" ||
-        errMsg === "Database is not initialized"
+        isDatabaseNotReadyError(e)
       ) {
         logger.info(
           `🐻 waiting for dependencies during catchup (${errMsg})...`,

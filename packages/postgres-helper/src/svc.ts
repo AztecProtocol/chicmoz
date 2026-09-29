@@ -3,7 +3,7 @@ import {
   getSvcState,
   type MicroserviceBaseSvc,
 } from "@chicmoz-pkg/microservice-base";
-import { DrizzleConfig } from "drizzle-orm";
+import { type DrizzleConfig } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { dbCredentials, getConfigStr } from "./environment.js";
@@ -50,21 +50,35 @@ const init = async (
   }
 };
 
-export const getDb = () => {
-  try {
-    const state = getSvcState(serviceId);
+const DB_NOT_READY_MESSAGES = {
+  notInitialized: "Database is not initialized",
+  shuttingDown: "Database is shutting down",
+  down: "Database is down",
+  initializing: "Database is initializing",
+};
 
-    if (state !== MicroserviceBaseSvcState.UP) {
-      if (state === MicroserviceBaseSvcState.SHUTTING_DOWN) {
-        throw new Error("Database is shutting down");
-      } else if (state === MicroserviceBaseSvcState.DOWN) {
-        throw new Error("Database is down");
-      } else if (state === MicroserviceBaseSvcState.INITIALIZING) {
-        throw new Error("Database is initializing");
-      }
-    }
+// True for the errors getDb throws while the database service is not up, for
+// callers that poll during startup and should wait rather than fail.
+export const isDatabaseNotReadyError = (error: unknown) =>
+  error instanceof Error &&
+  Object.values(DB_NOT_READY_MESSAGES).includes(error.message);
+
+export const getDb = () => {
+  let state: MicroserviceBaseSvcState;
+  try {
+    state = getSvcState(serviceId);
   } catch (error) {
-    throw new Error("Database is not initialized");
+    throw new Error(DB_NOT_READY_MESSAGES.notInitialized);
+  }
+
+  if (state !== MicroserviceBaseSvcState.UP) {
+    if (state === MicroserviceBaseSvcState.SHUTTING_DOWN) {
+      throw new Error(DB_NOT_READY_MESSAGES.shuttingDown);
+    } else if (state === MicroserviceBaseSvcState.DOWN) {
+      throw new Error(DB_NOT_READY_MESSAGES.down);
+    } else if (state === MicroserviceBaseSvcState.INITIALIZING) {
+      throw new Error(DB_NOT_READY_MESSAGES.initializing);
+    }
   }
   return db;
 };
