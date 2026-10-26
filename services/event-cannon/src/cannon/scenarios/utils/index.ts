@@ -1,6 +1,6 @@
-import { ContractInitializationStatus, Wallet } from "@aztec/aztec.js/wallet";
-import { ContractClassPublishedEvent } from "@aztec/protocol-contracts/class-registry";
-import { publishContractClass } from "@aztec/aztec.js/deployment";
+import { ContractInitializationStatus, Wallet } from "@aztec-labs/aztec.js/wallet";
+import { ContractClassPublishedEvent } from "@aztec-labs/protocol-contracts/class-registry";
+import { publishContractClass } from "@aztec-labs/aztec.js/deployment";
 import {
   generateVerifyArtifactPayload,
   generateVerifyArtifactUrl,
@@ -20,16 +20,16 @@ import {
   type ContractInstanceWithAddress,
   DeployMethod,
   TxSendResultMined,
-} from "@aztec/aztec.js/contracts";
-import { FunctionType, NoirCompiledContract } from "@aztec/aztec.js/abi";
-import { PXE } from "@aztec/pxe/server";
-import { Fr } from "@aztec/aztec.js/fields";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { AztecNode } from "@aztec/aztec.js/node";
-import { BlockNumber } from "@aztec/foundation/branded-types";
-import { Account } from "@aztec/aztec.js/account";
-import { TxReceipt } from "@aztec/aztec.js/tx";
+} from "@aztec-labs/aztec.js/contracts";
+import { FunctionType, NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
+import { PXE } from "@aztec-labs/pxe/server";
+import { Fq, Fr } from "@aztec-labs/aztec.js/fields";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { AztecNode } from "@aztec-labs/aztec.js/node";
+import { BlockNumber } from "@aztec-labs/foundation/branded-types";
+import { Account } from "@aztec-labs/aztec.js/account";
+import { TxReceipt } from "@aztec-labs/aztec.js/tx";
 
 export const AZTEC_CONTRACT_CLASS_VERSION = 1;
 
@@ -110,7 +110,12 @@ export const getNewSchnorrAccount = async ({
   accountName: string;
 }) => {
   logger.info(`  Creating new Schnorr account... (${accountName})`);
-  const schnorrAccount = await wallet.createSchnorrAccount(secretKey, salt);
+  const schnorrAccount = await wallet.createSchnorrAccount(
+    secretKey,
+    salt,
+    // 6.x no longer derives the signing key from the secret.
+    Fq.random(),
+  );
 
   logger.info(
     `    Schnorr account created ${schnorrAccount.address.toString()} (${accountName})`,

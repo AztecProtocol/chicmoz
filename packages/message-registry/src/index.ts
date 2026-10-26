@@ -1,9 +1,11 @@
 import { L2NetworkId } from "@chicmoz-pkg/types";
 import { L2Payload, L2Topic } from "./aztec.js";
 import { L1Payload, L1Topic } from "./ethereum.js";
+import { withKafkaNamespace } from "./namespace.js";
 
 export * from "./aztec.js";
 export * from "./ethereum.js";
+export * from "./namespace.js";
 export * from "./metric.js"; // TODO (legacy)
 export * from "./subscription.js"; // TODO (legacy)
 
@@ -19,5 +21,5 @@ export const getConsumerGroupId = ({
   networkId: L2NetworkId;
   handlerName: string;
 }) => {
-  return `${serviceName}_${networkId}_${handlerName}`;
+  return withKafkaNamespace(`${serviceName}_${networkId}_${handlerName}`);
 };

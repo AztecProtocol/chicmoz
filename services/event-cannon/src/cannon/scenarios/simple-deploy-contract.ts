@@ -1,12 +1,12 @@
-import { DeployMethod } from "@aztec/aztec.js/contracts";
+import { DeployMethod } from "@aztec-labs/aztec.js/contracts";
 import { logger } from "../../logger.js";
 import { getAztecNodeClient, getAccounts, getWallet } from "../pxe.js";
 import {
   deployContract,
   registerContractClassArtifact,
 } from "./utils/index.js";
-import { PrivateVotingContract } from "@aztec/noir-contracts.js/PrivateVoting";
-import * as contractArtifactJson from "@aztec/noir-contracts.js/artifacts/private_voting_contract-PrivateVoting" with { type: "json" };
+import { PrivateVotingContract } from "@aztec-labs/noir-contracts.js/PrivateVoting";
+import * as contractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/private_voting_contract-PrivateVoting" with { type: "json" };
 
 export async function run() {
   logger.info("===== SIMPLE DEPLOY CONTRACT =====");

@@ -1,5 +1,5 @@
-import { PublicChecksContract } from "@aztec/noir-contracts.js/PublicChecks";
-import * as contractArtifactJson from "@aztec/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
+import { PublicChecksContract } from "@aztec-labs/noir-contracts.js/PublicChecks";
+import * as contractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
 import { logger } from "../../logger.js";
 import { getAccounts, getAztecNodeClient, getWallet } from "../pxe.js";
 import {

@@ -1,4 +1,4 @@
-import { RollupAbi } from "@aztec/l1-artifacts";
+import { RollupAbi } from "@aztec-foundation/l1-artifacts";
 import { L2NetworkId, getL1NetworkId } from "@chicmoz-pkg/types";
 import {
   PublicClient,
@@ -195,6 +195,10 @@ const hardcodedRollupGenesisBlocks = (
         return 8125387n;
       case "0xf6d0d42ace06829becb78c74f49879528fc632c1":
         return 10391387n;
+      case "0x8c2fb2a68a3d362ab1de99e06f83f8903160bbd9":
+        return 11785332n;
+      case "0x1f435a7f2da358caf887a470faeee7d5d5f4efba":
+        return 11969225n;
       default:
         return 8125387n; // NOTE: probably it will never be a lower block than this on sepolia
     }

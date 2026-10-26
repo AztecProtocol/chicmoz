@@ -18,6 +18,7 @@ import {
   L1NetworkId,
   L2NetworkId,
 } from "@chicmoz-pkg/types";
+import { type KafkaNamespaced, withKafkaNamespace } from "./namespace.js";
 
 export type ConnectedToL1Event = {
   something: string;
@@ -58,14 +59,16 @@ export type L1GovernanceUriResolvedEvent = {
   error?: string;
 };
 
-export type L1Topic = `${L2NetworkId}_${L1NetworkId}__${keyof L1_MESSAGES}`;
+export type L1Topic = KafkaNamespaced<
+  `${L2NetworkId}_${L1NetworkId}__${keyof L1_MESSAGES}`
+>;
 
 export function generateL1TopicName(
   l2NetworkId: L2NetworkId,
   l1NetworkId: L1NetworkId,
   topic: keyof L1_MESSAGES,
 ): L1Topic {
-  return `${l2NetworkId}_${l1NetworkId}__${topic}`;
+  return withKafkaNamespace(`${l2NetworkId}_${l1NetworkId}__${topic}`);
 }
 
 export type L1_MESSAGES = {

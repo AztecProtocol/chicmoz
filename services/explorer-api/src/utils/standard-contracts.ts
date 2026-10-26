@@ -3,7 +3,7 @@ import {
   ContractStandardName,
   ContractStandardVersion,
 } from "@chicmoz-pkg/types";
-import { NoirCompiledContract } from "@aztec/aztec.js/abi";
+import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 import DripperContractJsonLegacy from "@defi-wonderland/aztec-standards-v410/target/dripper-Dripper.json" with { type: "json" };
 import EscrowContractJsonLegacy from "@defi-wonderland/aztec-standards-v410/target/escrow_contract-Escrow.json" with { type: "json" };
 import GenericProxyContractJsonLegacy from "@defi-wonderland/aztec-standards-v410/target/generic_proxy-GenericProxy.json" with { type: "json" };

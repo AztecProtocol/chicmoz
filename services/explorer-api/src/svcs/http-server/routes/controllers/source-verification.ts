@@ -1,6 +1,7 @@
 import asyncHandler from "express-async-handler";
 import { randomUUID } from "crypto";
 import { OpenAPIObject } from "openapi3-ts/oas31";
+import { ARCHIVE_MODE } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { controllers as db } from "../../../database/index.js";
 import { publishMessage } from "../../../message-bus/index.js";
@@ -83,6 +84,7 @@ export const openapi_POST_VERIFY_SOURCE: OpenAPIObject["paths"] = {
         "400": { description: "Invalid request" },
         "404": { description: "Contract class not found" },
         "429": { description: "Too many concurrent verification requests" },
+        "503": { description: "Source verification is unavailable (archived rollup)" },
       },
     },
   },
@@ -93,6 +95,13 @@ export const POST_VERIFY_SOURCE = asyncHandler(async (req, res) => {
     params: { contractClassId, version },
     body: { githubUrl, gitRef, subPath },
   } = postVerifySourceSchema.parse(req);
+
+  if (ARCHIVE_MODE) {
+    res.status(503).json({
+      error: "Source verification is unavailable for an archived rollup.",
+    });
+    return;
+  }
 
   // Rate limit by IP (DB-backed — survives restarts and self-cleans as jobs complete)
   const clientIp = getClientIp(req);

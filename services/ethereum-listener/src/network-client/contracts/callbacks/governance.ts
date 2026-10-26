@@ -10,7 +10,7 @@ import {
   chicmozL1GovernanceSignalCastSchema,
   chicmozL1GovernanceVoteCastSchema,
 } from "@chicmoz-pkg/types";
-import { GovernanceAbi } from "@aztec/l1-artifacts";
+import { GovernanceAbi } from "@aztec-foundation/l1-artifacts";
 import { type Address } from "viem";
 import { getBlockTimestamp, getPublicHttpClient } from "../../client/index.js";
 import { emit } from "../../../events/index.js";

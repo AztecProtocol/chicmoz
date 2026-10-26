@@ -6,7 +6,7 @@ import {
   OutboxAbi,
   RegistryAbi,
   RollupAbi,
-} from "@aztec/l1-artifacts";
+} from "@aztec-foundation/l1-artifacts";
 import { type PublicClient, getContract } from "viem";
 
 type AztecAbi =

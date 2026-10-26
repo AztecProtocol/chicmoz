@@ -1,15 +1,15 @@
-import { L1Deployer } from "@aztec/ethereum/deploy-l1-contract";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
+import { L1Deployer } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
 import {
   TestERC20Abi,
   TestERC20Bytecode,
   TokenPortalAbi,
   TokenPortalBytecode,
-} from "@aztec/l1-artifacts";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { TokenBridgeContract } from "@aztec/noir-contracts.js/TokenBridge";
-import * as tokenBridgeContractArtifactJson from "@aztec/noir-contracts.js/artifacts/token_bridge_contract-TokenBridge" with { type: "json" };
-import * as tokenContractArtifactJson from "@aztec/noir-contracts.js/artifacts/token_contract-Token" with { type: "json" };
+} from "@aztec-foundation/l1-artifacts";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { TokenBridgeContract } from "@aztec-labs/noir-contracts.js/TokenBridge";
+import * as tokenBridgeContractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/token_bridge_contract-TokenBridge" with { type: "json" };
+import * as tokenContractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/token_contract-Token" with { type: "json" };
 import assert from "assert";
 import { getContract } from "viem";
 import { ETHEREUM_RPC_URL } from "../../environment.js";
@@ -22,14 +22,14 @@ import {
   registerContractClassArtifact,
   simulateThenSend,
 } from "./utils/index.js";
-import { DeployMethod } from "@aztec/aztec.js/contracts";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { L1TokenPortalManager } from "@aztec/aztec.js/ethereum";
-import { createLogger } from "@aztec/aztec.js/log";
-import { Fr } from "@aztec/aztec.js/fields";
-import { SiblingPath } from "@aztec/aztec.js/trees";
-import { EpochNumber } from "@aztec/foundation/branded-types";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
+import { DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { L1TokenPortalManager } from "@aztec-labs/aztec.js/ethereum";
+import { createLogger } from "@aztec-labs/aztec.js/log";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { SiblingPath } from "@aztec-labs/aztec.js/trees";
+import { EpochNumber } from "@aztec-labs/foundation/branded-types";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
 
 const MNEMONIC = "test test test test test test test test test test test junk";
 const TOKEN_NAME = "TokenName";

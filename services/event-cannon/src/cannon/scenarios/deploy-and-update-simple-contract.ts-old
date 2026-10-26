@@ -2,7 +2,7 @@ import {
   type DeploySentTx,
   type NoirCompiledContract,
   waitForPXE,
-} from "@aztec/aztec.js";
+} from "@aztec-labs/aztec.js";
 import { SimpleLoggingContract } from "../../artifacts/SimpleLogging-v1.js";
 import { SimpleLoggingUpdateContract as SimpleLoggingV2 } from "../../artifacts/SimpleLoggingUpdate.js";
 import artifactJson from "../../contract-projects/SimpleLogging/target/simple_logging-SimpleLogging.json" with { type: "json" };

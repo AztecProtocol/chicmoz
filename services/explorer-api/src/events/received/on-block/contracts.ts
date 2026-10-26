@@ -1,9 +1,9 @@
-import { L2Block } from "@aztec/aztec.js/block";
-import { ContractClassPublishedEvent } from "@aztec/protocol-contracts/class-registry";
+import { L2Block } from "@aztec-labs/aztec.js/block";
+import { ContractClassPublishedEvent } from "@aztec-labs/protocol-contracts/class-registry";
 import {
   ContractInstancePublishedEvent,
   ContractInstanceUpdatedEvent,
-} from "@aztec/protocol-contracts/instance-registry";
+} from "@aztec-labs/protocol-contracts/instance-registry";
 import {
   chicmozL2ContractClassRegisteredEventSchema,
   chicmozL2ContractInstanceDeployedEventSchema,

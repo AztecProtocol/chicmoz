@@ -1,4 +1,4 @@
-import { Tx, TxHash } from "@aztec/aztec.js/tx";
+import { Tx, TxHash } from "@aztec-labs/aztec.js/tx";
 
 export const MAX_PENDING_TXS_PAGE_SIZE = 50;
 

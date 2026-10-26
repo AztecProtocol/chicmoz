@@ -49,6 +49,9 @@
   font-style: normal;
   margin-left: 6px;
 }
+.tip .kicker em.muted {
+  color: var(--ink-3);
+}
 .tip .kicker em.warn {
   color: #c99800;
 }

@@ -1,6 +1,6 @@
 import { TokenContract as TokenContractUntyped } from "@defi-wonderland/aztec-standards-v410/artifacts/src/artifacts/Token.js";
-import { Contract, DeployMethod } from "@aztec/aztec.js/contracts";
-import { Wallet } from "@aztec/aztec.js/wallet";
+import { Contract, DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { Wallet } from "@aztec-labs/aztec.js/wallet";
 import { logger } from "../../logger.js";
 
 type TokenContractStatic = {

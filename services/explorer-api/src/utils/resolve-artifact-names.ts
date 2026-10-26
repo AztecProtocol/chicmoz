@@ -2,8 +2,8 @@ import {
   decodeFunctionSignature,
   loadContractArtifact,
   FunctionSelector,
-} from "@aztec/stdlib/abi";
-import { type NoirCompiledContract } from "@aztec/aztec.js/abi";
+} from "@aztec-labs/stdlib/abi";
+import { type NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 
 /**
  * Extracts the function name from a selector-map value.

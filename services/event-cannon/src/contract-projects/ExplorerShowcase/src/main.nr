@@ -84,7 +84,7 @@ pub contract ExplorerShowcase {
         sender: EthAddress,
         leaf_index: Field,
     ) {
-        self.context.consume_l1_to_l2_message(content, secret, sender, leaf_index);
+        self.context.consume_l1_to_l2_message(content, [secret], sender, leaf_index);
 
         // Credit the admin with 1 public count to make the L2 effect visible.
         let admin = self.storage.admin.read();

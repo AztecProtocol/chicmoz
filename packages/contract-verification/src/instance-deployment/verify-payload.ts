@@ -1,14 +1,14 @@
-import { getDefaultInitializer, loadContractArtifact } from "@aztec/stdlib/abi";
+import { getDefaultInitializer, loadContractArtifact } from "@aztec-labs/stdlib/abi";
 import {
   computeContractAddressFromInstance,
   computeInitializationHash,
   computeSaltedInitializationHash,
-} from "@aztec/stdlib/contract";
+} from "@aztec-labs/stdlib/contract";
 import { VerifyInstanceDeploymentPayload } from "../types.js";
-import { NoirCompiledContract } from "@aztec/aztec.js/abi";
-import { Fr } from "@aztec/aztec.js/fields";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { PublicKeys } from "@aztec/aztec.js/keys";
+import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { PublicKeys } from "@aztec-labs/aztec.js/keys";
 
 export const verifyInstanceDeploymentPayload = async (
   payload: VerifyInstanceDeploymentPayload & {

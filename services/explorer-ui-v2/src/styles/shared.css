@@ -149,6 +149,57 @@
 .network-option.active .network-dot {
   opacity: 1;
 }
+/* The version picker sits right after the network picker. */
+.version-selector {
+  margin-left: -12px;
+}
+/* Versions read `v6`, not `V6`, like the trigger and the banner. */
+.version-name {
+  text-transform: none;
+}
+.version-status {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--green);
+}
+.version-status.previous {
+  color: var(--ink-3);
+}
+
+/* Shown on a previous version's deployment, under the topbar. */
+.version-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 176, 0, 0.55);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.version-banner a {
+  color: var(--purple-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.version-banner-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  border: 1px solid rgba(255, 176, 0, 0.55);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.light .version-banner-tag {
+  color: #8a6400;
+}
 
 .search {
   flex: 1;

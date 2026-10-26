@@ -14,7 +14,7 @@ import * as chainInfoPoller from "./pollers/chain-info-poller.js";
 import * as pendingTxsPoller from "./pollers/txs_poller.js";
 import * as droppedTxVerifier from "./pollers/dropped-tx-verifier.js";
 import * as l2TipsPoller from "./pollers/l2-tips-poller.js";
-import { NodeInfo } from "@aztec/aztec.js/contracts";
+import { NodeInfo } from "@aztec-labs/aztec.js/contracts";
 
 let nodeInfo: NodeInfo;
 

@@ -12,19 +12,19 @@ metadata:
 - Explain the Aztec SDK type landscape used in Chicmoz
 - Reference pinned package versions and where they are used
 - Describe common type patterns for blocks, transactions, and contracts
-- Clarify how `@chicmoz-pkg/types` relates to `@aztec/*` SDK types
+- Clarify how `@chicmoz-pkg/types` relates to `@aztec-labs/*` SDK types
 - Note compatibility constraints with `viem` and `@defi-wonderland/aztec-standards`
 
 ---
 
 ## Pinned Package Versions
 
-All `@aztec/*` packages are pinned globally via Yarn resolutions in the root `package.json`. **Do not change individual service package.json versions without updating resolutions too.**
+All `@aztec-labs/*` packages are pinned globally via Yarn resolutions in the root `package.json`. **Do not change individual service package.json versions without updating resolutions too.**
 
 ### Current pins
 
 Read them from the `resolutions` block in the root `package.json` (all
-`@aztec/*` packages share one version). Devnet is no longer served.
+`@aztec-labs/*` packages share one version). Devnet is no longer served.
 
 ### Additional non-Aztec dependency
 
@@ -32,17 +32,17 @@ Read them from the `resolutions` block in the root `package.json` (all
 
 ---
 
-## Where `@aztec/*` Is Used Per Service
+## Where `@aztec-labs/*` Is Used Per Service
 
-| Service                      | Direct `@aztec/*` deps                                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `services/aztec-listener`    | `@aztec/aztec.js`, `@aztec/stdlib`                                                                                       |
-| `services/ethereum-listener` | `@aztec/aztec.js`, `@aztec/l1-artifacts`                                                                                 |
-| `services/explorer-api`      | `@aztec/aztec.js`, `@aztec/protocol-contracts`, `@aztec/stdlib`                                                          |
-| `services/event-cannon`      | `@aztec/accounts`, `@aztec/aztec.js`, `@aztec/ethereum`, `@aztec/l1-artifacts`, `@aztec/noir-contracts.js`, `@aztec/pxe` |
-| `packages/types`             | **None** — uses only `zod` for validation                                                                                |
+| Service                      | Direct `@aztec-labs/*` deps                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `services/aztec-listener`    | `@aztec-labs/aztec.js`, `@aztec-labs/stdlib`                                                                                                                 |
+| `services/ethereum-listener` | `@aztec-labs/aztec.js`, `@aztec-foundation/l1-artifacts`                                                                                                     |
+| `services/explorer-api`      | `@aztec-labs/aztec.js`, `@aztec-labs/protocol-contracts`, `@aztec-labs/stdlib`                                                                               |
+| `services/event-cannon`      | `@aztec-labs/accounts`, `@aztec-labs/aztec.js`, `@aztec-labs/ethereum`, `@aztec-foundation/l1-artifacts`, `@aztec-labs/noir-contracts.js`, `@aztec-labs/pxe` |
+| `packages/types`             | **None** — uses only `zod` for validation                                                                                                                    |
 
-`packages/types` deliberately has no `@aztec/*` dependencies. It defines the Chicmoz-internal type system using plain TypeScript types (validated with Zod), keeping the shared type layer independent of the Aztec SDK version.
+`packages/types` deliberately has no `@aztec-labs/*` dependencies. It defines the Chicmoz-internal type system using plain TypeScript types (validated with Zod), keeping the shared type layer independent of the Aztec SDK version.
 
 ---
 
@@ -106,12 +106,12 @@ type AztecAddress = string;
 type EthAddress = string;
 ```
 
-### Working with `@aztec/aztec.js` types directly (in services)
+### Working with `@aztec-labs/aztec.js` types directly (in services)
 
 When interfacing directly with the Aztec node RPC in `aztec-listener`:
 
 ```typescript
-import { type L2Block } from "@aztec/aztec.js";
+import { type L2Block } from "@aztec-labs/aztec.js";
 
 // Aztec SDK types are complex — extract only what you need and map to @chicmoz-pkg/types
 // Do not pass raw SDK types through Kafka; serialize to plain objects first
@@ -119,15 +119,15 @@ import { type L2Block } from "@aztec/aztec.js";
 
 **Pattern**: Always map Aztec SDK types to Chicmoz internal types (`@chicmoz-pkg/types`) before publishing to Kafka or storing in the DB. This isolates SDK version changes to the listener services.
 
-### L1 contract types (via `@aztec/l1-artifacts`)
+### L1 contract types (via `@aztec-foundation/l1-artifacts`)
 
 ```typescript
-import { type L1ContractAddresses } from "@aztec/aztec.js";
+import { type L1ContractAddresses } from "@aztec-labs/aztec.js";
 ```
 
 Used in `ethereum-listener` to track L1 contract deployments. Map to `@chicmoz-pkg/types` definitions before publishing.
 
-### Protocol contracts (via `@aztec/protocol-contracts`)
+### Protocol contracts (via `@aztec-labs/protocol-contracts`)
 
 Used in `explorer-api` for contract class/instance lookups. These are Aztec-native contract artifacts — version-locked to the SDK version.
 
@@ -139,9 +139,9 @@ Used in `explorer-api` for contract class/instance lookups. These are Aztec-nati
 
 - `services/ethereum-listener`: listening to L1 events via HTTP/WS RPC
 - `services/event-cannon`: L1 interactions (fee juice, dev coin portals)
-- `@aztec/ethereum`: internally uses viem
+- `@aztec-labs/ethereum`: internally uses viem
 
-**Do not upgrade viem** independently — it must stay compatible with the `@aztec/*` SDK version. When bumping Aztec, check that the new Aztec version's internal viem dependency matches the pinned version.
+**Do not upgrade viem** independently — it must stay compatible with the `@aztec-labs/*` SDK version. When bumping Aztec, check that the new Aztec version's internal viem dependency matches the pinned version.
 
 ---
 
@@ -161,7 +161,7 @@ Used in `explorer-api` for contract class/instance lookups. These are Aztec-nati
 
 ## Upgrading Aztec SDK — Impact on Types
 
-When bumping `@aztec/*` versions:
+When bumping `@aztec-labs/*` versions:
 
 1. Check the Aztec changelog for breaking type changes in `L2Block`, `TxEffect`, `ContractClassPublic`, etc.
 2. Update mappings in `services/aztec-listener/src/` where Aztec SDK types are converted to Chicmoz internal types

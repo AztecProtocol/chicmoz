@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { deriveStorageSlotInMap } from "@aztec/stdlib/hash";
+import { deriveStorageSlotInMap } from "@aztec-labs/stdlib/hash";
 import {
   ChicmozChainInfo,
   ChicmozL2RpcNode,
@@ -29,12 +29,12 @@ import {
   getChicmozChainInfoFromNodeInfo,
   getRpcNodeFromNodeInfo,
 } from "./utils.js";
-import { AztecNode, NodeInfo } from "@aztec/aztec.js/node";
-import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { Fr } from "@aztec/aztec.js/fields";
-import { L2Block } from "@aztec/aztec.js/block";
-import { ProtocolContractAddress } from "@aztec/aztec.js/protocol";
-import { BlockNumber } from "@aztec/foundation/branded-types";
+import { AztecNode, NodeInfo } from "@aztec-labs/aztec.js/node";
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { L2Block } from "@aztec-labs/aztec.js/block";
+import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol";
+import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { getAllPendingTxs } from "./pending-txs.js";
 
 type AwaitedNodeReturn<K extends keyof AztecNode> = Awaited<

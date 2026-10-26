@@ -1,11 +1,11 @@
 import {
   PrivateVotingContract,
   PrivateVotingContractArtifact,
-} from "@aztec/noir-contracts.js/PrivateVoting";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
-import { Contract, DeployMethod } from "@aztec/aztec.js/contracts";
-import { Fr } from "@aztec/aztec.js/fields";
+} from "@aztec-labs/noir-contracts.js/PrivateVoting";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
+import { Contract, DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { Fr } from "@aztec-labs/aztec.js/fields";
 import { logger } from "../../logger.js";
 import { getAccounts, getAztecNodeClient, getWallet } from "../pxe.js";
 import {

@@ -1,5 +1,5 @@
-import { AztecNode, createAztecNodeClient } from "@aztec/aztec.js/node";
-import { defaultFetch } from "@aztec/foundation/json-rpc/client";
+import { AztecNode, createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { defaultFetch } from "@aztec-labs/foundation/json-rpc/client";
 import { AZTEC_RPC_URLS } from "../../../environment.js";
 import { onL2RpcNodeError } from "../../../events/emitted/index.js";
 import { logger } from "../../../logger.js";
@@ -117,11 +117,9 @@ export const initPool = () => {
     return {
       name: node.name,
       url: node.url,
-      instance: createAztecNodeClient(
-        node.url,
-        {},
-        fetchWithV5NodeNamespaceFallback,
-      ),
+      instance: createAztecNodeClient(node.url, {
+        fetch: fetchWithV5NodeNamespaceFallback,
+      }),
     };
   });
   resetPools();
