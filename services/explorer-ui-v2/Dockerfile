@@ -1,5 +1,8 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20250419+deb13u1 \
+    && rm -rf /var/lib/apt/lists/*
 
 ARG NODE_ENV
 ENV NODE_ENV=$NODE_ENV
