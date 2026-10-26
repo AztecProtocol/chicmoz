@@ -4,23 +4,54 @@ ARG NARGO_AZTEC_VERSION=v6.0.0
 FROM ${BASE_AZTEC_IMAGE}
 
 ARG NARGO_AZTEC_VERSION=v6.0.0
+# Noir release the Aztec version pins (install.aztec-labs.com/<version>/versions),
+# installed only when the base image has no nargo (6.x images ship none).
+# Override both together for another Aztec version.
+ARG NOIR_VERSION=1.0.0-rc.3
+ARG NOIR_SHA256=5792dd962afce1eed834570f95d9f72cc4a09d45cd846d3b80b7a57392732973
 
-# Put nargo and bb on PATH so `aztec compile` can find them
+# Images up to 5.x bundle nargo and bb here; 6.x finds bb through
+# @aztec-foundation/bb.js and nargo on PATH.
 ENV PATH="/usr/src/noir/noir-repo/target/release:/usr/src/barretenberg/ts/build/amd64-linux:${PATH}"
 
-# The v5 Aztec image contains the CLI entrypoint but does not put an `aztec`
+# The Aztec image contains the CLI entrypoint but does not put an `aztec`
 # binary on PATH. The compiler orchestrator invokes `aztec compile` directly.
 RUN printf '#!/bin/sh\nexec node /usr/src/yarn-project/aztec/dest/bin/index.js "$@"\n' > /usr/local/bin/aztec && \
   chmod +x /usr/local/bin/aztec
 
+RUN if ! command -v nargo >/dev/null 2>&1; then \
+    curl -fsSL -o /tmp/noir.tar.gz \
+      "https://github.com/noir-lang/noir/releases/download/v${NOIR_VERSION}/noir-x86_64-unknown-linux-gnu.tar.gz" && \
+    echo "${NOIR_SHA256}  /tmp/noir.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/noir.tar.gz -C /usr/local/bin ./nargo && \
+    rm /tmp/noir.tar.gz; \
+  fi && \
+  nargo --version
+
 # Pre-fetch nargo dependencies so compiles don't need network access.
 # The aztec-nr dependency tag is distinct from the upstream aztec Docker image tag.
+# aztec-packages carries aztec-nr up to 5.x and protocol_types from 6.x on;
+# from 6.x aztec-nr itself lives in aztec-labs-eng/aztec-nr, the only place
+# its tags exist. 6.0.0 needs poseidon v0.3.0 (aztec-nr) and v0.4.0
+# (protocol_types).
 RUN git clone --depth 1 --branch ${NARGO_AZTEC_VERSION} \
   https://github.com/AztecProtocol/aztec-packages.git \
   /root/nargo/github.com/AztecProtocol/aztec-packages/${NARGO_AZTEC_VERSION} && \
+  if git ls-remote --exit-code --tags https://github.com/aztec-labs-eng/aztec-nr \
+    "refs/tags/${NARGO_AZTEC_VERSION}" >/dev/null; then \
+    git clone --depth 1 --branch ${NARGO_AZTEC_VERSION} \
+      https://github.com/aztec-labs-eng/aztec-nr.git \
+      /root/nargo/github.com/aztec-labs-eng/aztec-nr/${NARGO_AZTEC_VERSION}; \
+  fi && \
   git clone --depth 1 --branch v0.2.3 \
   https://github.com/noir-lang/poseidon.git \
   /root/nargo/github.com/noir-lang/poseidon/v0.2.3 && \
+  git clone --depth 1 --branch v0.3.0 \
+  https://github.com/noir-lang/poseidon.git \
+  /root/nargo/github.com/noir-lang/poseidon/v0.3.0 && \
+  git clone --depth 1 --branch v0.4.0 \
+  https://github.com/noir-lang/poseidon.git \
+  /root/nargo/github.com/noir-lang/poseidon/v0.4.0 && \
   git clone --depth 1 --branch v0.3.0 \
   https://github.com/noir-lang/sha256.git \
   /root/nargo/github.com/noir-lang/sha256/v0.3.0

@@ -64,6 +64,17 @@ versions_for_branch() {
     esac
 }
 
+# Aztec images moved from aztecprotocol/aztec to azteclabs/aztec at 6.0.0.
+base_aztec_image_for() {
+    local version="$1"
+    local major="${version%%.*}"
+    if [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 6 ]; then
+        printf 'azteclabs/aztec:%s\n' "$version"
+    else
+        printf 'aztecprotocol/aztec:%s\n' "$version"
+    fi
+}
+
 build_one() {
     local requested_version="$1"
     local normalized_version
@@ -73,7 +84,7 @@ build_one() {
 
     normalized_version="$(normalize_version "$requested_version")"
     nargo_dependency_tag="$(normalize_nargo_dependency_tag "$requested_version")"
-    base_aztec_image="aztecprotocol/aztec:${normalized_version}"
+    base_aztec_image="$(base_aztec_image_for "$normalized_version")"
     image="${IMAGE_REPO}:${normalized_version}"
 
     if [ "$PRINT_ONLY" -eq 1 ]; then

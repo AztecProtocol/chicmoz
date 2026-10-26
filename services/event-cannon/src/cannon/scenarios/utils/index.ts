@@ -23,7 +23,7 @@ import {
 } from "@aztec-labs/aztec.js/contracts";
 import { FunctionType, NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 import { PXE } from "@aztec-labs/pxe/server";
-import { Fr } from "@aztec-labs/aztec.js/fields";
+import { Fq, Fr } from "@aztec-labs/aztec.js/fields";
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { AztecNode } from "@aztec-labs/aztec.js/node";
@@ -110,7 +110,12 @@ export const getNewSchnorrAccount = async ({
   accountName: string;
 }) => {
   logger.info(`  Creating new Schnorr account... (${accountName})`);
-  const schnorrAccount = await wallet.createSchnorrAccount(secretKey, salt);
+  const schnorrAccount = await wallet.createSchnorrAccount(
+    secretKey,
+    salt,
+    // 6.x no longer derives the signing key from the secret.
+    Fq.random(),
+  );
 
   logger.info(
     `    Schnorr account created ${schnorrAccount.address.toString()} (${accountName})`,
