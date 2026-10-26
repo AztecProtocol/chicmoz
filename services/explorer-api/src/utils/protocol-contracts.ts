@@ -1,12 +1,12 @@
-import { ContractArtifact } from "@aztec/aztec.js/abi";
-import { jsonStringify } from "@aztec/foundation/json-rpc";
+import { ContractArtifact } from "@aztec-labs/aztec.js/abi";
+import { jsonStringify } from "@aztec-labs/foundation/json-rpc";
 import {
   ProtocolContractAddress,
   ProtocolContractName,
   ProtocolContractSalt,
-} from "@aztec/protocol-contracts";
-import { ProtocolContractArtifact } from "@aztec/protocol-contracts/providers/bundle";
-import { getContractClassFromArtifact } from "@aztec/stdlib/contract";
+} from "@aztec-labs/protocol-contracts";
+import { ProtocolContractArtifact } from "@aztec-labs/protocol-contracts/providers/bundle";
+import { getContractClassFromArtifact } from "@aztec-labs/stdlib/contract";
 import {
   ChicmozL2ContractClassRegisteredEvent,
   ChicmozL2ContractInstanceDeluxe,

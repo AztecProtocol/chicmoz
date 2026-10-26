@@ -1,4 +1,4 @@
-import { RollupAbi } from "@aztec/l1-artifacts";
+import { RollupAbi } from "@aztec-foundation/l1-artifacts";
 import {
   type ChicmozL1L2Validator,
   chicmozL1L2ValidatorSchema,

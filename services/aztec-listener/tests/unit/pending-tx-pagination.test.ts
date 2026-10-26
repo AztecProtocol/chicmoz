@@ -1,4 +1,4 @@
-import { Tx, TxHash } from "@aztec/aztec.js/tx";
+import { Tx, TxHash } from "@aztec-labs/aztec.js/tx";
 import { describe, expect, it, vi } from "vitest";
 import {
   getAllPendingTxs,

@@ -7,7 +7,7 @@ import {
   verifyInstanceDeploymentPayload,
   verifyInstanceDeploymentPayloadSchema,
 } from "@chicmoz-pkg/contract-verification";
-import { PublicKeys } from "@aztec/aztec.js/keys";
+import { PublicKeys } from "@aztec-labs/aztec.js/keys";
 import { setEntry } from "@chicmoz-pkg/redis-helper";
 import {
   NODE_ENV,
@@ -40,7 +40,7 @@ import {
   contractInstanceResponseArray,
   dbWrapper,
 } from "./utils/index.js";
-import { NoirCompiledContract } from "@aztec/aztec.js/abi";
+import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 
 const verifyContractRequestBody = generateSchema(
   z.object({

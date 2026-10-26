@@ -13,17 +13,17 @@ and feel). `services/explorer-ui-v2/CLAUDE.md` has frontend specifics.
 
 ## Stack
 
-| Concern       | Technology                                                                    |
-| ------------- | ----------------------------------------------------------------------------- |
-| Monorepo      | Yarn 4 (Berry), `node-modules` linker, workspaces `services/*` + `packages/*` |
-| Language      | TypeScript 5.8 ESM throughout — imports require `.js` extensions              |
-| Backend       | Node.js, Express 4, Drizzle ORM (Postgres), Redis                             |
-| Validation    | Zod — schema first, types via `z.infer<>`                                     |
-| Messaging     | Kafka (KafkaJS via `@chicmoz-pkg/message-bus`), BSON serialization            |
-| Chain clients | `@aztec/aztec.js` (L2), `viem` (L1) — both pinned at root via `resolutions`   |
-| Frontend      | React 18, Vite, TailwindCSS, TanStack Router/Query/Table, shadcn/ui           |
-| Logging       | Winston via `@chicmoz-pkg/logger-server` — no `console.*` in service code     |
-| Local dev     | Kubernetes (minikube) + Skaffold, `k8s/local/`                                |
+| Concern       | Technology                                                                       |
+| ------------- | -------------------------------------------------------------------------------- |
+| Monorepo      | Yarn 4 (Berry), `node-modules` linker, workspaces `services/*` + `packages/*`    |
+| Language      | TypeScript 5.8 ESM throughout — imports require `.js` extensions                 |
+| Backend       | Node.js, Express 4, Drizzle ORM (Postgres), Redis                                |
+| Validation    | Zod — schema first, types via `z.infer<>`                                        |
+| Messaging     | Kafka (KafkaJS via `@chicmoz-pkg/message-bus`), BSON serialization               |
+| Chain clients | `@aztec-labs/aztec.js` (L2), `viem` (L1) — both pinned at root via `resolutions` |
+| Frontend      | React 18, Vite, TailwindCSS, TanStack Router/Query/Table, shadcn/ui              |
+| Logging       | Winston via `@chicmoz-pkg/logger-server` — no `console.*` in service code        |
+| Local dev     | Kubernetes (minikube) + Skaffold, `k8s/local/`                                   |
 
 ## Commands
 

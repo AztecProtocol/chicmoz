@@ -1,5 +1,5 @@
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import * as tokenContractArtifactJson from "@aztec/noir-contracts.js/artifacts/token_contract-Token" with { type: "json" };
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import * as tokenContractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/token_contract-Token" with { type: "json" };
 import { logger } from "../../logger.js";
 import { getAccounts, getAztecNodeClient, getWallet } from "../pxe.js";
 import {
@@ -9,8 +9,8 @@ import {
   simulateThenSend,
   verifyContractInstanceDeployment,
 } from "./utils/index.js";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { Contract, DeployMethod } from "@aztec/aztec.js/contracts";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { Contract, DeployMethod } from "@aztec-labs/aztec.js/contracts";
 
 export async function run() {
   logger.info("===== TOKEN CONTRACT =====");

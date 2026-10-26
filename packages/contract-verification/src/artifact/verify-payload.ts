@@ -3,8 +3,8 @@ import { VerifyArtifactPayload } from "../types.js";
 import {
   loadContractArtifact,
   NoirCompiledContract,
-} from "@aztec/aztec.js/abi";
-import { getContractClassFromArtifact } from "@aztec/aztec.js/contracts";
+} from "@aztec-labs/aztec.js/abi";
+import { getContractClassFromArtifact } from "@aztec-labs/aztec.js/contracts";
 
 export type VerificationResult = {
   isMatchingByteCode: boolean;

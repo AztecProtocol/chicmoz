@@ -4,7 +4,7 @@ import {
   chicmozL2BlockSchema,
 } from "@chicmoz-pkg/types";
 import { parseTimeStamp } from "./time.js";
-import { L2Block } from "@aztec/aztec.js/block";
+import { L2Block } from "@aztec-labs/aztec.js/block";
 
 const getTxEffectWithHashes = (txEffects: L2Block["body"]["txEffects"]) => {
   return txEffects.map((txEffect) => {

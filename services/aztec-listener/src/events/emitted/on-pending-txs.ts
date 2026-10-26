@@ -1,4 +1,4 @@
-import { Tx } from "@aztec/aztec.js/tx";
+import { Tx } from "@aztec-labs/aztec.js/tx";
 import {
   ChicmozL2PendingTx,
   ChicmozL2PendingL2ToL1Msg,

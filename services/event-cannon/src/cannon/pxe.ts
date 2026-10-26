@@ -1,10 +1,10 @@
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { createStore } from "@aztec/kv-store/lmdb";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { createStore } from "@aztec-labs/kv-store/lmdb";
 import { AZTEC_RPC_URL } from "../environment.js";
-import { AztecNode, createAztecNodeClient } from "@aztec/aztec.js/node";
-import { createPXE, getPXEConfig, PXE } from "@aztec/pxe/server";
-import { AccountManager } from "@aztec/aztec.js/wallet";
+import { AztecNode, createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { createPXE, getPXEConfig, PXE } from "@aztec-labs/pxe/server";
+import { AccountManager } from "@aztec-labs/aztec.js/wallet";
 
 let pxe: PXE;
 let aztecNode: AztecNode;

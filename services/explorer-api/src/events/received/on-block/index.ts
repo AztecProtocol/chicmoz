@@ -25,7 +25,7 @@ import { controllers } from "../../../svcs/database/index.js";
 import { handleDuplicateBlockError, type PartialDbError } from "../utils.js";
 import { storeContracts } from "./contracts.js";
 import { detectReorg, handleReorg } from "./reorg-handler.js";
-import { type L2Block } from "@aztec/aztec.js/block";
+import { type L2Block } from "@aztec-labs/aztec.js/block";
 
 const truncateString = (value: string) => {
   const startHash = value.substring(0, 100);

@@ -1,4 +1,4 @@
-import { NodeInfo } from "@aztec/aztec.js/node";
+import { NodeInfo } from "@aztec-labs/aztec.js/node";
 import {
   ChicmozChainInfo,
   ChicmozL2RpcNode,

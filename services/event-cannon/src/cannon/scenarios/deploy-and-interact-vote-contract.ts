@@ -1,8 +1,8 @@
 import {
   PrivateVotingContract,
   PrivateVotingContractArtifact,
-} from "@aztec/noir-contracts.js/PrivateVoting";
-import * as contractArtifactJson from "@aztec/noir-contracts.js/artifacts/private_voting_contract-PrivateVoting" with { type: "json" };
+} from "@aztec-labs/noir-contracts.js/PrivateVoting";
+import * as contractArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/private_voting_contract-PrivateVoting" with { type: "json" };
 import { logger } from "../../logger.js";
 import { getAccounts, getAztecNodeClient, getWallet } from "../pxe.js";
 import {
@@ -11,8 +11,8 @@ import {
   simulateThenSend,
   verifyContractInstanceDeployment,
 } from "./utils/index.js";
-import { Contract, DeployMethod } from "@aztec/aztec.js/contracts";
-import { Fr } from "@aztec/aztec.js/fields";
+import { Contract, DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { Fr } from "@aztec-labs/aztec.js/fields";
 
 const contractId = "VotingContract";
 

@@ -1,6 +1,6 @@
-import { getContractClassFromArtifact } from "@aztec/aztec.js/contracts";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
-import publicChecksArtifactJson from "@aztec/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
+import { getContractClassFromArtifact } from "@aztec-labs/aztec.js/contracts";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import publicChecksArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
 import { ChicmozL2ContractClassRegisteredEvent } from "@chicmoz-pkg/types";
 import { describe, expect, test } from "vitest";
 import { generateVerifyArtifactPayload, verifyArtifactPayload } from "./index.js";

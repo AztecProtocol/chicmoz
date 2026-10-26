@@ -6,7 +6,7 @@ import {
   OutboxAbi,
   RegistryAbi,
   RollupAbi,
-} from "@aztec/l1-artifacts";
+} from "@aztec-foundation/l1-artifacts";
 import { controllers as dbControllers } from "../../svcs/database/index.js";
 import {
   getLatestFinalizedHeight,

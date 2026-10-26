@@ -8,8 +8,8 @@
 ## Compile contracts (if changed or updated version)
 
 ```sh
-aztec-up install 5.0.0-rc.2
-aztec-up use 5.0.0-rc.2
+aztec-up install 6.0.0
+aztec-up use 6.0.0
 
 cd src/contract-projects/YOUR_PROJECT
 aztec compile

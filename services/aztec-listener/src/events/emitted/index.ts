@@ -18,7 +18,7 @@ import {
   publishMessageSync,
 } from "../../svcs/message-bus/index.js";
 import { onL2RpcNodeAlive } from "./on-node-alive.js";
-import { L2Block } from "@aztec/stdlib/block";
+import { L2Block } from "@aztec-labs/stdlib/block";
 
 const toSafeBlockNumber = (value: bigint): number => {
   const blockNumber = Number(value);

@@ -1,11 +1,11 @@
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { loadContractArtifact } from "@aztec/aztec.js/abi";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
 import {
   getContractClassFromArtifact,
   getContractInstanceFromInstantiationParams,
-} from "@aztec/aztec.js/contracts";
-import { Fr } from "@aztec/aztec.js/fields";
-import publicChecksArtifactJson from "@aztec/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
+} from "@aztec-labs/aztec.js/contracts";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import publicChecksArtifactJson from "@aztec-labs/noir-contracts.js/artifacts/public_checks_contract-PublicChecks" with { type: "json" };
 import { describe, expect, test } from "vitest";
 import { generateVerifyInstancePayload } from "./generate-payload.js";
 import { verifyInstanceDeploymentPayload } from "./verify-payload.js";

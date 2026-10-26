@@ -1,5 +1,5 @@
-import { DeployMethod } from "@aztec/aztec.js/contracts";
-import { NoirCompiledContract } from "@aztec/aztec.js/abi";
+import { DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 import { SimpleLoggingContract } from "../../artifacts/SimpleLogging.js";
 import artifactJson from "../../contract-projects/SimpleLogging/target/simple_logging-SimpleLogging.json" with { type: "json" };
 import { logger } from "../../logger.js";

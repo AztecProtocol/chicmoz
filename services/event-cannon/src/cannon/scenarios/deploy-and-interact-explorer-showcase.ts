@@ -1,6 +1,6 @@
-import { Fr } from "@aztec/aztec.js/fields";
-import { DeployMethod } from "@aztec/aztec.js/contracts";
-import { NoirCompiledContract } from "@aztec/aztec.js/abi";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { DeployMethod } from "@aztec-labs/aztec.js/contracts";
+import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 import { ExplorerShowcaseContract } from "../../artifacts/ExplorerShowcase.js";
 import artifactJson from "../../contract-projects/ExplorerShowcase/target/explorer_showcase-ExplorerShowcase.json" with { type: "json" };
 import { logger } from "../../logger.js";
