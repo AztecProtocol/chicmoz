@@ -3,7 +3,7 @@
 
 /* eslint-disable */
 import { AztecAddress, CompleteAddress } from '@aztec-labs/aztec.js/addresses';
-import { type AbiType, type AztecAddressLike, type ContractArtifact, EventSelector, decodeFromAbi, type EthAddressLike, type FieldLike, type FunctionSelectorLike, loadContractArtifact, loadContractArtifactForPublic, type NoirCompiledContract, type OptionLike, type U128Like, type WrappedFieldLike } from '@aztec-labs/aztec.js/abi';
+import { type AbiType, type AztecAddressLike, type ContractArtifact, EventSelector, type EthAddressLike, type FieldLike, type FunctionSelectorLike, loadContractArtifact, loadContractArtifactForPublic, type NoirCompiledContract, type OptionLike, type U128Like, type WrappedFieldLike } from '@aztec-labs/aztec.js/abi';
 import { Contract, ContractBase, ContractFunctionInteraction, type ContractMethod, type ContractStorageLayout, type DeployInstantiationOptions, DeployMethod } from '@aztec-labs/aztec.js/contracts';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr, Point } from '@aztec-labs/aztec.js/fields';
