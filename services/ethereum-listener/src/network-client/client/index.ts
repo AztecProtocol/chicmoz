@@ -217,6 +217,8 @@ const hardcodedRollupGenesisBlocks = (
     switch (rollupAddress.toLowerCase()) {
       case "0xae2001f7e21d5ecabf6234e9fdd1e76f50f74962":
         return 24586322n;
+      case "0xe37a2663cc9c119ba41572c40fab0bbb23a5402f":
+        return 26160102n;
       default:
         return 24586322n; // NOTE: probably it will never be a lower block than this on mainnet
     }
