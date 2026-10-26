@@ -17,6 +17,7 @@ import {
 import { getSingleSearchDestination } from "~/lib/search-results";
 import { BrandLogo } from "./brand-logo";
 import { NetworkSelector } from "./network-selector";
+import { VersionSelector } from "./version-selector";
 
 export type TopBarActive =
   | "home"
@@ -270,6 +271,7 @@ export const TopBar: FC<Props> = ({ active = "home" }) => {
         </div>
       </Link>
       <NetworkSelector />
+      <VersionSelector />
 
       <Link
         to="/health"

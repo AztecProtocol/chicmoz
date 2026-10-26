@@ -4,7 +4,13 @@ import { type FC } from "react";
 import { Countdown } from "~/components/common";
 import { blockStatusToDisplay } from "~/lib/block-status";
 import { ageStr, fmtNum, truncateHashString } from "~/lib/utils";
-import { BLOCK_TIME_TARGET_SECONDS } from "~/service/constants";
+import {
+  BLOCK_TIME_TARGET_SECONDS,
+  DEPLOYMENT_STATUS,
+} from "~/service/constants";
+
+// An archived rollup has a final block, not a live tip.
+const isArchived = DEPLOYMENT_STATUS === "archived";
 
 interface Props {
   chainInfo: ChicmozChainInfo | undefined;
@@ -57,7 +63,15 @@ export const HeroTip: FC<Props> = ({
       <div className="tip-cell accent">
         <span className="rail" />
         <div className="kicker">
-          Latest block<em>● live</em>
+          {isArchived ? (
+            <>
+              Final block<em className="muted">● archived</em>
+            </>
+          ) : (
+            <>
+              Latest block<em>● live</em>
+            </>
+          )}
         </div>
         <div className="hh">
           {latestHeight !== undefined ? (
@@ -132,7 +146,11 @@ export const HeroTip: FC<Props> = ({
       </div>
 
       <div className="tip-cell">
-        <Countdown avgSec={avgSec} latestBlockTs={latestTs} />
+        {isArchived ? (
+          <div className="kicker">No new blocks · archived rollup</div>
+        ) : (
+          <Countdown avgSec={avgSec} latestBlockTs={latestTs} />
+        )}
       </div>
     </div>
   );

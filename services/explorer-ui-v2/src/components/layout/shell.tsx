@@ -2,6 +2,7 @@ import { type FC, type ReactNode } from "react";
 import { TooltipProvider } from "~/providers/tooltip-provider";
 import { Footer } from "./footer";
 import { TopBar, type TopBarActive } from "./top-bar";
+import { VersionBanner } from "./version-banner";
 
 interface Props {
   active?: TopBarActive;
@@ -13,6 +14,7 @@ export const Shell: FC<Props> = ({ active, children }) => (
   <TooltipProvider>
     <div className="shell">
       <TopBar active={active} />
+      <VersionBanner />
       {children}
       <Footer />
     </div>

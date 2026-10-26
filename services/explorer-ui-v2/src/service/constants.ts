@@ -1,4 +1,9 @@
 import { apiKeySchema, l2NetworkIdSchema } from "@chicmoz-pkg/types";
+import {
+  getDeploymentStatus,
+  normalizeVersion,
+  parseUiDeployments,
+} from "./deployments";
 
 export const aztecExplorer = {
   getL2LatestHeight: "/l2/latest-height",
@@ -112,14 +117,22 @@ export const L2_NETWORK_ID = l2NetworkIdSchema.parse(
   import.meta.env.VITE_L2_NETWORK_ID,
 );
 
-export const CHICMOZ_ALL_UI_URLS =
-  typeof import.meta.env.VITE_CHICMOZ_ALL_UI_URLS === "string" &&
-  import.meta.env.VITE_CHICMOZ_ALL_UI_URLS.length > 0
-    ? import.meta.env.VITE_CHICMOZ_ALL_UI_URLS.split(",").map((tuple) => {
-        const [name, url] = tuple.split("|");
-        return { name, url };
-      })
-    : [];
+export const UI_DEPLOYMENTS = parseUiDeployments(
+  import.meta.env.VITE_CHICMOZ_ALL_UI_URLS,
+);
+
+/** This build's major Aztec version (e.g. `v6`), or null when unversioned. */
+export const NETWORK_VERSION =
+  typeof import.meta.env.VITE_NETWORK_VERSION === "string" &&
+  import.meta.env.VITE_NETWORK_VERSION.trim().length > 0
+    ? normalizeVersion(import.meta.env.VITE_NETWORK_VERSION)
+    : null;
+
+export const DEPLOYMENT_STATUS = getDeploymentStatus(
+  UI_DEPLOYMENTS,
+  L2_NETWORK_ID,
+  NETWORK_VERSION,
+);
 
 const API_KEY = apiKeySchema.parse(import.meta.env.VITE_API_KEY);
 
@@ -128,8 +141,10 @@ export const API_URL =
     ? `${import.meta.env.VITE_API_URL}/${API_KEY}`
     : "";
 
+// An archived rollup has no live updates, so it never opens a socket.
 export const WS_URL =
-  typeof import.meta.env.VITE_WS_URL === "string"
+  typeof import.meta.env.VITE_WS_URL === "string" &&
+  DEPLOYMENT_STATUS !== "archived"
     ? import.meta.env.VITE_WS_URL
     : "";
 

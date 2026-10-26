@@ -1,76 +1,28 @@
-import { type FC, useEffect, useMemo, useRef, useState } from "react";
-import { CHICMOZ_ALL_UI_URLS, L2_NETWORK_ID } from "~/service/constants";
+import { type FC, useCallback, useMemo, useRef, useState } from "react";
+import { useDismissableMenu } from "~/hooks/use-dismissable-menu";
+import { cn } from "~/lib/utils";
+import { getNetworkEntries } from "~/service/deployments";
+import { L2_NETWORK_ID, UI_DEPLOYMENTS } from "~/service/constants";
+import { normalizeUrl, withCurrentPath } from "./deployment-url";
 
-const normalizeNetworkName = (name: string): string => name.trim().toUpperCase();
-
-const normalizeUrl = (url: string): string => {
-  const trimmed = url.trim();
-  const fixedSingleSlashScheme = trimmed.replace(
-    /^([a-z][a-z\d+.-]*:)\/(?!\/)/i,
-    "$1//",
-  );
-  const hasScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(fixedSingleSlashScheme);
-  const absoluteUrl = hasScheme
-    ? fixedSingleSlashScheme
-    : `${window.location.protocol}//${fixedSingleSlashScheme}`;
-
-  return absoluteUrl.replace(/\/$/, "");
-};
-
-const preserveCurrentPath = (baseUrl: string): string => {
-  const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  return `${normalizeUrl(baseUrl)}${path}`;
-};
-
+/** Picks the network; switching always lands on its canonical version. */
 export const NetworkSelector: FC = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const currentNetwork = normalizeNetworkName(L2_NETWORK_ID ?? "MAINNET");
+  const close = useCallback(() => setOpen(false), []);
+  useDismissableMenu(ref, open, close);
+  const currentNetwork = L2_NETWORK_ID;
 
   const networks = useMemo(
     () =>
-      CHICMOZ_ALL_UI_URLS.map(({ name, url }) => ({
-        name: normalizeNetworkName(name),
+      getNetworkEntries(UI_DEPLOYMENTS).map(({ network, url }) => ({
+        name: network,
         url: normalizeUrl(url),
-      })).filter(({ name, url }) => name.length > 0 && url.length > 0),
+      })),
     [],
   );
 
-  const hasMultipleNetworks = networks.length > 1;
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleDocClick = (event: MouseEvent) => {
-      if (
-        ref.current &&
-        event.target instanceof Node &&
-        !ref.current.contains(event.target)
-      ) {
-        setOpen(false);
-      }
-    };
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleDocClick);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("mousedown", handleDocClick);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
-
-  const switchNetwork = (url: string) => {
-    window.location.assign(preserveCurrentPath(url));
-  };
-
-  if (!hasMultipleNetworks) {
+  if (networks.length <= 1) {
     return <div className="brand-env">{currentNetwork}</div>;
   }
 
@@ -78,7 +30,7 @@ export const NetworkSelector: FC = () => {
     <div className="network-selector" ref={ref}>
       <button
         type="button"
-        className={`brand-env network-trigger${open ? " on" : ""}`}
+        className={cn("brand-env network-trigger", open && "on")}
         aria-label="Select Aztec network"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -97,13 +49,13 @@ export const NetworkSelector: FC = () => {
                 type="button"
                 role="menuitemradio"
                 aria-checked={isActive}
-                className={`network-option${isActive ? " active" : ""}`}
+                className={cn("network-option", isActive && "active")}
                 onClick={() => {
                   if (isActive) {
-                    setOpen(false);
+                    close();
                     return;
                   }
-                  switchNetwork(network.url);
+                  window.location.assign(withCurrentPath(network.url));
                 }}
               >
                 <span className="network-dot" />
