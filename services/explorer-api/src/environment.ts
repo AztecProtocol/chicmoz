@@ -6,6 +6,18 @@ import {
 } from "@chicmoz-pkg/types";
 import { z } from "zod";
 
+/**
+ * Reads a boolean env var as exactly "true" or "false"; unset or empty means
+ * the default. Not z.coerce.boolean(), which reads the string "false" as true.
+ */
+export const parseBooleanEnv = (
+  value: string | undefined,
+  defaultValue: boolean,
+): boolean =>
+  value === undefined || value === ""
+    ? defaultValue
+    : z.enum(["true", "false"]).parse(value) === "true";
+
 export const PUBLIC_API_KEY: ApiKey = apiKeySchema.parse(
   process.env.PUBLIC_API_KEY,
 );
@@ -26,10 +38,10 @@ export const DB_MAX_CONTRACTS = 20;
 export const L2_TIPS_STALE_AFTER_MS =
   Number(process.env.L2_TIPS_STALE_AFTER_MS) || 60_000;
 
-export const L2_BLOCK_RECONCILIATION_ENABLED = z.coerce
-  .boolean()
-  .default(true)
-  .parse(process.env.L2_BLOCK_RECONCILIATION_ENABLED);
+export const L2_BLOCK_RECONCILIATION_ENABLED = parseBooleanEnv(
+  process.env.L2_BLOCK_RECONCILIATION_ENABLED,
+  true,
+);
 export const L2_BLOCK_RECONCILIATION_INTERVAL_MS = z.coerce
   .number()
   .positive()
@@ -69,10 +81,10 @@ export const L2_BLOCK_RECONCILIATION_MAX_RANGES = z.coerce
   .default(10)
   .parse(process.env.L2_BLOCK_RECONCILIATION_MAX_RANGES);
 
-export const L1_GOVERNANCE_URI_RECONCILIATION_ENABLED = z.coerce
-  .boolean()
-  .default(true)
-  .parse(process.env.L1_GOVERNANCE_URI_RECONCILIATION_ENABLED);
+export const L1_GOVERNANCE_URI_RECONCILIATION_ENABLED = parseBooleanEnv(
+  process.env.L1_GOVERNANCE_URI_RECONCILIATION_ENABLED,
+  true,
+);
 export const L1_GOVERNANCE_URI_RECONCILIATION_INTERVAL_MS = z.coerce
   .number()
   .positive()
