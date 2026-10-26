@@ -1,12 +1,16 @@
 /* eslint-disable no-console */
 import { MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
 import { createClient } from "redis";
+import { buildCacheKey, type CacheKeys } from "./cache-key.js";
 import {
+  CACHE_NAMESPACE,
   L2_NETWORK_ID,
   REDIS_HOST,
   REDIS_PORT,
   getConfigStr,
 } from "./environment.js";
+
+export type { CacheKeys } from "./cache-key.js";
 
 // Connection configuration
 const REDIS_CONNECT_TIMEOUT = 2000; // 2 seconds
@@ -76,8 +80,10 @@ const getCache = () => {
   return cache;
 };
 
-export type CacheKeys = (string | number | bigint | undefined)[];
 export type CacheValue = string | number;
+
+const cacheKey = (keys: CacheKeys) =>
+  buildCacheKey(keys, L2_NETWORK_ID, CACHE_NAMESPACE);
 
 export const setEntry = async (
   keys: CacheKeys,
@@ -90,7 +96,7 @@ export const setEntry = async (
   }
 
   try {
-    return await getCache().set([L2_NETWORK_ID, ...keys].join("-"), value, {
+    return await getCache().set(cacheKey(keys), value, {
       EX: secondsTtl,
     });
   } catch (error) {
@@ -104,7 +110,7 @@ export const setEntry = async (
 };
 
 export const getEntry = async (keys: CacheKeys) => {
-  const keysStr = [L2_NETWORK_ID, ...keys].join("-");
+  const keysStr = cacheKey(keys);
 
   if (!isCacheAvailable) {
     console.warn("[REDIS] Cache unavailable, returning null for getEntry");

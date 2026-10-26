@@ -1,5 +1,6 @@
 import { L2NetworkId, l2NetworkIdSchema } from "@chicmoz-pkg/types";
 import { z } from "zod";
+import { parseCacheNamespace } from "./cache-key.js";
 
 export const REDIS_HOST = z
   .string()
@@ -11,12 +12,15 @@ export const REDIS_PORT = z
   .default(6379)
   .parse(process.env.REDIS_PORT);
 
-export const getConfigStr = () => {
-  return `REDIS
-Host: ${REDIS_HOST}
-Port: ${REDIS_PORT}`;
-};
-
 export const L2_NETWORK_ID: L2NetworkId = l2NetworkIdSchema.parse(
   process.env.L2_NETWORK_ID,
 );
+
+export const CACHE_NAMESPACE = parseCacheNamespace(process.env.KAFKA_NAMESPACE);
+
+export const getConfigStr = () => {
+  return `REDIS
+Host: ${REDIS_HOST}
+Port: ${REDIS_PORT}
+Key prefix: ${CACHE_NAMESPACE ? `${CACHE_NAMESPACE}-` : ""}${L2_NETWORK_ID}`;
+};
