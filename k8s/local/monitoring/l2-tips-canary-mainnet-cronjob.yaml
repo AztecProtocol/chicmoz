@@ -20,7 +20,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: canary
-              image: node:22-alpine
+              image: node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
               env:
                 - name: L2_TIPS_HEALTH_URLS
                   value: "http://explorer-api-mainnet-service.chicmoz.svc.cluster.local/l2/tips"

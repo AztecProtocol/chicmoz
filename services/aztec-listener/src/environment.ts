@@ -5,6 +5,18 @@ import {
 } from "@chicmoz-pkg/types";
 import { z } from "zod";
 
+/**
+ * Reads a boolean env var as exactly "true" or "false"; unset or empty means
+ * the default. Not z.coerce.boolean(), which reads the string "false" as true.
+ */
+export const parseBooleanEnv = (
+  value: string | undefined,
+  defaultValue: boolean,
+): boolean =>
+  value === undefined || value === ""
+    ? defaultValue
+    : z.enum(["true", "false"]).parse(value) === "true";
+
 export const BLOCK_POLL_INTERVAL_MS = z.coerce
   .number()
   .default(3000)
@@ -37,31 +49,27 @@ export const AZTEC_DISABLE_LISTEN_FOR_PROPOSED_BLOCKS =
   process.env.AZTEC_DISABLE_LISTEN_FOR_PROPOSED_BLOCKS === "true";
 export const AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS =
   process.env.AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS === "true";
-export const AZTEC_LISTEN_FOR_PENDING_TXS = z.coerce
-  .boolean()
-  .default(true)
-  .parse(process.env.AZTEC_LISTEN_FOR_PENDING_TXS);
-export const AZTEC_LISTEN_FOR_CHAIN_INFO = z.coerce
-  .boolean()
-  .default(true)
-  .parse(process.env.AZTEC_LISTEN_FOR_CHAIN_INFO);
-export const AZTEC_LISTEN_FOR_L2_TIPS = z.coerce
-  .boolean()
-  .default(true)
-  .parse(process.env.AZTEC_LISTEN_FOR_L2_TIPS);
-export const AZTEC_DISABLED = z.coerce
-  .boolean().default(false).parse(process.env.AZTEC_DISABLED);
+export const AZTEC_LISTEN_FOR_PENDING_TXS = parseBooleanEnv(
+  process.env.AZTEC_LISTEN_FOR_PENDING_TXS,
+  true,
+);
+export const AZTEC_LISTEN_FOR_CHAIN_INFO = parseBooleanEnv(
+  process.env.AZTEC_LISTEN_FOR_CHAIN_INFO,
+  true,
+);
+export const AZTEC_LISTEN_FOR_L2_TIPS = parseBooleanEnv(
+  process.env.AZTEC_LISTEN_FOR_L2_TIPS,
+  true,
+);
+export const AZTEC_DISABLED = parseBooleanEnv(
+  process.env.AZTEC_DISABLED,
+  false,
+);
 
 export const parseFullSweepCatchupEnabled = (env: {
   AZTEC_ENABLE_FULL_SWEEP_CATCHUP: string | undefined;
 }) => {
-  const parseBooleanEnv = (value: string) =>
-    z.enum(["true", "false"]).parse(value) === "true";
-
-  if (env.AZTEC_ENABLE_FULL_SWEEP_CATCHUP !== undefined) {
-    return parseBooleanEnv(env.AZTEC_ENABLE_FULL_SWEEP_CATCHUP);
-  }
-  return false;
+  return parseBooleanEnv(env.AZTEC_ENABLE_FULL_SWEEP_CATCHUP, false);
 };
 export const AZTEC_ENABLE_FULL_SWEEP_CATCHUP = parseFullSweepCatchupEnabled({
   AZTEC_ENABLE_FULL_SWEEP_CATCHUP:
