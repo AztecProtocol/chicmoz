@@ -2311,6 +2311,7 @@ __metadata:
     prettier-plugin-sort-json: "npm:3.1.0"
     redis: "npm:4.6.13"
     typescript: "npm:5.8.3"
+    vitest: "npm:3.2.4"
     zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
