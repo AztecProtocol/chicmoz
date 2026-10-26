@@ -3,6 +3,7 @@ import {
   AZTEC_SCAN_NOTES,
 } from "./constants.js";
 import {
+  ARCHIVE_MODE,
   L1_GOVERNANCE_URI_RECONCILIATION_ENABLED,
   L2_BLOCK_RECONCILIATION_ENABLED,
   L2_NETWORK_ID,
@@ -55,6 +56,13 @@ URL: ${sourceCodeUrl}`);
         sourceCodeUrl,
       });
     }
+  }
+
+  if (ARCHIVE_MODE) {
+    logger.info(
+      "Archive mode: serving stored history only (no event consumption or reconciliation)",
+    );
+    return;
   }
 
   await subscribeHandlers();

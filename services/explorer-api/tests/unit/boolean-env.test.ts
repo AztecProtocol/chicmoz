@@ -21,7 +21,7 @@ describe("boolean env vars", () => {
     expect(() => parseBooleanEnv("yes", false)).toThrow();
   });
 
-  it('turns reconciliation off with "false"', async () => {
+  it('turns reconciliation off with "false"; archive mode stays off by default', async () => {
     vi.stubEnv("L2_BLOCK_RECONCILIATION_ENABLED", "false");
     vi.stubEnv("L1_GOVERNANCE_URI_RECONCILIATION_ENABLED", "false");
 
@@ -29,5 +29,6 @@ describe("boolean env vars", () => {
 
     expect(env.L2_BLOCK_RECONCILIATION_ENABLED).toBe(false);
     expect(env.L1_GOVERNANCE_URI_RECONCILIATION_ENABLED).toBe(false);
+    expect(env.ARCHIVE_MODE).toBe(false);
   });
 });

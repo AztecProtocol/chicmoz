@@ -106,3 +106,7 @@ export const L1_GOVERNANCE_URI_RECONCILIATION_LOOKBACK_DAYS = z.coerce
 export const L2_NETWORK_ID: L2NetworkId = l2NetworkIdSchema.parse(
   process.env.L2_NETWORK_ID,
 );
+
+// Serves a retired rollup's history from Postgres alone: no Kafka, so no
+// event ingest, no reconciliation and no source verification.
+export const ARCHIVE_MODE = parseBooleanEnv(process.env.ARCHIVE_MODE, false);
