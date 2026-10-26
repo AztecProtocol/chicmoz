@@ -2,6 +2,7 @@ import { EventHandler } from "@chicmoz-pkg/message-bus";
 import {
   ChicmozChainInfoEvent,
   generateL2TopicName,
+  withKafkaNamespace,
 } from "@chicmoz-pkg/message-registry";
 import { type ChicmozChainInfo } from "@chicmoz-pkg/types";
 import { isAddress } from "viem";
@@ -128,7 +129,7 @@ export const onChainInfo = async (event: ChicmozChainInfoEvent) => {
 };
 
 export const connectedToAztec: EventHandler = {
-  groupId: `${groupId}-connected-to-aztec`,
+  groupId: withKafkaNamespace(`${groupId}-connected-to-aztec`),
   cb: onChainInfo as (arg0: unknown) => Promise<void>,
   topic: generateL2TopicName(L2_NETWORK_ID, "CHAIN_INFO_EVENT"),
 };

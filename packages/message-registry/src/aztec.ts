@@ -9,6 +9,7 @@ import type {
   L2NetworkId,
   SourceVerificationFailureStage,
 } from "@chicmoz-pkg/types";
+import { type KafkaNamespaced, withKafkaNamespace } from "./namespace.js";
 
 export type L2BlockStatusHint = "proposed" | "proven";
 
@@ -117,7 +118,7 @@ export function generateL2TopicName(
   networkId: L2NetworkId,
   topic: keyof L2_MESSAGES,
 ): L2Topic {
-  return `${networkId}__${topic}`;
+  return withKafkaNamespace(`${networkId}__${topic}`);
 }
 
 export type L2_MESSAGES = {
@@ -136,5 +137,5 @@ export type L2_MESSAGES = {
   COMPILE_SOURCE_RESULT_EVENT: CompileSourceResultEvent;
 };
 
-export type L2Topic = `${L2NetworkId}__${keyof L2_MESSAGES}`;
+export type L2Topic = KafkaNamespaced<`${L2NetworkId}__${keyof L2_MESSAGES}`>;
 export type L2Payload = L2_MESSAGES[keyof L2_MESSAGES];
