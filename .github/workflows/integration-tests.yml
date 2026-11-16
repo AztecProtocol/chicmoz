@@ -44,6 +44,8 @@ jobs:
               - 'services/explorer-api/**'
               - 'services/aztec-listener/**'
               - 'services/ethereum-listener/**'
+              # The install reads every workspace manifest.
+              - 'services/*/package.json'
               - 'packages/**'
               - 'fixtures/**'
               - 'package.json'
@@ -77,6 +79,10 @@ jobs:
           if [ -z "$base" ]; then
             base=$(git merge-base HEAD origin/main)
           fi
+          # Dispatched on main itself: compare with the parent, as a push would, not with HEAD.
+          if [ "$base" = "$(git rev-parse HEAD)" ]; then
+            base=$(git rev-parse HEAD^1)
+          fi
           echo "MIGRATIONS_BASE_REF=$base" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-yarn
       # The migrate entrypoints and schema modules run from each service's build.
@@ -100,6 +106,7 @@ jobs:
           path: .harness/
           retention-days: 7
           if-no-files-found: ignore
+          include-hidden-files: true
 
   explorer-api:
     name: explorer-api against Postgres, Kafka and Redis
@@ -127,6 +134,7 @@ jobs:
           path: .harness/
           retention-days: 7
           if-no-files-found: ignore
+          include-hidden-files: true
 
   status:
     name: integration-tests-status

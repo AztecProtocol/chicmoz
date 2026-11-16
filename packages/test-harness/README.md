@@ -15,7 +15,7 @@ Each integration run is its own compose project (`ih<random>`). Every port is as
 
 ## In CI
 
-`.github/workflows/integration-tests.yml` runs both suites as two jobs and reports `integration-tests-status`. On pull requests a path filter skips them when nothing they build, install, migrate or run has changed; the status check still reports, expecting `skipped`. The migrations job checks out full history and sets `MIGRATIONS_BASE_REF` (the PR base, the previous `main` commit on push, else the merge base with `origin/main`), so the applied-migration and upgrade-path tests always run there. A failing job uploads `.harness/` as an artifact for 7 days.
+`.github/workflows/integration-tests.yml` runs both suites as two jobs and reports `integration-tests-status`. On pull requests a path filter skips them when nothing they build, install, migrate or run has changed; the status check still reports, expecting `skipped`. The migrations job checks out full history and sets `MIGRATIONS_BASE_REF` (the PR base, the previous `main` commit on push, else the merge base with `origin/main`, or `HEAD^1` when that is `HEAD` itself), so the applied-migration and upgrade-path tests always run there. A failing job uploads `.harness/` as an artifact for 7 days.
 
 ## Reading a failure
 
