@@ -45,11 +45,14 @@ const parseResultRows = (results: string) =>
     return name === "" ? [] : [{ name, actual, expected: rest.join("|") }];
   });
 
-/** An expected value that cannot simply echo the result it is compared with. */
-const isIndependentExpectation = (expected: string) =>
+const GATED_EXPECTATION =
+  /^\$\{\{ needs\.[\w-]+\.outputs\.[\w-]+ == 'true' && 'success' \|\| 'skipped' \}\}$/;
+
+/** `success`, `skipped`, or a gate output choosing one; any looser expression can evaluate to the result it is compared with. */
+const isFixedExpectation = (expected: string) =>
   expected === "success" ||
   expected === "skipped" ||
-  (/^\$\{\{[\s\S]*\}\}$/.test(expected) && !expected.includes(".result"));
+  GATED_EXPECTATION.test(expected);
 
 /**
  * Ways a `*-status` job (by id or display name) in one workflow can pass while
@@ -123,8 +126,7 @@ export const statusJobViolations = (
         `^\\$\\{\\{\\s*needs\\.${escapeRegExp(need)}\\.result\\s*\\}\\}$`,
       );
       const checked = rows.some(
-        (row) =>
-          actual.test(row.actual) && isIndependentExpectation(row.expected),
+        (row) => actual.test(row.actual) && isFixedExpectation(row.expected),
       );
       if (!checked) {
         violations.push(

@@ -36,13 +36,15 @@ jobs:
   status:
     name: demo-status
     if: always() && success()
-    needs: [build, test, e2e]
+    needs: [build, test, e2e, lint]
     steps:
       - env:
           RESULTS: |
             \${{ needs.build.result }}|success|success
             test|\${{ needs.test.result }}|\${{ needs.test.result }}
             e2e|\${{ needs.e2e.result }}|\${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+            lint|\${{ needs.lint.result }}|\${{ needs.lint['result'] }}
+            lint|\${{ needs.lint.result }}|\${{ 'failure' }}
         continue-on-error: true
         run: bash .github/scripts/check-job-results.sh
   ignored-status:
@@ -53,11 +55,11 @@ jobs:
 `;
     expect(statusJobViolations("demo.yml", source, ["audit", "gone"])).toEqual([
       expect.stringContaining("advisory job gone does not exist"),
-      expect.stringContaining("demo-status does not need lint"),
       expect.stringContaining("demo-status must have exactly if: always()"),
       expect.stringContaining("check step sets if or continue-on-error"),
       expect.stringContaining("demo-status needs build but no RESULTS row"),
       expect.stringContaining("demo-status needs test but no RESULTS row"),
+      expect.stringContaining("demo-status needs lint but no RESULTS row"),
       expect.stringContaining("ignored-status has no step that runs exactly"),
     ]);
   });
