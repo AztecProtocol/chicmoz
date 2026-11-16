@@ -126,11 +126,37 @@ jobs:
             echo "::warning title=Dependency audit::unavailable (yarn npm audit exit $code)"
           fi
 
+  commitlint:
+    name: Commitlint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The PR's commits must be in the clone for the base..head range.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-yarn
+      - name: Lint the PR's commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          case "$PR_AUTHOR" in
+            "dependabot[bot]" | AztecBot)
+              echo "Commitlint skipped: $PR_AUTHOR is an automation account, exempt from this check."
+              exit 0
+              ;;
+          esac
+          yarn commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+
   status:
     name: quality-status
     if: always()
     # The advisory audit is deliberately absent: it must never block a merge.
-    needs: [build, lint, unit-tests]
+    needs: [build, lint, unit-tests, commitlint]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -143,4 +169,5 @@ jobs:
             build|${{ needs.build.result }}|success
             lint|${{ needs.lint.result }}|success
             unit-tests|${{ needs.unit-tests.result }}|success
+            commitlint|${{ needs.commitlint.result }}|${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
         run: bash .github/scripts/check-job-results.sh
