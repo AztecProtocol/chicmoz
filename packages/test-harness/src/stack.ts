@@ -17,7 +17,6 @@ export const COMPOSE_FILE = join(
 /** Label on every harness container; `ls` and `down` act only on projects that carry it. */
 export const HARNESS_LABEL = "chicmoz.harness=1";
 
-const RUN_ID = /^[a-z][a-z0-9]{2,30}$/;
 const WAIT_SECONDS = 120;
 
 /** What a process on the host needs to reach the stack, in the services' own env names. */
@@ -94,7 +93,7 @@ const projectExists = async (runId: string) => {
   return stdout.trim() !== "";
 };
 
-export const newRunId = () => `ih${randomBytes(5).toString("hex")}`;
+const newRunId = () => `ih${randomBytes(5).toString("hex")}`;
 
 export const runDirOf = (runId: string) => join(REPO_ROOT, ".harness", runId);
 
@@ -119,21 +118,15 @@ export const attach = (info: StackInfo): Stack => ({
 });
 
 /**
- * Starts the `infra` profile (Postgres, Kafka, Redis) as compose project
- * `runId` and waits until every service is healthy. On failure the logs land
- * in `.harness/<runId>/compose.log` and the project is removed.
+ * Starts the `infra` profile (Postgres, Kafka, Redis) as a new compose project
+ * with a random run id and waits until every service is healthy. On failure
+ * the logs land in `.harness/<runId>/compose.log` and the project is removed;
+ * the id is never caller-chosen, so that project is always this call's own.
  */
-export const up = async ({
-  runId = newRunId(),
-}: { runId?: string } = {}): Promise<Stack> => {
-  if (!RUN_ID.test(runId)) {
-    throw new Error(`run id "${runId}" must match ${RUN_ID}`);
-  }
-  // The failure path below removes the project, so it must be this call's own.
+export const up = async (): Promise<Stack> => {
+  const runId = newRunId();
   if (await projectExists(runId)) {
-    throw new Error(
-      `compose project ${runId} already exists; pick another run id`,
-    );
+    throw new Error(`compose project ${runId} already exists`);
   }
   const runDir = runDirOf(runId);
   mkdirSync(runDir, { recursive: true });
