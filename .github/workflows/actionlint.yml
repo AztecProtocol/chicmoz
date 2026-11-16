@@ -1,0 +1,45 @@
+name: Workflow lint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR cancels its older run; every main commit keeps its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The official image bundles shellcheck, so `run:` blocks are checked too.
+      - name: Lint every workflow
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+
+  status:
+    name: actionlint-status
+    if: always()
+    needs: [actionlint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every gate ended as expected
+        env:
+          RESULTS: |
+            actionlint|${{ needs.actionlint.result }}|success
+        run: bash .github/scripts/check-job-results.sh
