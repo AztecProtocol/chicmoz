@@ -2629,6 +2629,25 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@chicmoz/test-harness@workspace:packages/test-harness":
+  version: 0.0.0-use.local
+  resolution: "@chicmoz/test-harness@workspace:packages/test-harness"
+  dependencies:
+    "@types/node": "npm:20.5.0"
+    "@typescript-eslint/eslint-plugin": "npm:6.11.0"
+    "@typescript-eslint/parser": "npm:6.11.0"
+    eslint: "npm:8.53.0"
+    eslint-config-prettier: "npm:9.0.0"
+    eslint-plugin-import: "npm:2.29.0"
+    prettier: "npm:3.1.0"
+    prettier-plugin-organize-imports: "npm:3.2.4"
+    prettier-plugin-sort-json: "npm:3.1.0"
+    typescript: "npm:5.8.3"
+    vitest: "npm:3.2.4"
+    zod: "npm:^3.23.8"
+  languageName: unknown
+  linkType: soft
+
 "@chicmoz/websocket-event-publisher@workspace:services/websocket-event-publisher":
   version: 0.0.0-use.local
   resolution: "@chicmoz/websocket-event-publisher@workspace:services/websocket-event-publisher"
