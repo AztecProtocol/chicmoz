@@ -203,13 +203,13 @@ const key = (columns: readonly string[]) => [...columns].sort().join(",");
 
 /**
  * Fails unless every table, column, primary key and unique key that the
- * Drizzle schema module declares exists in `database`. Keys compare by
+ * Drizzle schema modules declare exists in `database`. Keys compare by
  * column set, which is what ON CONFLICT targets resolve against. Types,
  * defaults and nullability are not compared.
  */
 export const assertDeclaredSchemaExists = async (
   stack: StackInfo,
-  schemaModule: Record<string, unknown>,
+  schemaModules: readonly Record<string, unknown>[],
   database: string,
   label: string,
 ): Promise<void> => {
@@ -234,8 +234,10 @@ export const assertDeclaredSchemaExists = async (
               FROM pg_index i
               JOIN pg_class t ON t.oid = i.indrelid
               JOIN pg_namespace n ON n.oid = t.relnamespace AND n.nspname = 'public'
-              JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY (i.indkey)
-             WHERE i.indisunique
+              JOIN pg_attribute a ON a.attrelid = t.oid
+                   AND a.attnum = ANY ((i.indkey::int2[])[0:i.indnkeyatts - 1])
+             WHERE i.indisunique AND i.indisvalid
+               AND i.indpred IS NULL AND i.indexprs IS NULL
              GROUP BY t.relname, i.indexrelid, i.indisprimary`,
           )
         ).rows,
@@ -252,7 +254,9 @@ export const assertDeclaredSchemaExists = async (
   );
   const unique = new Set(keys.map((k) => `${k.table_name}(${key(k.cols)})`));
 
-  const declared = Object.values(schemaModule).filter((v) => is(v, PgTable));
+  const declared = [
+    ...new Set(schemaModules.flatMap((m) => Object.values(m))),
+  ].filter((v) => is(v, PgTable));
   if (declared.length === 0) {
     throw new Error(`${label}: the schema module declares no tables`);
   }
@@ -280,9 +284,10 @@ export const assertDeclaredSchemaExists = async (
     const uniqueKeys = [
       ...config.columns.filter((c) => c.isUnique).map((c) => [c.name]),
       ...config.uniqueConstraints.map((u) => u.columns.map((c) => c.name)),
-      // An index over an expression has no column set to compare.
+      // Partial and expression indexes have no plain column set to compare;
+      // the query above leaves them out on the database side too.
       ...config.indexes
-        .filter((i) => i.config.unique)
+        .filter((i) => i.config.unique && i.config.where === undefined)
         .flatMap(({ config: { columns } }) => {
           const names = columns.map((c) =>
             is(c, IndexedColumn) ? c.name : undefined,

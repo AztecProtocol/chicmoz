@@ -1,6 +1,6 @@
 # @chicmoz/test-harness
 
-Test infrastructure for the backend: Docker-free checks that run in `yarn test`, and a compose stack (Postgres 18, Kafka 4 with SASL, Redis 7) for integration tests. Private and dev-only; the `@chicmoz/` name keeps it out of `build:packages` and every image build.
+Test infrastructure for the backend: Docker-free checks that run in `yarn test`, and a compose stack (Postgres 18, Kafka 4 with SASL, Redis 7) for integration tests. Private and dev-only. The `@chicmoz/` name keeps it out of `build:packages`, so no image build compiles or installs it; its source is still copied into images with the rest of `packages/`, inert.
 
 ## Commands
 

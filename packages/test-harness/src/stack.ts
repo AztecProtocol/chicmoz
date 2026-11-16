@@ -83,6 +83,17 @@ const hostPort = async (runId: string, service: string, port: number) => {
   return match[1];
 };
 
+const projectExists = async (runId: string) => {
+  const { stdout } = await execFileAsync("docker", [
+    "ps",
+    "-a",
+    "-q",
+    "--filter",
+    `label=com.docker.compose.project=${runId}`,
+  ]);
+  return stdout.trim() !== "";
+};
+
 export const newRunId = () => `ih${randomBytes(5).toString("hex")}`;
 
 export const runDirOf = (runId: string) => join(REPO_ROOT, ".harness", runId);
@@ -100,7 +111,6 @@ export const downProject = async (runId: string): Promise<void> => {
   await compose(runId, ["down", "-v", "--remove-orphans", "--timeout", "5"]);
 };
 
-/** Binds the Docker operations of a running stack to its run id. */
 export const attach = (info: StackInfo): Stack => ({
   ...info,
   exec: (service, cmd) => execIn(info.runId, service, cmd),
@@ -114,10 +124,16 @@ export const attach = (info: StackInfo): Stack => ({
  * in `.harness/<runId>/compose.log` and the project is removed.
  */
 export const up = async ({
-  runId = process.env.HARNESS_RUN_ID ?? newRunId(),
+  runId = newRunId(),
 }: { runId?: string } = {}): Promise<Stack> => {
   if (!RUN_ID.test(runId)) {
     throw new Error(`run id "${runId}" must match ${RUN_ID}`);
+  }
+  // The failure path below removes the project, so it must be this call's own.
+  if (await projectExists(runId)) {
+    throw new Error(
+      `compose project ${runId} already exists; pick another run id`,
+    );
   }
   const runDir = runDirOf(runId);
   mkdirSync(runDir, { recursive: true });

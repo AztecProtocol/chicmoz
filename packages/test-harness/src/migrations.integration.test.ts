@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, inject, it } from "vitest";
@@ -19,10 +19,26 @@ import {
 import { REPO_ROOT } from "./repo.js";
 import { attach } from "./stack.js";
 
-const SCHEMA_MODULES: Record<MigratingService, string> = {
-  "explorer-api": "build/src/svcs/database/schema/index.js",
+/** The built schema, as each service's drizzle.config selects it (a directory means every module in it). */
+const SCHEMA_PATHS: Record<MigratingService, string> = {
+  "explorer-api": "build/src/svcs/database/schema",
   "aztec-listener": "build/src/svcs/database/schema.js",
   "ethereum-listener": "build/src/svcs/database/schema.js",
+};
+
+const loadSchema = (svc: MigratingService) => {
+  const path = join(REPO_ROOT, "services", svc, SCHEMA_PATHS[svc]);
+  const files = path.endsWith(".js")
+    ? [path]
+    : readdirSync(path, { recursive: true, encoding: "utf8" })
+        .filter((file) => file.endsWith(".js"))
+        .map((file) => join(path, file));
+  return Promise.all(
+    files.map(
+      async (file) =>
+        (await import(pathToFileURL(file).href)) as Record<string, unknown>,
+    ),
+  );
 };
 
 const stack = attach(inject("harnessStack"));
@@ -34,10 +50,7 @@ describe.concurrent.each(MIGRATING_SERVICES)("%s migrations", (svc) => {
     const db = dbName("empty", svc);
     await createDatabase(stack, db);
     await runMigrateEntrypoint(stack, svc, db);
-    const schema = (await import(
-      pathToFileURL(join(REPO_ROOT, "services", svc, SCHEMA_MODULES[svc])).href
-    )) as Record<string, unknown>;
-    await assertDeclaredSchemaExists(stack, schema, db, svc);
+    await assertDeclaredSchemaExists(stack, await loadSchema(svc), db, svc);
 
     const before = await dumpSchema(stack, db);
     await migrateDir(stack, db, migrationsDir(svc), svc);

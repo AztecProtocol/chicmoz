@@ -22,15 +22,19 @@ export const harnessGlobalSetup = (
       if (stack === undefined) {
         return;
       }
-      await stack.saveLogs();
-      if (process.env.HARNESS_KEEP === "1") {
-        process.stderr.write(
-          `harness: kept run ${stack.runId}; remove it with: yarn harness down ${stack.runId}\n`,
-        );
-        return;
+      const keep = process.env.HARNESS_KEEP === "1";
+      try {
+        await stack.saveLogs();
+      } finally {
+        if (keep) {
+          process.stderr.write(
+            `harness: kept run ${stack.runId}; remove it with: yarn harness down ${stack.runId}\n`,
+          );
+        } else {
+          await stack.down();
+          process.stderr.write(`harness: removed run ${stack.runId}\n`);
+        }
       }
-      await stack.down();
-      process.stderr.write(`harness: removed run ${stack.runId}\n`);
     },
   };
 };
