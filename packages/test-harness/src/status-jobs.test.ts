@@ -32,11 +32,12 @@ jobs:
   lint: { runs-on: ubuntu-latest }
   test: { runs-on: ubuntu-latest }
   e2e: { runs-on: ubuntu-latest }
+  docs: { runs-on: ubuntu-latest }
   audit: { runs-on: ubuntu-latest }
   status:
     name: demo-status
     if: always() && success()
-    needs: [build, test, e2e, lint]
+    needs: [build, test, e2e, lint, docs]
     steps:
       - env:
           RESULTS: |
@@ -45,11 +46,12 @@ jobs:
             e2e|\${{ needs.e2e.result }}|\${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
             lint|\${{ needs.lint.result }}|\${{ needs.lint['result'] }}
             lint|\${{ needs.lint.result }}|\${{ 'failure' }}
+            \${{ '' }}|\${{ needs.docs.result }}|success
         continue-on-error: true
         run: bash .github/scripts/check-job-results.sh
   ignored-status:
     if: always()
-    needs: [build, lint, test, e2e]
+    needs: [build, lint, test, e2e, docs]
     steps:
       - run: bash .github/scripts/check-job-results.sh || true
 `;
@@ -60,6 +62,7 @@ jobs:
       expect.stringContaining("demo-status needs build but no RESULTS row"),
       expect.stringContaining("demo-status needs test but no RESULTS row"),
       expect.stringContaining("demo-status needs lint but no RESULTS row"),
+      expect.stringContaining("demo-status needs docs but no RESULTS row"),
       expect.stringContaining("ignored-status has no step that runs exactly"),
     ]);
   });

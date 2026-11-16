@@ -38,11 +38,15 @@ const unwrapExpression = (value: unknown) =>
 /**
  * Splits RESULTS the way check-job-results.sh reads it (`IFS='|' read -r
  * name actual expected`): no trimming, and `expected` takes the remainder.
+ * The script skips a row with an empty name, so a name must be literal: an
+ * expression could render empty.
  */
 const parseResultRows = (results: string) =>
   results.split("\n").flatMap((line) => {
     const [name = "", actual = "", ...rest] = line.split("|");
-    return name === "" ? [] : [{ name, actual, expected: rest.join("|") }];
+    return name === "" || name.includes("${{")
+      ? []
+      : [{ name, actual, expected: rest.join("|") }];
   });
 
 const GATED_EXPECTATION =
