@@ -76,7 +76,7 @@ export const startExplorerApiForTest =
     // a wrong REDIS_PORT would otherwise pass every route test.
     if (!cacheService.health()) {
       throw new Error(
-        `Redis at ${stack.env.REDIS_HOST}:${stack.env.REDIS_PORT} is not reachable (cacheService.health() is false)`,
+        `Redis at ${process.env.REDIS_HOST}:${process.env.REDIS_PORT} is not reachable (cacheService.health() is false)`,
       );
     }
 

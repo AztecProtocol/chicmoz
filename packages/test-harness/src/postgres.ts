@@ -61,20 +61,30 @@ export const createDatabase = (
     ),
   );
 
-/** The `<tag>.sql` holding `statement`, by Drizzle's own split on statement breakpoints. */
-const fileOfStatement = (folder: string, statement: string) => {
+/**
+ * The `<tag>.sql` holding the failing statement: the latest logged query that
+ * belongs to a migration file (Drizzle logs each query before running it and
+ * logs the rollback after the failure), by Drizzle's own breakpoint split.
+ */
+const fileOfFailure = (folder: string, queries: readonly string[]) => {
   const { entries } = parseJournal(
     readFileSync(join(folder, "meta", "_journal.json"), "utf8"),
   );
-  const wanted = statement.trim();
-  const entry = entries.find(({ tag }) =>
-    readFileSync(join(folder, `${tag}.sql`), "utf8")
-      .split("--> statement-breakpoint")
-      .some((s) => s.trim() === wanted),
-  );
-  return entry === undefined
-    ? "the migrator's own bookkeeping"
-    : `${entry.tag}.sql`;
+  const files = entries.map(({ tag }) => ({
+    file: `${tag}.sql`,
+    statements: new Set(
+      readFileSync(join(folder, `${tag}.sql`), "utf8")
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim()),
+    ),
+  }));
+  for (const query of [...queries].reverse()) {
+    const match = files.find(({ statements }) => statements.has(query.trim()));
+    if (match) {
+      return match.file;
+    }
+  }
+  return "the migrator's own bookkeeping";
 };
 
 /**
@@ -87,10 +97,10 @@ export const migrateDir = async (
   folder: string,
   label: string,
 ): Promise<void> => {
-  let lastQuery = "";
+  const queries: string[] = [];
   const logger: Logger = {
     logQuery: (q) => {
-      lastQuery = q;
+      queries.push(q);
     },
   };
   try {
@@ -102,7 +112,7 @@ export const migrateDir = async (
     );
   } catch (e) {
     throw new Error(
-      `${label}: ${fileOfStatement(folder, lastQuery)} failed: ${
+      `${label}: ${fileOfFailure(folder, queries)} failed: ${
         (e as Error).message
       }`,
     );
