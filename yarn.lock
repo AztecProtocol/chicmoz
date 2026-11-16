@@ -2629,6 +2629,26 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@chicmoz/test-harness@workspace:packages/test-harness":
+  version: 0.0.0-use.local
+  resolution: "@chicmoz/test-harness@workspace:packages/test-harness"
+  dependencies:
+    "@types/node": "npm:20.5.0"
+    "@typescript-eslint/eslint-plugin": "npm:6.11.0"
+    "@typescript-eslint/parser": "npm:6.11.0"
+    eslint: "npm:8.53.0"
+    eslint-config-prettier: "npm:9.0.0"
+    eslint-plugin-import: "npm:2.29.0"
+    prettier: "npm:3.1.0"
+    prettier-plugin-organize-imports: "npm:3.2.4"
+    prettier-plugin-sort-json: "npm:3.1.0"
+    typescript: "npm:5.8.3"
+    vitest: "npm:3.2.4"
+    yaml: "npm:2.7.1"
+    zod: "npm:^3.23.8"
+  languageName: unknown
+  linkType: soft
+
 "@chicmoz/websocket-event-publisher@workspace:services/websocket-event-publisher":
   version: 0.0.0-use.local
   resolution: "@chicmoz/websocket-event-publisher@workspace:services/websocket-event-publisher"
@@ -18597,21 +18617,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"yaml@npm:2.7.1, yaml@npm:^2.5.0":
+  version: 2.7.1
+  resolution: "yaml@npm:2.7.1"
+  bin:
+    yaml: bin.mjs
+  checksum: ee2126398ab7d1fdde566b4013b68e36930b9e6d8e68b6db356875c99614c10d678b6f45597a145ff6d63814961221fc305bf9242af8bf7450177f8a68537590
+  languageName: node
+  linkType: hard
+
 "yaml@npm:^2.3.4":
   version: 2.5.0
   resolution: "yaml@npm:2.5.0"
   bin:
     yaml: bin.mjs
   checksum: 771a1df083c8217cf04ef49f87244ae2dd7d7457094425e793b8f056159f167602ce172aa32d6bca21f787d24ec724aee3cecde938f6643564117bd151452631
-  languageName: node
-  linkType: hard
-
-"yaml@npm:^2.5.0":
-  version: 2.7.1
-  resolution: "yaml@npm:2.7.1"
-  bin:
-    yaml: bin.mjs
-  checksum: ee2126398ab7d1fdde566b4013b68e36930b9e6d8e68b6db356875c99614c10d678b6f45597a145ff6d63814961221fc305bf9242af8bf7450177f8a68537590
   languageName: node
   linkType: hard
 
