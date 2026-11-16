@@ -95,7 +95,8 @@ export const statusJobViolations = (
   for (const id of ids.filter(isStatus)) {
     const job = jobs[id];
     const label = `${file}: ${job.name ?? id}`;
-    const needs = typeof job.needs === "string" ? [job.needs] : job.needs ?? [];
+    const needs =
+      typeof job.needs === "string" ? [job.needs] : (job.needs ?? []);
 
     for (const other of ids) {
       if (
