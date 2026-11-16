@@ -102,6 +102,10 @@
     "drizzle.config.js",
     "scripts/**/*",
     "tests/**/*",
-    "vitest.config.ts"
-  ]
+    "vitest.config.ts",
+    "vitest.integration.config.ts"
+  ],
+  // Integration tests type-check through tests/integration/tsconfig.json; the
+  // build (and so every image build) never compiles them.
+  "exclude": ["tests/integration"]
 }

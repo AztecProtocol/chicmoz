@@ -4,6 +4,6 @@ import { defineConfig } from "vitest/config";
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   test: {
-    exclude: ["build/**", "node_modules/**"],
+    exclude: ["build/**", "node_modules/**", "**/*.integration.test.ts"],
   },
 });
