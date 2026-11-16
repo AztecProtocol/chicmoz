@@ -21,6 +21,7 @@ export {
   MicroserviceBaseSvcState,
   getMicroserviceState,
   getSvcState,
+  setLogger,
   setSvcState,
   type MicroserviceBaseSvc,
   type MicroserviceConfig,
