@@ -28,7 +28,7 @@ and feel). `services/explorer-ui-v2/CLAUDE.md` has frontend specifics.
 ## Commands
 
 ```sh
-yarn install                 # yarn 4 via corepack; git-lfs is required for checkout
+yarn install                 # yarn 4 via corepack
 yarn build:packages          # shared packages — required before building any service
 yarn build                   # everything (parallel)
 yarn build-all-slow          # everything, strict dependency order

@@ -1,0 +1,146 @@
+name: Quality
+
+on:
+  pull_request:
+    # No `branches:` filter (it matches the base branch). Drafts run too: GitHub
+    # counts a skipped required check as passed.
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR cancels its older run; every main commit keeps its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-yarn
+      - name: Build every workspace
+        run: yarn build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-yarn
+      # Type-aware rules resolve @chicmoz-pkg/* through their built .d.ts files.
+      - name: Build shared packages
+        run: yarn build:packages
+      - name: Lint every workspace
+        run: yarn lint
+      # `yarn lint` runs `eslint --fix`, so an auto-fixable violation passes it.
+      - name: Fail on files that lint auto-fixed
+        run: |
+          if ! git diff --quiet; then
+            git diff --stat
+            echo "::error::yarn lint changed the files above (eslint --fix). Run yarn lint locally and commit the result."
+            exit 1
+          fi
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # `yarn test` runs `test-once` where it exists and skips every other workspace without a word.
+      # The pattern matches Vitest's default include, *.{test,spec}.?(c|m)[jt]s?(x).
+      - name: Check every workspace with test files runs them
+        run: |
+          missing=0
+          for dir in services/* packages/*; do
+            if git ls-files -- "$dir" | grep -E '\.(test|spec)\.[cm]?[jt]sx?$' > /dev/null \
+              && ! jq -e '.scripts["test-once"]' "$dir/package.json" > /dev/null; then
+              echo "::error file=$dir/package.json::$dir has test files but no test-once script, so yarn test skips them."
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - uses: ./.github/actions/setup-yarn
+      - name: Build shared packages
+        run: yarn build:packages
+      - name: Run unit tests
+        run: yarn test
+
+  dependency-audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-yarn
+        with:
+          install: "false"
+      # Advisory: reports and never fails. `yarn npm audit` reads the lockfile; it needs no install.
+      - name: Audit the lockfile
+        run: |
+          set +e
+          yarn npm audit --all --recursive --json > audit.ndjson 2> audit.err
+          code=$?
+          set -e
+          found=$(jq -r 'select(.children.Severity != null) | .children.Severity' audit.ndjson 2> /dev/null || true)
+          {
+            echo "## Dependency audit (advisory; yarn npm audit exit $code)"
+            if [ -n "$found" ]; then
+              echo "| Severity | Advisories |"
+              echo "|---|---|"
+              sort <<< "$found" | uniq -c | awk '{print "| " $2 " | " $1 " |"}'
+              echo
+              echo "### Critical and high"
+              jq -r 'select(.children.Severity == "critical" or .children.Severity == "high")
+                | "- \(.children.Severity): `\(.value)` \(.children.Issue) (\(.children.URL))"' audit.ndjson | sort -u
+            elif [ "$code" = 0 ]; then
+              echo "No advisories."
+            else
+              # Exit 1 with no advisory lines is a tool or registry failure, not a clean result.
+              echo "Audit unavailable. stderr:"
+              echo '```'
+              cat audit.err
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$found" ]; then
+            counts=$(sort <<< "$found" | uniq -c | awk '{printf "%s%s %s", sep, $1, $2; sep=", "}')
+            echo "::warning title=Dependency audit::$counts (advisory; see the run summary)"
+          elif [ "$code" != 0 ]; then
+            echo "::warning title=Dependency audit::unavailable (yarn npm audit exit $code)"
+          fi
+
+  status:
+    name: quality-status
+    if: always()
+    # The advisory audit is deliberately absent: it must never block a merge.
+    needs: [build, lint, unit-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every gate ended as expected
+        env:
+          RESULTS: |
+            build|${{ needs.build.result }}|success
+            lint|${{ needs.lint.result }}|success
+            unit-tests|${{ needs.unit-tests.result }}|success
+        run: bash .github/scripts/check-job-results.sh
