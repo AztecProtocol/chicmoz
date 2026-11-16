@@ -100,6 +100,8 @@ and are decoded with `parseBlock()`.
 - Errors through `@chicmoz-pkg/error-middleware`; never swallow silently.
 - Sanitize IP addresses in RPC-node error events before publishing.
 - Never commit `.chicmoz.env`; `.chicmoz-example.env` is the template.
+- Commit messages follow Conventional Commits (`commitlint.config.mjs`); the
+  `commit-msg` hook and CI's `Commitlint` job check them.
 - Source verification runs untrusted compiles in isolated jobs
   (`compiler-orchestrator`); payloads can be several MB — keep size guards.
 
