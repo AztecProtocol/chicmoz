@@ -11,7 +11,7 @@ Test infrastructure for the backend: Docker-free checks that run in `yarn test`,
 | `yarn harness ls`         | Docker               | harness compose projects on this host: run id, container states, created, worktree                          |
 | `yarn harness down <run>` | Docker               | removes one harness project and its volumes; refuses anything without the harness label                     |
 
-Each integration run is its own compose project (`ih<random>`, or `HARNESS_RUN_ID`). Every port is assigned by Docker on `127.0.0.1`, so parallel runs on one host do not collide, and a run removes only its own project. Set `HARNESS_KEEP=1` to keep the stack after the run; it prints the `yarn harness down` command.
+Each integration run is its own compose project (`ih<random>`). Every port is assigned by Docker on `127.0.0.1`, so parallel runs on one host do not collide, and a run removes only its own project. Set `HARNESS_KEEP=1` to keep the stack after the run; it prints the `yarn harness down` command.
 
 ## Reading a failure
 
