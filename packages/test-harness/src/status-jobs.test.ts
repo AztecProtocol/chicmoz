@@ -31,7 +31,8 @@ jobs:
   build: { runs-on: ubuntu-latest }
   lint: { runs-on: ubuntu-latest }
   test: { runs-on: ubuntu-latest }
-  e2e: { runs-on: ubuntu-latest }
+  e2e: { runs-on: ubuntu-latest, if: "needs.changes.outputs.run == 'true'" }
+  gated: { runs-on: ubuntu-latest, if: "needs.changes.outputs.other == 'true'" }
   docs: { runs-on: ubuntu-latest }
   commitlint: { runs-on: ubuntu-latest, if: "github.event_name == 'pull_request'" }
   release: { runs-on: ubuntu-latest, if: "github.event_name == 'push'" }
@@ -41,13 +42,14 @@ jobs:
   status:
     name: demo-status
     if: always() && success()
-    needs: [build, test, e2e, lint, docs, commitlint, release, bare, extra]
+    needs: [build, test, e2e, gated, lint, docs, commitlint, release, bare, extra]
     steps:
       - env:
           RESULTS: |
             \${{ needs.build.result }}|success|success
             test|\${{ needs.test.result }}|\${{ needs.test.result }}
             e2e|\${{ needs.e2e.result }}|\${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+            gated|\${{ needs.gated.result }}|\${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
             lint|\${{ needs.lint.result }}|\${{ needs.lint['result'] }}
             lint|\${{ needs.lint.result }}|\${{ 'failure' }}
             \${{ '' }}|\${{ needs.docs.result }}|success
@@ -59,7 +61,7 @@ jobs:
         run: bash .github/scripts/check-job-results.sh
   ignored-status:
     if: always()
-    needs: [build, lint, test, e2e, docs, commitlint, release, bare, extra]
+    needs: [build, lint, test, e2e, gated, docs, commitlint, release, bare, extra]
     steps:
       - run: bash .github/scripts/check-job-results.sh || true
 `;
@@ -69,6 +71,7 @@ jobs:
       expect.stringContaining("check step sets if or continue-on-error"),
       expect.stringContaining("demo-status needs build but no RESULTS row"),
       expect.stringContaining("demo-status needs test but no RESULTS row"),
+      expect.stringContaining("demo-status needs gated but no RESULTS row"),
       expect.stringContaining("demo-status needs lint but no RESULTS row"),
       expect.stringContaining("demo-status needs docs but no RESULTS row"),
       expect.stringContaining("demo-status needs release but no RESULTS row"),

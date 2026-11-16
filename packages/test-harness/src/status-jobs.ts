@@ -49,30 +49,21 @@ const parseResultRows = (results: string) =>
       : [{ name, actual, expected: rest.join("|") }];
   });
 
-const GATED_EXPECTATION =
-  /^\$\{\{ needs\.[\w-]+\.outputs\.[\w-]+ == 'true' && 'success' \|\| 'skipped' \}\}$/;
-
-const EVENT_EXPECTATION =
-  /^\$\{\{ github\.event_name == '([a-z_]+)' && 'success' \|\| 'skipped' \}\}$/;
+const CONDITIONAL_EXPECTATION =
+  /^\$\{\{ (needs\.[\w-]+\.outputs\.[\w-]+ == 'true'|github\.event_name == '[a-z_]+') && 'success' \|\| 'skipped' \}\}$/;
 
 /**
  * True only for expected values that evaluate to `success` or `skipped`, never
- * to the result itself; an event-chosen one also needs the job's `if` to be
- * that same event test.
+ * to the result itself. One chosen by a gate output or event test also needs
+ * the job's own `if` to be exactly that test, so `skipped` is expected exactly
+ * when the job's own condition is false.
  */
 const isFixedExpectation = (expected: string, neededJobIf: unknown) => {
-  if (
-    expected === "success" ||
-    expected === "skipped" ||
-    GATED_EXPECTATION.test(expected)
-  ) {
+  if (expected === "success" || expected === "skipped") {
     return true;
   }
-  const event = EVENT_EXPECTATION.exec(expected)?.[1];
-  return (
-    event !== undefined &&
-    unwrapExpression(neededJobIf) === `github.event_name == '${event}'`
-  );
+  const condition = CONDITIONAL_EXPECTATION.exec(expected)?.[1];
+  return condition !== undefined && unwrapExpression(neededJobIf) === condition;
 };
 
 /**
