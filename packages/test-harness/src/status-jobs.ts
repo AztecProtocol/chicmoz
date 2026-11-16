@@ -52,11 +52,28 @@ const parseResultRows = (results: string) =>
 const GATED_EXPECTATION =
   /^\$\{\{ needs\.[\w-]+\.outputs\.[\w-]+ == 'true' && 'success' \|\| 'skipped' \}\}$/;
 
-/** `success`, `skipped`, or a gate output choosing one; any looser expression can evaluate to the result it is compared with. */
-const isFixedExpectation = (expected: string) =>
-  expected === "success" ||
-  expected === "skipped" ||
-  GATED_EXPECTATION.test(expected);
+const EVENT_EXPECTATION =
+  /^\$\{\{ github\.event_name == '([a-z_]+)' && 'success' \|\| 'skipped' \}\}$/;
+
+/**
+ * True only for expected values that evaluate to `success` or `skipped`, never
+ * to the result itself; an event-chosen one also needs the job's `if` to be
+ * that same event test.
+ */
+const isFixedExpectation = (expected: string, neededJobIf: unknown) => {
+  if (
+    expected === "success" ||
+    expected === "skipped" ||
+    GATED_EXPECTATION.test(expected)
+  ) {
+    return true;
+  }
+  const event = EVENT_EXPECTATION.exec(expected)?.[1];
+  return (
+    event !== undefined &&
+    unwrapExpression(neededJobIf) === `github.event_name == '${event}'`
+  );
+};
 
 /**
  * Ways a `*-status` job (by id or display name) in one workflow can pass while
@@ -130,7 +147,9 @@ export const statusJobViolations = (
         `^\\$\\{\\{\\s*needs\\.${escapeRegExp(need)}\\.result\\s*\\}\\}$`,
       );
       const checked = rows.some(
-        (row) => actual.test(row.actual) && isFixedExpectation(row.expected),
+        (row) =>
+          actual.test(row.actual) &&
+          isFixedExpectation(row.expected, jobs[need]?.if),
       );
       if (!checked) {
         violations.push(

@@ -33,11 +33,15 @@ jobs:
   test: { runs-on: ubuntu-latest }
   e2e: { runs-on: ubuntu-latest }
   docs: { runs-on: ubuntu-latest }
+  commitlint: { runs-on: ubuntu-latest, if: "github.event_name == 'pull_request'" }
+  release: { runs-on: ubuntu-latest, if: "github.event_name == 'push'" }
+  bare: { runs-on: ubuntu-latest }
+  extra: { runs-on: ubuntu-latest, if: "github.event_name == 'pull_request' && github.actor != 'bot'" }
   audit: { runs-on: ubuntu-latest }
   status:
     name: demo-status
     if: always() && success()
-    needs: [build, test, e2e, lint, docs]
+    needs: [build, test, e2e, lint, docs, commitlint, release, bare, extra]
     steps:
       - env:
           RESULTS: |
@@ -47,11 +51,15 @@ jobs:
             lint|\${{ needs.lint.result }}|\${{ needs.lint['result'] }}
             lint|\${{ needs.lint.result }}|\${{ 'failure' }}
             \${{ '' }}|\${{ needs.docs.result }}|success
+            commitlint|\${{ needs.commitlint.result }}|\${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
+            release|\${{ needs.release.result }}|\${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
+            bare|\${{ needs.bare.result }}|\${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
+            extra|\${{ needs.extra.result }}|\${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
         continue-on-error: true
         run: bash .github/scripts/check-job-results.sh
   ignored-status:
     if: always()
-    needs: [build, lint, test, e2e, docs]
+    needs: [build, lint, test, e2e, docs, commitlint, release, bare, extra]
     steps:
       - run: bash .github/scripts/check-job-results.sh || true
 `;
@@ -63,6 +71,9 @@ jobs:
       expect.stringContaining("demo-status needs test but no RESULTS row"),
       expect.stringContaining("demo-status needs lint but no RESULTS row"),
       expect.stringContaining("demo-status needs docs but no RESULTS row"),
+      expect.stringContaining("demo-status needs release but no RESULTS row"),
+      expect.stringContaining("demo-status needs bare but no RESULTS row"),
+      expect.stringContaining("demo-status needs extra but no RESULTS row"),
       expect.stringContaining("ignored-status has no step that runs exactly"),
     ]);
   });
