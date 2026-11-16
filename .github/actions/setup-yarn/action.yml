@@ -1,0 +1,18 @@
+name: Set up Node and Yarn
+description: Node from .nvmrc, the repo's committed Yarn release, and a frozen install.
+inputs:
+  install:
+    description: Run `yarn install --immutable` after setting up Node.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # The runner's global Yarn 1 hands off to the release named by .yarnrc.yml's yarnPath.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: ${{ inputs.install == 'true' && 'yarn' || '' }}
+    - name: Install dependencies (frozen lockfile)
+      if: inputs.install == 'true'
+      shell: bash
+      run: yarn install --immutable

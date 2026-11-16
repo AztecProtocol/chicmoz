@@ -17,7 +17,7 @@ COPY packages packages
 ARG VERSION_STRING
 ENV VERSION_STRING $VERSION_STRING
 
-RUN yarn install
+RUN yarn install --immutable
 RUN yarn run build:packages
 
 WORKDIR /usr/main/services/explorer-api
