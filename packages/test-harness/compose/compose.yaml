@@ -1,0 +1,88 @@
+# Test infrastructure only. Credentials are the repository's local-dev
+# defaults; every port binds to 127.0.0.1 on a Docker-assigned host port.
+name: chicmoz-harness
+
+x-labels: &labels
+  chicmoz.harness: "1"
+
+services:
+  postgres:
+    profiles: [infra]
+    image: postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+    labels: *labels
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret-local-password
+    # Durability off: every database here is disposable.
+    command:
+      [
+        postgres,
+        -c,
+        fsync=off,
+        -c,
+        synchronous_commit=off,
+        -c,
+        full_page_writes=off,
+      ]
+    ports: ["127.0.0.1::5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      # TCP, not the socket: the image's init phase runs a socket-only server.
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, admin, -d, postgres]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  kafka:
+    profiles: [infra]
+    image: apache/kafka:4.1.1@sha256:0bc1bb2478f45b6cea78864df86acdc11e8df2c5172477819a4d12942cbe5d40
+    labels: *labels
+    ports: ["127.0.0.1::19092"]
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: SASL_PLAINTEXT://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT,EXTERNAL:SASL_PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/jaas.conf
+      KAFKA_MESSAGE_MAX_BYTES: "10000000"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    volumes:
+      - ./kafka-jaas.conf:/etc/kafka/secrets/jaas.conf:ro
+      - ./kafka-client.properties:/etc/kafka/secrets/client.properties:ro
+    # The host listener must advertise the host port Docker picked, which is
+    # known only after start: up() writes it to /tmp/advertised.
+    command:
+      - sh
+      - -c
+      - while [ ! -s /tmp/advertised ]; do sleep 0.2; done; export KAFKA_ADVERTISED_LISTENERS=$$(cat /tmp/advertised); exec /etc/kafka/docker/run
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 --command-config /etc/kafka/secrets/client.properties > /dev/null
+      interval: 2s
+      timeout: 20s
+      retries: 60
+
+  redis:
+    profiles: [infra]
+    image: redis:7.2-alpine@sha256:2f66de68111e64c3927859f158f8e666066dae2b97d9f82770a6f37a5aa1c335
+    labels: *labels
+    command:
+      [redis-server, --maxmemory, 100mb, --maxmemory-policy, volatile-ttl]
+    ports: ["127.0.0.1::6379"]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+volumes:
+  pgdata:

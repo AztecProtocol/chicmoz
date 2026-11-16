@@ -5,17 +5,23 @@
   "type": "module",
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
-    "build": "yarn tsc",
+    "build": "yarn tsc -p tsconfig.build.json",
     "lint": "yarn run lint-base --ext .ts .",
     "lint-base": "yarn run g:lint",
-    "test": "vitest run --dir src",
-    "test-once": "vitest run --dir src"
+    "test": "vitest run --dir src --exclude '**/*.integration.test.ts'",
+    "test-once": "vitest run --dir src --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "harness": "yarn build > /dev/null && node build/cli.js"
   },
   "dependencies": {
+    "bson": "6.2.0",
+    "drizzle-orm": "0.33.0",
+    "pg": "8.11.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "20.5.0",
+    "@types/pg": "8.11.8",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "eslint": "8.53.0",
