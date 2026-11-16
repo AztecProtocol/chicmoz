@@ -1,0 +1,148 @@
+name: Integration tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR cancels its older run; every main commit keeps its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect integration inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.full.outputs.run || steps.filter.outputs.integration }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run every suite outside pull requests
+        id: full
+        if: github.event_name != 'pull_request'
+        run: echo "run=true" >> "$GITHUB_OUTPUT"
+      # Anything the suites build, install, migrate or run. Too wide costs minutes; too narrow
+      # skips a real failure, so when in doubt a path belongs here.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            integration:
+              - 'services/explorer-api/**'
+              - 'services/aztec-listener/**'
+              - 'services/ethereum-listener/**'
+              - 'packages/**'
+              - 'fixtures/**'
+              - 'package.json'
+              - 'yarn.lock'
+              - '.yarnrc.yml'
+              - '.yarn/**'
+              - '.nvmrc'
+              - '.github/workflows/integration-tests.yml'
+              - '.github/actions/setup-yarn/**'
+              - '.github/scripts/check-job-results.sh'
+
+  migrations:
+    name: Migrations from empty and from base
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Migrations at this commit count as applied. Once MIGRATIONS_BASE_REF is set, the
+      # applied-migration and upgrade-path tests must resolve it: they can fail, never skip.
+      - name: Resolve the migrations base
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          base="${PR_BASE:-$PUSH_BEFORE}"
+          if [ -z "$base" ]; then
+            base=$(git merge-base HEAD origin/main)
+          fi
+          echo "MIGRATIONS_BASE_REF=$base" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-yarn
+      # The migrate entrypoints and schema modules run from each service's build.
+      - name: Build shared packages and the migrating services
+        run: >-
+          yarn workspaces foreach --all --topological-dev
+          --include '@chicmoz-pkg/*' --include '@chicmoz/explorer-api'
+          --include '@chicmoz/aztec-listener' --include '@chicmoz/ethereum-listener'
+          run build
+      - name: Check migration journals and applied migrations
+        run: yarn workspace @chicmoz/test-harness test-once
+      - name: Pull the stack images
+        run: docker compose -f packages/test-harness/compose/compose.yaml --profile infra pull --quiet
+      - name: Run the migration suite
+        run: yarn workspace @chicmoz/test-harness test:integration
+      - name: Keep the run logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: harness-migrations
+          path: .harness/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  explorer-api:
+    name: explorer-api against Postgres, Kafka and Redis
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-yarn
+      # explorer-api's tests run its TypeScript source; only the shared packages need a build.
+      - name: Build shared packages
+        run: yarn build:packages
+      - name: Pull the stack images
+        run: docker compose -f packages/test-harness/compose/compose.yaml --profile infra pull --quiet
+      - name: Run the explorer-api suite
+        run: yarn workspace @chicmoz/explorer-api test:integration
+      - name: Keep the run logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: harness-explorer-api
+          path: .harness/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  status:
+    name: integration-tests-status
+    if: always()
+    needs: [changes, migrations, explorer-api]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every gate ended as expected
+        env:
+          RESULTS: |
+            changes|${{ needs.changes.result }}|success
+            integration filter|${{ needs.changes.outputs.run }}|bool
+            migrations|${{ needs.migrations.result }}|${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+            explorer-api|${{ needs.explorer-api.result }}|${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+        run: bash .github/scripts/check-job-results.sh

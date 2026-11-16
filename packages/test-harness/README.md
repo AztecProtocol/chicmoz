@@ -13,6 +13,10 @@ Test infrastructure for the backend: Docker-free checks that run in `yarn test`,
 
 Each integration run is its own compose project (`ih<random>`). Every port is assigned by Docker on `127.0.0.1`, so parallel runs on one host do not collide, and a run removes only its own project. Set `HARNESS_KEEP=1` to keep the stack after the run; it prints the `yarn harness down` command.
 
+## In CI
+
+`.github/workflows/integration-tests.yml` runs both suites as two jobs and reports `integration-tests-status`. On pull requests a path filter skips them when nothing they build, install, migrate or run has changed; the status check still reports, expecting `skipped`. The migrations job checks out full history and sets `MIGRATIONS_BASE_REF` (the PR base, the previous `main` commit on push, else the merge base with `origin/main`), so the applied-migration and upgrade-path tests always run there. A failing job uploads `.harness/` as an artifact for 7 days.
+
 ## Reading a failure
 
 - Start-up: `harness run <id> did not start: ...; logs in .harness/<id>/compose.log`.
