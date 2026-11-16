@@ -12,7 +12,6 @@ import { setEntry } from "@chicmoz-pkg/redis-helper";
 import {
   NODE_ENV,
   NodeEnv,
-  chicmozL2ContractClassRegisteredEventSchema,
   chicmozL2ContractInstanceDeployedEventSchema,
   type ChicmozL2ContractInstanceDeluxe,
 } from "@chicmoz-pkg/types";
@@ -40,7 +39,12 @@ import {
   contractInstanceResponseArray,
   dbWrapper,
 } from "./utils/index.js";
-import { NOT_COMPILER_OUTPUT_TEXT } from "./contract-classes.js";
+import {
+  NOT_COMPILER_OUTPUT_TEXT,
+  readClassWithArtifact,
+  storeArtifactIfAbsent,
+  type VerifiedArtifact,
+} from "./contract-classes.js";
 
 /** Resolves undefined when the uploaded artifact is refused. */
 const verifyUploadedArtifact = (
@@ -65,11 +69,6 @@ const verifyContractRequestBody = generateSchema(
     verifiedDeploymentArguments: verifyInstanceDeploymentPayloadSchema.schema,
   }),
 );
-
-const contractClassWithArtifactKeys = (
-  contractClassId: string,
-  version: number,
-) => ["l2", "contract-classes", contractClassId, version, "with-artifact"];
 
 export const openapi_GET_L2_CONTRACT_INSTANCE: OpenAPIObject["paths"] = {
   "/l2/contract-instances/{address}": {
@@ -400,112 +399,46 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       return;
     }
     const deploymentContractClassId = dbContractInstance.originalContractClassId;
-    const contractClassString = await dbWrapper.get(
-      contractClassWithArtifactKeys(
-        deploymentContractClassId,
-        dbContractInstance.version,
-      ),
-      () =>
-        db.l2Contract.getL2RegisteredContractClass(
-          deploymentContractClassId,
-          dbContractInstance.version,
-        ),
+    const registeredClass = await readClassWithArtifact(
+      deploymentContractClassId,
+      dbContractInstance.version,
     );
-    let dbContractClass;
-    try {
-      dbContractClass = chicmozL2ContractClassRegisteredEventSchema.parse(
-        JSON.parse(contractClassString),
+
+    let verifiedUpload: VerifiedArtifact | undefined;
+    if (stringifiedArtifactJson) {
+      const verification = await verifyUploadedArtifact(
+        stringifiedArtifactJson,
+        registeredClass,
       );
-    } catch {
-      res.status(500).send("Contract class found in DB is not valid");
-      return;
+      if (!verification) {
+        res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
+        return;
+      }
+      if (!verification.isMatchingClassId) {
+        res
+          .status(400)
+          .send(
+            verification.reason === "NOT_COMPILER_OUTPUT"
+              ? NOT_COMPILER_OUTPUT_TEXT
+              : registeredClass.artifactJson
+                ? "Contract class already has a registered artifact that does not match the uploaded artifact"
+                : "Uploaded artifact does not match contract class",
+          );
+        return;
+      }
+      verifiedUpload = verification;
     }
 
-    if (!stringifiedArtifactJson && !dbContractClass.artifactJson) {
+    // The stored artifact, when there is one, is what the class is known by.
+    const artifactString =
+      registeredClass.artifactJson ?? verifiedUpload?.artifactJson;
+    if (!artifactString) {
       res
         .status(400)
         .send(
           `artifactJson is missing in the request and could not be found for contract class ${deploymentContractClassId} version ${dbContractInstance.version}`,
         );
       return;
-    }
-
-    if (stringifiedArtifactJson && dbContractClass.artifactJson) {
-      const verification = await verifyUploadedArtifact(
-        stringifiedArtifactJson,
-        dbContractClass,
-      );
-      if (!verification) {
-        res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
-        return;
-      }
-      if (!verification.isMatchingClassId) {
-        res
-          .status(400)
-          .send(
-            verification.reason === "NOT_COMPILER_OUTPUT"
-              ? NOT_COMPILER_OUTPUT_TEXT
-              : "Contract class already has a registered artifact that does not match the uploaded artifact",
-          );
-        return;
-      }
-    }
-
-    if (stringifiedArtifactJson && !dbContractClass.artifactJson) {
-      // TODO: this entire block should use verify contract class artifact
-      const verification = await verifyUploadedArtifact(
-        stringifiedArtifactJson,
-        dbContractClass,
-      );
-      if (!verification) {
-        res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
-        return;
-      }
-      if (!verification.isMatchingClassId) {
-        res
-          .status(400)
-          .send(
-            verification.reason === "NOT_COMPILER_OUTPUT"
-              ? NOT_COMPILER_OUTPUT_TEXT
-              : "Uploaded artifact does not match contract class",
-          );
-        return;
-      }
-      const { artifactJson, artifactContractName } = verification;
-      const completeContractClass = {
-        ...dbContractClass,
-        artifactJson,
-        artifactContractName,
-      };
-
-      setEntry(
-        contractClassWithArtifactKeys(
-          deploymentContractClassId,
-          dbContractInstance.version,
-        ),
-        JSON.stringify(completeContractClass),
-        CACHE_TTL_SECONDS,
-      ).catch((err) => {
-        logger.warn(`Failed to cache contract class: ${err}`);
-      });
-      const { selectorMap } = await db.l2Contract.addArtifactData({
-        contractClassId: dbContractClass.contractClassId,
-        version: dbContractClass.version,
-        artifactJson,
-        contractName: artifactContractName,
-      });
-      await db.l2Contract.backfillPublicCallRequestNames({
-        contractClassId: dbContractClass.contractClassId,
-        version: dbContractClass.version,
-        selectorMap,
-        contractName: artifactContractName,
-      });
-    }
-
-    const artifactString =
-      stringifiedArtifactJson ?? dbContractClass.artifactJson;
-    if (!artifactString) {
-      throw new Error("For some reason artifactString is undefined");
     }
 
     let verificationPayload: VerifyInstanceDeploymentPayload;
@@ -549,6 +482,10 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         .status(400)
         .send("Uploaded data does not lead to correct contract address");
       return;
+    }
+
+    if (verifiedUpload && !registeredClass.artifactJson) {
+      await storeArtifactIfAbsent(registeredClass, verifiedUpload);
     }
 
     await db.l2Contract.storeContractInstanceVerifiedDeploymentArguments({

@@ -80,10 +80,12 @@ export const addArtifactData = async ({
   artifactJson: string;
   contractName?: string;
   standardData?: ContractStandard;
-}): Promise<{ selectorMap: Record<string, string> }> => {
+}): Promise<{ written: boolean; selectorMap: Record<string, string> }> => {
   const selectorMap = await buildSelectorMap(artifactJson);
 
-  await db()
+  // Only the first artifact is kept; callers re-read the row when nothing
+  // was written.
+  const written = await db()
     .update(l2ContractClassRegistered)
     .set({
       artifactJson,
@@ -96,11 +98,12 @@ export const addArtifactData = async ({
       and(
         eq(l2ContractClassRegistered.contractClassId, contractClassId),
         eq(l2ContractClassRegistered.version, version),
+        isNull(l2ContractClassRegistered.artifactJson),
       ),
     )
-    .execute();
+    .returning({ contractClassId: l2ContractClassRegistered.contractClassId });
 
-  return { selectorMap };
+  return { written: written.length > 0, selectorMap };
 };
 
 export const storePrivateFunction = async (

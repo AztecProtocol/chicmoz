@@ -101,10 +101,6 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_STANDARD_ARTIFACT = asyncHandler(
           res.status(404).send(error.message);
           return;
         }
-        if (error.message === "Contract class found in DB is not valid") {
-          res.status(500).send(error.message);
-          return;
-        }
         if (isBadArtifactMessage(error.message)) {
           res.status(400).send(error.message);
           return;
