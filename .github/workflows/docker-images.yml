@@ -1,0 +1,112 @@
+name: Docker images
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR cancels its older run; every main commit keeps its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect image inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      images: ${{ steps.full.outputs.images || steps.filter.outputs.images }}
+      services: ${{ steps.list.outputs.services }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: List the production Dockerfiles
+        id: list
+        run: |
+          services=$(find services -mindepth 2 -maxdepth 2 -name Dockerfile.prod | cut -d/ -f2 | sort | jq -Rsc 'split("\n") | map(select(. != ""))')
+          if [ "$services" = "[]" ]; then
+            echo "::error::No services/*/Dockerfile.prod found."
+            exit 1
+          fi
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+      - name: Build every image outside pull requests
+        id: full
+        if: github.event_name != 'pull_request'
+        run: echo "images=true" >> "$GITHUB_OUTPUT"
+      # Source changes are proven by the Quality build; these are the inputs only an image build reads.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            images:
+              - 'services/*/Dockerfile.prod'
+              - '.dockerignore'
+              - 'package.json'
+              - 'yarn.lock'
+              - '.yarnrc.yml'
+              - '.yarn/**'
+              - 'services/*/package.json'
+              - 'packages/*/package.json'
+              - '.github/workflows/docker-images.yml'
+
+  build:
+    name: Build image (${{ matrix.service }})
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show the runner's Docker
+        run: docker version && docker buildx version
+      # cacheonly: build every stage, export nothing, push nothing.
+      - name: Build services/${{ matrix.service }}/Dockerfile.prod
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: docker buildx build --progress=plain --output type=cacheonly --file "services/$SERVICE/Dockerfile.prod" .
+      - name: Report free disk
+        if: always()
+        run: |
+          {
+            echo "### Disk after building $SERVICE"
+            echo '```'
+            df -h /
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SERVICE: ${{ matrix.service }}
+
+  status:
+    name: docker-images-status
+    if: always()
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every gate ended as expected
+        env:
+          RESULTS: |
+            changes|${{ needs.changes.result }}|success
+            images filter|${{ needs.changes.outputs.images }}|bool
+            build|${{ needs.build.result }}|${{ needs.changes.outputs.images == 'true' && 'success' || 'skipped' }}
+        run: bash .github/scripts/check-job-results.sh
