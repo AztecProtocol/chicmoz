@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
-    "build": "yarn tsc",
+    "build": "yarn tsc -p tsconfig.build.json",
     "lint": "yarn run lint-base --ext .ts .",
     "lint-base": "yarn run g:lint",
     "test": "vitest run --dir src --exclude '**/*.integration.test.ts'",
     "test-once": "vitest run --dir src --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run --config vitest.integration.config.mjs",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "harness": "yarn build > /dev/null && node build/cli.js"
   },
   "dependencies": {
