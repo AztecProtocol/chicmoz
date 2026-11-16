@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import path from "node:path";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { REPO_ROOT, git } from "./repo.js";
@@ -40,15 +40,13 @@ export const OUT_OF_ORDER_ENTRIES: Record<MigratingService, readonly string[]> =
   };
 
 export const migrationsDir = (svc: MigratingService): string =>
-  path.join(REPO_ROOT, "services", svc, "migrations");
+  join(REPO_ROOT, "services", svc, "migrations");
 
 export const parseJournal = (json: string): Journal =>
   journalSchema.parse(JSON.parse(json));
 
 export const readJournal = (svc: MigratingService): Journal =>
-  parseJournal(
-    readFileSync(path.join(migrationsDir(svc), JOURNAL_PATH), "utf8"),
-  );
+  parseJournal(readFileSync(join(migrationsDir(svc), JOURNAL_PATH), "utf8"));
 
 export const listSqlFiles = (svc: MigratingService): string[] =>
   readdirSync(migrationsDir(svc)).filter((file) => file.endsWith(".sql"));
@@ -179,7 +177,9 @@ export const appliedMigrationChanges = (
       continue;
     }
     violations.push(
-      `${svc}: ${file} ${status === "D" ? "was deleted" : "changed"} since ${base}; an applied migration must stay byte-identical`,
+      `${svc}: ${file} ${
+        status === "D" ? "was deleted" : "changed"
+      } since ${base}; an applied migration must stay byte-identical`,
     );
   }
 

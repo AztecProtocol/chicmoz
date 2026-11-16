@@ -1,17 +1,21 @@
 import { parse } from "yaml";
 import { z } from "zod";
 
-const RESULTS_SCRIPT = ".github/scripts/check-job-results.sh";
+const RESULTS_RUN = "bash .github/scripts/check-job-results.sh";
 
+const condition = z.union([z.string(), z.boolean()]).optional();
 const workflowSchema = z.object({
   jobs: z.record(
     z.object({
       name: z.string().optional(),
-      if: z.union([z.string(), z.boolean()]).optional(),
+      if: condition,
+      "continue-on-error": z.unknown().optional(),
       needs: z.union([z.string(), z.array(z.string())]).optional(),
       steps: z
         .array(
           z.object({
+            if: condition,
+            "continue-on-error": z.unknown().optional(),
             run: z.string().optional(),
             env: z.record(z.unknown()).optional(),
           }),
@@ -26,11 +30,33 @@ const isStatusName = (name: string | undefined) =>
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const unwrapExpression = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .replace(/^\$\{\{\s*([\s\S]*?)\s*\}\}$/, "$1");
+
+/**
+ * Splits RESULTS the way check-job-results.sh reads it (`IFS='|' read -r
+ * name actual expected`): no trimming, and `expected` takes the remainder.
+ */
+const parseResultRows = (results: string) =>
+  results.split("\n").flatMap((line) => {
+    const [name = "", actual = "", ...rest] = line.split("|");
+    return name === "" ? [] : [{ name, actual, expected: rest.join("|") }];
+  });
+
+/** An expected value that cannot simply echo the result it is compared with. */
+const isIndependentExpectation = (expected: string) =>
+  expected === "success" ||
+  expected === "skipped" ||
+  (/^\$\{\{[\s\S]*\}\}$/.test(expected) && !expected.includes(".result"));
+
 /**
  * Ways a `*-status` job (by id or display name) in one workflow can pass while
  * a gating job of the same workflow has not succeeded: it does not wait for
- * that job, it is skipped when a dependency fails (a skipped required check
- * counts as passed), or `check-job-results.sh` never sees that job's result.
+ * that job; it is skipped when a dependency fails (a skipped required check
+ * counts as passed); its check step can be skipped or its failure ignored; or
+ * check-job-results.sh never compares that job's result with a fixed outcome.
  * `advisory` names jobs that must not gate; each must exist.
  */
 export const statusJobViolations = (
@@ -54,8 +80,7 @@ export const statusJobViolations = (
   for (const id of ids.filter(isStatus)) {
     const job = jobs[id];
     const label = `${file}: ${job.name ?? id}`;
-    const needs =
-      typeof job.needs === "string" ? [job.needs] : (job.needs ?? []);
+    const needs = typeof job.needs === "string" ? [job.needs] : job.needs ?? [];
 
     for (const other of ids) {
       if (
@@ -68,24 +93,42 @@ export const statusJobViolations = (
         );
       }
     }
-    if (!String(job.if ?? "").includes("always()")) {
+    if (unwrapExpression(job.if) !== "always()") {
       violations.push(
-        `${label} lacks if: always(), so it is skipped, and passes, when a job it needs fails`,
+        `${label} must have exactly if: always(); otherwise it is skipped, and passes, when a job it needs fails`,
       );
     }
-    const step = job.steps?.find((s) => s.run?.includes(RESULTS_SCRIPT));
+    if (job["continue-on-error"] !== undefined) {
+      violations.push(
+        `${label} sets continue-on-error, so its failure is ignored`,
+      );
+    }
+
+    const step = job.steps?.find((s) => s.run?.trim() === RESULTS_RUN);
     if (step === undefined) {
-      violations.push(`${label} does not run ${RESULTS_SCRIPT}`);
+      violations.push(`${label} has no step that runs exactly: ${RESULTS_RUN}`);
       continue;
     }
-    const results = step.env?.RESULTS;
-    for (const need of needs) {
-      const line = new RegExp(
-        `\\$\\{\\{\\s*needs\\.${escapeRegExp(need)}\\.result\\s*\\}\\}`,
+    if (step.if !== undefined || step["continue-on-error"] !== undefined) {
+      violations.push(
+        `${label}: its check step sets if or continue-on-error, so it can be skipped or ignored`,
       );
-      if (typeof results !== "string" || !line.test(results)) {
+    }
+    const rows =
+      typeof step.env?.RESULTS === "string"
+        ? parseResultRows(step.env.RESULTS)
+        : [];
+    for (const need of needs) {
+      const actual = new RegExp(
+        `^\\$\\{\\{\\s*needs\\.${escapeRegExp(need)}\\.result\\s*\\}\\}$`,
+      );
+      const checked = rows.some(
+        (row) =>
+          actual.test(row.actual) && isIndependentExpectation(row.expected),
+      );
+      if (!checked) {
         violations.push(
-          `${label} needs ${need} but its RESULTS never checks needs.${need}.result`,
+          `${label} needs ${need} but no RESULTS row has actual \${{ needs.${need}.result }} and a fixed expected value`,
         );
       }
     }
