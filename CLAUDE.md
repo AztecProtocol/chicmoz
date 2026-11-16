@@ -33,7 +33,9 @@ yarn build:packages          # shared packages — required before building any 
 yarn build                   # everything (parallel)
 yarn build-all-slow          # everything, strict dependency order
 yarn lint                    # all workspaces (lint-staged + prettier run on commit)
-yarn test                    # vitest across workspaces
+yarn test                    # unit: vitest across workspaces, no Docker
+yarn test:integration        # integration: Docker + `yarn build` first; own Postgres/Kafka/Redis per run (packages/test-harness)
+yarn harness ls|down <run>   # list or remove this host's harness compose projects
 # per service: cd services/<name> && yarn build|lint|test|test:watch
 ```
 

@@ -30,6 +30,8 @@
     "build": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run build",
     "lint": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run lint",
     "test": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run test-once",
+    "test:integration": "yarn workspace @chicmoz/test-harness test:integration && yarn workspace @chicmoz/explorer-api test:integration",
+    "harness": "yarn workspace @chicmoz/test-harness harness",
     "g:lint": "cd $INIT_CWD && eslint --fix",
     "postinstall": "husky install",
     "prepare": "husky install"
