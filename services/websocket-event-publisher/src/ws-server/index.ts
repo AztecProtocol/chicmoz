@@ -8,6 +8,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import { PORT } from "../environment.js";
 import { logger } from "../logger.js";
+import { handleConnection } from "./connection.js";
 import { closeHealthCheckServer, createHealthCheckServer } from "./health.js";
 
 let wss: WebSocketServer;
@@ -89,11 +90,8 @@ export const init = async () => {
     resolveInit();
   });
 
-  wss.on("connection", (connectedWs) => {
-    logger.info(`🧍 WS: client connected    (total: ${wss.clients.size})`);
-    connectedWs.on("close", function close() {
-      logger.info(`🚪 WS: client disconnected (total: ${wss.clients.size})`);
-    });
+  wss.on("connection", (socket) => {
+    handleConnection(wss, socket);
   });
 
   await initPromise;

@@ -14,7 +14,7 @@
     "@chicmoz-pkg/message-bus": "workspace:^",
     "@chicmoz-pkg/message-registry": "workspace:^",
     "@chicmoz-pkg/types": "workspace:^",
-    "ws": "8.18.0"
+    "ws": "8.22.2"
   },
   "devDependencies": {
     "@types/node": "20.5.0",
@@ -25,7 +25,8 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-n": "15.0.0 || 16.0.0 ",
     "eslint-plugin-promise": "6.0.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vitest": "3.2.4"
   },
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
@@ -35,7 +36,9 @@
     "dev": "yarn node build/index.js",
     "start": "yarn node --unhandled-rejections=strict --enable-source-maps build/index.js",
     "lint": "yarn run lint-base --ext .ts .",
-    "lint-base": "yarn run g:lint"
+    "lint-base": "yarn run g:lint",
+    "test": "vitest run --dir src",
+    "test-once": "vitest run --dir src"
   },
   "type": "module"
 }
