@@ -101,9 +101,12 @@ and are decoded with `parseBlock()`.
 - Errors through `@chicmoz-pkg/error-middleware`; never swallow silently.
 - Sanitize IP addresses in RPC-node error events before publishing.
 - Never commit `.chicmoz.env`; `.chicmoz-example.env` is the template.
-- Yarn skips npm versions published less than 7 days ago (`npmMinimalAgeGate`
-  in `.yarnrc.yml`); do not bypass it (`--no-time-gate`, `npmPreapprovedPackages`)
-  without a maintainer's approval.
+- `.yarnrc.yml`: Yarn skips npm versions published less than 7 days ago
+  (`npmMinimalAgeGate`) and runs no third-party install scripts
+  (`enableScripts: false`). Do not bypass the gate (`--no-time-gate`,
+  `npmPreapprovedPackages`) without a maintainer's approval; a package that
+  needs its install script is allowed by name, with a maintainer's approval
+  (`dependenciesMeta.<name>.built: true` in the root `package.json`).
 - Commit messages follow Conventional Commits (`commitlint.config.mjs`); the
   `commit-msg` hook and CI's `Commitlint` job check them.
 - Source verification runs untrusted compiles in isolated jobs
