@@ -1,5 +1,4 @@
 import { createErrorMiddleware } from "@chicmoz-pkg/error-middleware";
-import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -36,12 +35,12 @@ const config = () => {
   app.use(cors({ credentials: true }));
 
   app.use(
-    bodyParser.json({
+    express.json({
       limit: BODY_LIMIT,
     })
   );
   app.use(
-    bodyParser.urlencoded({
+    express.urlencoded({
       extended: true,
       limit: BODY_LIMIT,
       parameterLimit: PARAMETER_LIMIT,
