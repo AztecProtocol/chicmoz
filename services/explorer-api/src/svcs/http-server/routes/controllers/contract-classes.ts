@@ -31,6 +31,23 @@ import {
 import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 
 
+const artifactRefusalText = {
+  CLASS_ID_MISMATCH: "Incorrect artifact",
+  NOT_COMPILER_OUTPUT: "Artifact must be the raw aztec compile output",
+} as const;
+
+export const NOT_COMPILER_OUTPUT_TEXT = artifactRefusalText.NOT_COMPILER_OUTPUT;
+
+const badArtifactMessages: string[] = [
+  "Missing artifact json",
+  ...Object.values(artifactRefusalText),
+  ARTIFACT_REFUSED_MESSAGE,
+];
+
+/** True for the errors `verifyArtifact` throws for a bad upload (a 400). */
+export const isBadArtifactMessage = (message: string) =>
+  badArtifactMessages.includes(message);
+
 const contractClassKeys = (
   contractClassId: string,
   version: number,
@@ -304,23 +321,20 @@ export const verifyArtifact = async ({
     throw new Error("Missing artifact json");
   }
 
-  const { isMatchingByteCode } = await verifyArtifactPayload(
+  const verification = await verifyArtifactPayload(
     { stringifiedArtifactJson: artifactJsonString },
     dbContractClass,
   );
 
-  if (!isMatchingByteCode) {
-    throw new Error("Incorrect artifact");
+  if (!verification.isMatchingClassId) {
+    throw new Error(artifactRefusalText[verification.reason]);
   }
-
-  const parsed = JSON.parse(
-    artifactJsonString,
-  ) as unknown as NoirCompiledContract;
+  const { artifactJson, artifactContractName } = verification;
 
   const completeContractClass = {
     ...dbContractClass,
-    artifactJson: artifactJsonString,
-    artifactContractName: parsed.name,
+    artifactJson,
+    artifactContractName,
     standardContractType: standardData?.name ?? null,
     standardContractVersion: standardData?.version ?? null,
   };
@@ -336,15 +350,15 @@ export const verifyArtifact = async ({
   const { selectorMap } = await db.l2Contract.addArtifactData({
     contractClassId: dbContractClass.contractClassId,
     version: dbContractClass.version,
-    artifactJson: artifactJsonString,
-    contractName: parsed.name,
+    artifactJson,
+    contractName: artifactContractName,
     standardData: standardData,
   });
   await db.l2Contract.backfillPublicCallRequestNames({
     contractClassId: dbContractClass.contractClassId,
     version: dbContractClass.version,
     selectorMap,
-    contractName: parsed.name,
+    contractName: artifactContractName,
   });
 
   return {
@@ -384,11 +398,7 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT = asyncHandler(
           res.status(500).send(error.message);
           return;
         }
-        if (
-          error.message === "Missing artifact json" ||
-          error.message === "Incorrect artifact" ||
-          error.message === ARTIFACT_REFUSED_MESSAGE
-        ) {
+        if (isBadArtifactMessage(error.message)) {
           res.status(400).send(error.message);
           return;
         }

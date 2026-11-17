@@ -40,6 +40,7 @@ import {
   contractInstanceResponseArray,
   dbWrapper,
 } from "./utils/index.js";
+import { NOT_COMPILER_OUTPUT_TEXT } from "./contract-classes.js";
 
 /** Resolves undefined when the uploaded artifact is refused. */
 const verifyUploadedArtifact = (
@@ -438,11 +439,13 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
         return;
       }
-      if (!verification.isMatchingByteCode) {
+      if (!verification.isMatchingClassId) {
         res
           .status(400)
           .send(
-            "Contract class already has a registered artifact that does not match the uploaded artifact",
+            verification.reason === "NOT_COMPILER_OUTPUT"
+              ? NOT_COMPILER_OUTPUT_TEXT
+              : "Contract class already has a registered artifact that does not match the uploaded artifact",
           );
         return;
       }
@@ -458,14 +461,20 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
         return;
       }
-      const { isMatchingByteCode, artifactContractName } = verification;
-      if (!isMatchingByteCode) {
-        res.status(400).send("Uploaded artifact does not match contract class");
+      if (!verification.isMatchingClassId) {
+        res
+          .status(400)
+          .send(
+            verification.reason === "NOT_COMPILER_OUTPUT"
+              ? NOT_COMPILER_OUTPUT_TEXT
+              : "Uploaded artifact does not match contract class",
+          );
         return;
       }
+      const { artifactJson, artifactContractName } = verification;
       const completeContractClass = {
         ...dbContractClass,
-        artifactJson: stringifiedArtifactJson,
+        artifactJson,
         artifactContractName,
       };
 
@@ -482,7 +491,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       const { selectorMap } = await db.l2Contract.addArtifactData({
         contractClassId: dbContractClass.contractClassId,
         version: dbContractClass.version,
-        artifactJson: stringifiedArtifactJson,
+        artifactJson,
         contractName: artifactContractName,
       });
       await db.l2Contract.backfillPublicCallRequestNames({
