@@ -1,6 +1,5 @@
 import { createErrorMiddleware } from "@chicmoz-pkg/error-middleware";
 import { isHealthy } from "@chicmoz-pkg/microservice-base";
-import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import asyncHandler from "express-async-handler";
@@ -88,7 +87,7 @@ export function setup(
     if (isArtifactUpdate(req.path, req.method)) {
       return next();
     }
-    bodyParser.json({
+    express.json({
       limit: options.BODY_LIMIT,
     })(req, res, next);
   });
@@ -97,7 +96,7 @@ export function setup(
     if (isArtifactUpdate(req.path, req.method)) {
       return next();
     }
-    bodyParser.urlencoded({
+    express.urlencoded({
       extended: true,
       limit: options.BODY_LIMIT,
       parameterLimit: options.PARAMETER_LIMIT,

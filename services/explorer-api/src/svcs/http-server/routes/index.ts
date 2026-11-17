@@ -1,6 +1,5 @@
 import assert from "assert";
-import bodyParser from "body-parser";
-import { Router } from "express";
+import { json, Router } from "express";
 import { OpenAPIObject } from "openapi3-ts/oas31";
 import { ARTIFACT_BODY_LIMIT } from "../../../environment.js";
 import { logger } from "../../../logger.js";
@@ -254,7 +253,7 @@ export const init = ({ router }: { router: Router }) => {
 
   router.post(
     paths.contractClass,
-    bodyParser.json({
+    json({
       limit: ARTIFACT_BODY_LIMIT,
     }),
     controller.POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT,
@@ -266,7 +265,7 @@ export const init = ({ router }: { router: Router }) => {
 
   router.post(
     paths.contractInstance,
-    bodyParser.json({
+    json({
       limit: ARTIFACT_BODY_LIMIT,
     }),
     controller.POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT,
