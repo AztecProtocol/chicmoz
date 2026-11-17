@@ -1,10 +1,7 @@
 import { ChicmozL2ContractClassRegisteredEvent } from "@chicmoz-pkg/types";
 import { VerifyArtifactPayload } from "../types.js";
-import {
-  loadContractArtifact,
-  NoirCompiledContract,
-} from "@aztec-labs/aztec.js/abi";
 import { getContractClassFromArtifact } from "@aztec-labs/aztec.js/contracts";
+import { loadArtifactJson } from "./load-artifact.js";
 
 export type VerificationResult = {
   isMatchingByteCode: boolean;
@@ -15,10 +12,9 @@ export const verifyArtifactPayload = async (
   artifactPayload: VerifyArtifactPayload,
   storedArtifact: ChicmozL2ContractClassRegisteredEvent,
 ): Promise<VerificationResult> => {
-  const parsedArtifact = JSON.parse(
+  const loadedArtifact = loadArtifactJson(
     artifactPayload.stringifiedArtifactJson,
-  ) as NoirCompiledContract;
-  const loadedArtifact = loadContractArtifact(parsedArtifact);
+  );
   const contractClass = await getContractClassFromArtifact(loadedArtifact);
   const storedBytes = Uint8Array.from(storedArtifact.packedBytecode);
   const contractBytes = Uint8Array.from(contractClass.packedBytecode);
@@ -27,6 +23,6 @@ export const verifyArtifactPayload = async (
     storedBytes.every((value, index) => value === contractBytes[index]);
   return {
     isMatchingByteCode,
-    artifactContractName: parsedArtifact.name ?? "PARSE ERROR",
+    artifactContractName: loadedArtifact.name,
   };
 };

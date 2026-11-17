@@ -1,7 +1,7 @@
 import { generateSchema } from "@anatine/zod-openapi";
 import {
+  ARTIFACT_REFUSED_MESSAGE,
   VerifyInstanceDeploymentPayload,
-  generateVerifyArtifactPayload,
   generateVerifyInstancePayload,
   verifyArtifactPayload,
   verifyInstanceDeploymentPayload,
@@ -40,7 +40,23 @@ import {
   contractInstanceResponseArray,
   dbWrapper,
 } from "./utils/index.js";
-import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
+
+/** Resolves undefined when the uploaded artifact is refused. */
+const verifyUploadedArtifact = (
+  stringifiedArtifactJson: string,
+  registeredClass: Parameters<typeof verifyArtifactPayload>[1],
+) =>
+  verifyArtifactPayload({ stringifiedArtifactJson }, registeredClass).catch(
+    (error: unknown) => {
+      if (
+        error instanceof Error &&
+        error.message === ARTIFACT_REFUSED_MESSAGE
+      ) {
+        return undefined;
+      }
+      throw error;
+    },
+  );
 
 const verifyContractRequestBody = generateSchema(
   z.object({
@@ -414,13 +430,15 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
     }
 
     if (stringifiedArtifactJson && dbContractClass.artifactJson) {
-      const { isMatchingByteCode } = await verifyArtifactPayload(
-        generateVerifyArtifactPayload(
-          JSON.parse(stringifiedArtifactJson) as NoirCompiledContract,
-        ),
+      const verification = await verifyUploadedArtifact(
+        stringifiedArtifactJson,
         dbContractClass,
       );
-      if (!isMatchingByteCode) {
+      if (!verification) {
+        res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
+        return;
+      }
+      if (!verification.isMatchingByteCode) {
         res
           .status(400)
           .send(
@@ -432,13 +450,15 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
 
     if (stringifiedArtifactJson && !dbContractClass.artifactJson) {
       // TODO: this entire block should use verify contract class artifact
-      const { isMatchingByteCode, artifactContractName } =
-        await verifyArtifactPayload(
-          generateVerifyArtifactPayload(
-            JSON.parse(stringifiedArtifactJson ?? "{}") as NoirCompiledContract,
-          ),
-          dbContractClass,
-        );
+      const verification = await verifyUploadedArtifact(
+        stringifiedArtifactJson,
+        dbContractClass,
+      );
+      if (!verification) {
+        res.status(400).send(ARTIFACT_REFUSED_MESSAGE);
+        return;
+      }
+      const { isMatchingByteCode, artifactContractName } = verification;
       if (!isMatchingByteCode) {
         res.status(400).send("Uploaded artifact does not match contract class");
         return;
