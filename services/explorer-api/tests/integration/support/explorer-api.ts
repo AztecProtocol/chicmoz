@@ -1,8 +1,4 @@
-import {
-  type Stack,
-  attach,
-  createDatabase,
-} from "@chicmoz/test-harness";
+import { type Stack, attach, createDatabase } from "@chicmoz/test-harness";
 import { type MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
 import express from "express";
 import { randomBytes } from "node:crypto";
