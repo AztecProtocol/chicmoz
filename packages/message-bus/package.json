@@ -6,7 +6,6 @@
     "@chicmoz-pkg/logger-server": "workspace:^",
     "@chicmoz-pkg/message-registry": "workspace:^",
     "@chicmoz-pkg/microservice-base": "workspace:^",
-    "@types/node": "20.5.0",
     "auto-bind": "5.0.1",
     "bson": "6.2.0",
     "exponential-backoff": "3.1.1",
@@ -25,6 +24,7 @@
   },
   "devDependencies": {
     "@types/auto-bind": "2.1.0",
+    "@types/node": "20.5.0",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "eslint": "8.53.0",
