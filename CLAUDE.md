@@ -28,7 +28,7 @@ and feel). `services/explorer-ui-v2/CLAUDE.md` has frontend specifics.
 ## Commands
 
 ```sh
-yarn install                 # yarn 4 via corepack
+yarn install                 # runs the Yarn release that .yarnrc.yml's yarnPath names
 yarn build:packages          # shared packages — required before building any service
 yarn build                   # everything (parallel)
 yarn build-all-slow          # everything, strict dependency order
@@ -101,6 +101,9 @@ and are decoded with `parseBlock()`.
 - Errors through `@chicmoz-pkg/error-middleware`; never swallow silently.
 - Sanitize IP addresses in RPC-node error events before publishing.
 - Never commit `.chicmoz.env`; `.chicmoz-example.env` is the template.
+- Yarn skips npm versions published less than 7 days ago (`npmMinimalAgeGate`
+  in `.yarnrc.yml`); do not bypass it (`--no-time-gate`, `npmPreapprovedPackages`)
+  without a maintainer's approval.
 - Commit messages follow Conventional Commits (`commitlint.config.mjs`); the
   `commit-msg` hook and CI's `Commitlint` job check them.
 - Source verification runs untrusted compiles in isolated jobs
