@@ -17,8 +17,6 @@ import {
 const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
   const {
     jobId,
-    contractClassId,
-    version,
     status,
     artifactJson,
     sourceFiles,
@@ -34,6 +32,16 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
   );
 
   try {
+    // The job record, not the event, names the class.
+    const job = await db.l2Contract.getSourceVerificationJob(jobId);
+    if (!job) {
+      logger.warn(
+        `Ignoring compile source result for job ${jobId}: no such job`,
+      );
+      return;
+    }
+    const { contractClassId, version } = job;
+
     if (status !== "success") {
       const errorMessage = error ?? `Compilation ${status.replace("_", " ")}`;
       await db.l2Contract.updateSourceVerificationJobStatus({
@@ -90,13 +98,6 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
           failureStage: "ARTIFACT_VERIFICATION",
           compileOutput,
         });
-        return;
-      }
-
-      // Get the job to retrieve the GitHub URL
-      const job = await db.l2Contract.getSourceVerificationJob(jobId);
-      if (!job) {
-        logger.error(`Job ${jobId} not found after verification`);
         return;
       }
 

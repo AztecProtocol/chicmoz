@@ -202,6 +202,30 @@ describe("source verification results", () => {
     },
   );
 
+  it("checks a result against the class of its job", async () => {
+    const jobClass = await seedClass(rawArtifact("escrow_contract-Escrow"));
+    const otherFile = "ecdsa_r_account_contract-EcdsaRAccount";
+    const otherClass = await seedClass(rawArtifact(otherFile));
+    const job = await seedJob(jobClass);
+    const before = [await readClassRow(jobClass), await readClassRow(otherClass)];
+
+    await deliverCompileResult(
+      compileResult(job, rawJson(otherFile), {
+        contractClassId: otherClass.contractClassId,
+        version: otherClass.version,
+      }),
+    );
+
+    expect(await readJob(job.jobId)).toMatchObject({
+      status: "FAILED",
+      failureStage: "ARTIFACT_VERIFICATION",
+    });
+    expect([
+      await readClassRow(jobClass),
+      await readClassRow(otherClass),
+    ]).toEqual(before);
+  });
+
   it("a failed finalization stores no source", async () => {
     const file = "schnorr_hardcoded_account_contract-SchnorrHardcodedAccount";
     const seeded = await seedClass(rawArtifact(file));
