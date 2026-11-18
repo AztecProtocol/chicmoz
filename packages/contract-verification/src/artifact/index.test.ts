@@ -73,6 +73,74 @@ const otherClassIdCases: Array<
   ],
 ];
 
+// Each keeps the class id: the class id is compared first.
+const functionListCases: Array<
+  [string, () => { original: unknown; upload: NoirCompiledContract }]
+> = [
+  [
+    "another public function name",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      functionNamed(upload, "check_timestamp").name = "check_time";
+      return { original: publicChecksArtifactJson, upload };
+    },
+  ],
+  [
+    "another parameter label",
+    () => {
+      const upload = copy(escrowArtifactJson);
+      const recipient = functionNamed(upload, "withdraw").abi.parameters.find(
+        (param) => param.name === "recipient",
+      );
+      if (!recipient) {
+        throw new Error("Escrow withdraw has no recipient parameter");
+      }
+      recipient.name = "to";
+      return { original: escrowArtifactJson, upload };
+    },
+  ],
+  [
+    "another parameter type of a public function",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      functionNamed(upload, "check_block_number").abi.parameters[1].type = {
+        kind: "field",
+      };
+      return { original: publicChecksArtifactJson, upload };
+    },
+  ],
+  [
+    "a function removed from the list",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      upload.functions = upload.functions.filter(
+        (fn) => fn.name !== "check_timestamp",
+      );
+      return { original: publicChecksArtifactJson, upload };
+    },
+  ],
+  [
+    "a function added to the list",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      upload.functions.push({
+        ...functionNamed(upload, "check_timestamp"),
+        name: "check_timestamp_again",
+      });
+      return { original: publicChecksArtifactJson, upload };
+    },
+  ],
+  [
+    "a function renamed to a compiler-added name",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      functionNamed(upload, "check_block_number").name =
+        "__emit_public_init_nullifier";
+      return { original: publicChecksArtifactJson, upload };
+    },
+  ],
+];
+
 const notCompilerOutputCases: Array<
   [string, (registered: ChicmozL2ContractClassRegisteredEvent) => string]
 > = [
@@ -87,6 +155,24 @@ const notCompilerOutputCases: Array<
         ...copy(publicChecksArtifactJson),
         artifactHash: registered.artifactHash,
       }),
+  ],
+  [
+    "a function carrying functionType",
+    () => {
+      const upload = copy(publicChecksArtifactJson);
+      const fn = functionNamed(upload, "check_timestamp");
+      fn.custom_attributes = ["abi_private"];
+      fn.abi.return_type = {
+        abi_type: { kind: "boolean" },
+        visibility: "public",
+      };
+      return JSON.stringify({
+        ...upload,
+        functions: upload.functions.map((f) =>
+          f === fn ? { ...f, functionType: "public" } : f,
+        ),
+      });
+    },
   ],
   ["a JSON value that is not an object", () => "null"],
 ];
@@ -121,6 +207,24 @@ describe("artifact verification", () => {
       expect(result).toEqual({
         isMatchingClassId: false,
         reason: "CLASS_ID_MISMATCH",
+      });
+    },
+  );
+
+  test.each(functionListCases)(
+    "refuses an artifact whose function list differs from its outputs (%s)",
+    async (_, build) => {
+      const { original, upload } = build();
+      const registered = await registeredClassOf(copy(original));
+
+      const result = await verifyArtifactPayload(
+        generateVerifyArtifactPayload(upload),
+        registered,
+      );
+
+      expect(result).toEqual({
+        isMatchingClassId: false,
+        reason: "FUNCTION_LIST_MISMATCH",
       });
     },
   );
