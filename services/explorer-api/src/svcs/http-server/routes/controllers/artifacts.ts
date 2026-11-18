@@ -1,3 +1,4 @@
+import { ARTIFACT_REFUSED_MESSAGE } from "@chicmoz-pkg/contract-verification";
 import asyncHandler from "express-async-handler";
 import { OpenAPIObject } from "openapi3-ts/oas31";
 import { getProtocolContractArtifactByHash } from "../../../../utils/protocol-contracts.js";
@@ -107,7 +108,8 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_STANDARD_ARTIFACT = asyncHandler(
         }
         if (
           error.message === "Missing artifact json" ||
-          error.message === "Incorrect artifact"
+          error.message === "Incorrect artifact" ||
+          error.message === ARTIFACT_REFUSED_MESSAGE
         ) {
           res.status(400).send(error.message);
           return;

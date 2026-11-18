@@ -1,15 +1,16 @@
-import { getDefaultInitializer, loadContractArtifact } from "@aztec-labs/stdlib/abi";
+import { getDefaultInitializer } from "@aztec-labs/stdlib/abi";
 import {
   computeContractAddressFromInstance,
   computeInitializationHash,
   computeSaltedInitializationHash,
 } from "@aztec-labs/stdlib/contract";
+import { loadStoredArtifactJson } from "../artifact/load-artifact.js";
 import { VerifyInstanceDeploymentPayload } from "../types.js";
-import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 import { Fr } from "@aztec-labs/aztec.js/fields";
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 import { PublicKeys } from "@aztec-labs/aztec.js/keys";
 
+/** `stringifiedArtifactJson` is stored JSON or an upload already checked by `loadArtifactJson`. */
 export const verifyInstanceDeploymentPayload = async (
   payload: VerifyInstanceDeploymentPayload & {
     instanceAddress: string;
@@ -27,9 +28,7 @@ export const verifyInstanceDeploymentPayload = async (
     salt,
     publicKeysString,
   } = payload;
-  const artifact = loadContractArtifact(
-    JSON.parse(stringifiedArtifactJson) as unknown as NoirCompiledContract,
-  );
+  const artifact = loadStoredArtifactJson(stringifiedArtifactJson);
 
   const initFn = getDefaultInitializer(artifact);
   const initializationHash = await computeInitializationHash(

@@ -1,4 +1,7 @@
-import { verifyArtifactPayload } from "@chicmoz-pkg/contract-verification";
+import {
+  ARTIFACT_REFUSED_MESSAGE,
+  verifyArtifactPayload,
+} from "@chicmoz-pkg/contract-verification";
 import { setEntry } from "@chicmoz-pkg/redis-helper";
 import {
   type ChicmozL2ContractClassRegisteredEvent,
@@ -383,7 +386,8 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT = asyncHandler(
         }
         if (
           error.message === "Missing artifact json" ||
-          error.message === "Incorrect artifact"
+          error.message === "Incorrect artifact" ||
+          error.message === ARTIFACT_REFUSED_MESSAGE
         ) {
           res.status(400).send(error.message);
           return;
