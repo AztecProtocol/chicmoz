@@ -57,8 +57,7 @@ domain Zod schemas — single source of truth), `message-registry` (topic names,
 payload type maps, `getConsumerGroupId()`), `message-bus`, `microservice-base`
 (`startMicroservice()`, `MicroserviceBaseSvc` with `init/shutdown/health`),
 `postgres-helper`, `redis-helper`, `backend-utils` (`parseBlock()`),
-`logger-server`, `error-middleware`, `auth0-middleware`,
-`contract-verification`.
+`logger-server`, `error-middleware`, `contract-verification`.
 
 ## Data flow
 
