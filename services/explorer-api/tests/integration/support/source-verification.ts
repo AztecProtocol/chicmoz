@@ -15,7 +15,11 @@ export type SeededJob = SeededClass & {
 /** A job as the submit route leaves it once the compile request is published. */
 export const seedJob = async (
   seeded: SeededClass,
-  { status = "COMPILING", error }: { status?: JobStatus; error?: string } = {},
+  {
+    status = "COMPILING",
+    error,
+    clientIp,
+  }: { status?: JobStatus; error?: string; clientIp?: string | null } = {},
 ): Promise<SeededJob> => {
   const { getDb } = await import("@chicmoz-pkg/postgres-helper");
   const { sourceVerificationJobs } = await import(
@@ -37,6 +41,7 @@ export const seedJob = async (
       gitRef: job.gitRef,
       status,
       error: error ?? null,
+      clientIp: clientIp ?? null,
     });
   return job;
 };
