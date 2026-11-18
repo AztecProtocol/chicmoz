@@ -1,6 +1,7 @@
 import { generateSchema } from "@anatine/zod-openapi";
 import {
   ARTIFACT_REFUSED_MESSAGE,
+  type InstanceDeploymentVerification,
   VerifyInstanceDeploymentPayload,
   generateVerifyInstancePayload,
   verifyArtifactPayload,
@@ -458,9 +459,9 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       return;
     }
 
-    let isVerifiedDeploymentPayload: boolean;
+    let deploymentVerification: InstanceDeploymentVerification;
     try {
-      isVerifiedDeploymentPayload = await verifyInstanceDeploymentPayload({
+      deploymentVerification = await verifyInstanceDeploymentPayload({
         ...verificationPayload,
         stringifiedArtifactJson: artifactString,
         instanceAddress: address,
@@ -477,12 +478,21 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       return;
     }
 
-    if (!isVerifiedDeploymentPayload) {
+    if (!deploymentVerification.isVerified) {
+      const { stoppedAt } = deploymentVerification;
+      if (stoppedAt) {
+        logger.warn(
+          `Initializer search for contract instance ${address} stopped at the ${stoppedAt.limit} limit after ${stoppedAt.candidatesExamined} candidates and ${stoppedAt.encodedFields} encoded fields`,
+        );
+      }
       res
         .status(400)
         .send("Uploaded data does not lead to correct contract address");
       return;
     }
+    logger.info(
+      `Verified deployment of contract instance ${address}, initializer: ${JSON.stringify(deploymentVerification.initializer)}`,
+    );
 
     if (verifiedUpload && !registeredClass.artifactJson) {
       await storeArtifactIfAbsent(registeredClass, verifiedUpload);
