@@ -2258,6 +2258,7 @@ __metadata:
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-import: "npm:2.29.0"
     typescript: "npm:5.8.3"
+    vitest: "npm:3.2.7"
     zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft

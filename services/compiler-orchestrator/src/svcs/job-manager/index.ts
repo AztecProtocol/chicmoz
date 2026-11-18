@@ -1,11 +1,15 @@
 import type { CompileSourceRequestEvent } from "@chicmoz-pkg/message-registry";
 import type { MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
-import type { SourceVerificationFailureStage } from "@chicmoz-pkg/types";
+import {
+  githubRepositoryUrlSchema,
+  type SourceVerificationFailureStage,
+} from "@chicmoz-pkg/types";
 import { execFile } from "child_process";
 import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import { z } from "zod";
 import { logger } from "../../logger.js";
 import {
   COMPILER_IMAGE,
@@ -416,6 +420,39 @@ const buildCompileOutput = ({
   return trimCompileOutput(sections.join("\n\n"));
 };
 
+const sourceRecordSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
+/**
+ * One reader-script line. The script escapes only backslashes, double quotes
+ * and newlines; JSON forbids the other control characters raw.
+ */
+const parseSourceRecord = (
+  line: string,
+): z.infer<typeof sourceRecordSchema> => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      line.replace(
+        // eslint-disable-next-line no-control-regex
+        /[\u0000-\u001f]/g,
+        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      ),
+    );
+  } catch {
+    parsed = undefined;
+  }
+  const record = sourceRecordSchema.safeParse(parsed);
+  if (!record.success) {
+    throw new Error(
+      `Could not parse source file record: ${line.slice(0, 200)}`,
+    );
+  }
+  return record.data;
+};
+
 const parseJobResults = (
   readerLog: string,
 ): {
@@ -440,22 +477,17 @@ const parseJobResults = (
   }
   const artifactJson = artifactMatch[1].trim();
 
-  // Parse source files
+  // A result must carry every listed file, so an unreadable listing fails the job.
   const sourcesMatch = logStr.match(
-    /===SOURCES_START===\n([\s\S]*?)\n===SOURCES_END===/,
+    /^===SOURCES_START===$([\s\S]*?)^===SOURCES_END===$/m,
   );
-  const sourceFiles: Array<{ path: string; content: string }> = [];
-  if (sourcesMatch) {
-    const lines = sourcesMatch[1].trim().split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line) as { path: string; content: string };
-        sourceFiles.push(parsed);
-      } catch {
-        logger.warn(`Failed to parse source file line: ${line}`);
-      }
-    }
+  if (!sourcesMatch) {
+    throw new Error("Could not parse source files from compile job logs");
   }
+  const sourceFiles = sourcesMatch[1]
+    .split("\n")
+    .filter(Boolean)
+    .map(parseSourceRecord);
 
   return { artifactJson, sourceFiles, commitHash };
 };
@@ -594,6 +626,31 @@ const stopJobPoller = (): void => {
   }
 };
 
+/** Fails a request at INPUT_VALIDATION before git or the backend runs. */
+const rejectInput = async (
+  event: CompileSourceRequestEvent,
+  compileOutput: string,
+): Promise<void> => {
+  logger.warn(
+    `Rejected compile request jobId=${event.jobId}: ${compileOutput}`,
+  );
+  try {
+    await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
+      jobId: event.jobId,
+      contractClassId: event.contractClassId,
+      version: event.version,
+      status: "compilation_failed",
+      error: summarizeFailure("INPUT_VALIDATION"),
+      failureStage: "INPUT_VALIDATION",
+      compileOutput,
+    });
+  } catch (e) {
+    logger.error(
+      `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
+    );
+  }
+};
+
 // --- Public API ---
 export const handleCompileRequest = async (
   event: CompileSourceRequestEvent,
@@ -621,45 +678,27 @@ export const handleCompileRequest = async (
     return;
   }
 
+  if (!githubRepositoryUrlSchema.safeParse(event.githubUrl).success) {
+    await rejectInput(
+      event,
+      "Invalid repository URL. Only https://github.com/<owner>/<repo> repositories are allowed.",
+    );
+    return;
+  }
+
   if (event.gitRef && !isValidGitRef(event.gitRef)) {
-    logger.warn(`Invalid gitRef for jobId=${event.jobId}: ${event.gitRef}`);
-    try {
-      await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
-        jobId: event.jobId,
-        contractClassId: event.contractClassId,
-        version: event.version,
-        status: "compilation_failed",
-        error: summarizeFailure("INPUT_VALIDATION"),
-        failureStage: "INPUT_VALIDATION",
-        compileOutput:
-          "Invalid git ref. Only alphanumeric characters, '.', '-', '_', and '/' are allowed.",
-      });
-    } catch (e) {
-      logger.error(
-        `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
-      );
-    }
+    await rejectInput(
+      event,
+      "Invalid git ref. Only alphanumeric characters, '.', '-', '_', and '/' are allowed.",
+    );
     return;
   }
 
   if (event.subPath && !isValidSubPath(event.subPath)) {
-    logger.warn(`Invalid subPath for jobId=${event.jobId}: ${event.subPath}`);
-    try {
-      await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
-        jobId: event.jobId,
-        contractClassId: event.contractClassId,
-        version: event.version,
-        status: "compilation_failed",
-        error: summarizeFailure("INPUT_VALIDATION"),
-        failureStage: "INPUT_VALIDATION",
-        compileOutput:
-          "Invalid sub-path. Only alphanumeric characters, '.', '-', '_', and '/' are allowed (no '..').",
-      });
-    } catch (e) {
-      logger.error(
-        `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
-      );
-    }
+    await rejectInput(
+      event,
+      "Invalid sub-path. Only alphanumeric characters, '.', '-', '_', and '/' are allowed (no '..').",
+    );
     return;
   }
 
@@ -719,11 +758,7 @@ export const handleCompileRequest = async (
 
   try {
     await backend.launch(state, {
-      compileScript: buildCompileScript(
-        state.githubUrl,
-        state.gitRef,
-        state.subPath,
-      ),
+      compileScript: buildCompileScript(state.gitRef, state.subPath),
       readerScript: buildReaderScript(),
     });
     activeJobs.set(event.jobId, state);

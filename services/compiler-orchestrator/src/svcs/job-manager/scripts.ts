@@ -1,26 +1,27 @@
+/**
+ * The job's inputs reach the script only as the environment variables
+ * GIT_URL, GIT_REF and SUB_PATH; `gitRef` and `subPath` decide only whether it
+ * checks out a ref and enters a sub-path.
+ */
 export const buildCompileScript = (
-  _githubUrl: string,
-  _gitRef?: string,
-  _subPath?: string,
+  gitRef?: string,
+  subPath?: string,
 ): string => {
-  // Arguments are passed via env vars (GIT_URL, GIT_REF, SUB_PATH) to avoid
-  // shell injection — this script only references those env vars, never
-  // interpolated user input.
-  const checkoutRef = _gitRef
+  const checkoutRef = gitRef
     ? `git checkout "$GIT_REF"`
     : "echo 'Using default branch'";
-  const cdSubPath = _subPath
+  const cdSubPath = subPath
     ? `cd "/workspace/repo/$SUB_PATH"`
     : "cd /workspace/repo";
-  const sourceRoot = _subPath ? `/workspace/repo/$SUB_PATH` : "/workspace/repo";
+  const sourceRoot = subPath ? `/workspace/repo/$SUB_PATH` : "/workspace/repo";
 
   return [
     `set -e`,
     `export RUST_BACKTRACE="\${RUST_BACKTRACE:-1}"`,
     `echo "===INPUTS_START==="`,
-    `echo "GIT_URL=${_githubUrl}"`,
-    `echo "GIT_REF=${_gitRef ?? ""}"`,
-    `echo "SUB_PATH=${_subPath ?? ""}"`,
+    `echo "GIT_URL=$GIT_URL"`,
+    `echo "GIT_REF=$GIT_REF"`,
+    `echo "SUB_PATH=$SUB_PATH"`,
     `echo "AZTEC_VERSION=$AZTEC_VERSION"`,
     `echo "NARGO_HOME=$NARGO_HOME"`,
     `echo "RUST_BACKTRACE=$RUST_BACKTRACE"`,
@@ -30,7 +31,9 @@ export const buildCompileScript = (
     `git clone "$GIT_URL" /workspace/repo`,
     `cd /workspace/repo`,
     `echo "===STAGE:CHECKOUT==="`,
-    `echo "Checking out git ref: ${_gitRef ?? "(default branch)"}"`,
+    gitRef
+      ? `echo "Checking out git ref: $GIT_REF"`
+      : `echo "Checking out git ref: (default branch)"`,
     checkoutRef,
     `echo "Resolved HEAD: $(git rev-parse HEAD)"`,
     `git rev-parse HEAD > /output/commit_hash`,
@@ -62,7 +65,9 @@ export const buildCompileScript = (
     `cp "$SELECTED_ARTIFACT_PATH" /output/artifact/`,
     `rm -f "$ARTIFACT_MARKER_FILE"`,
     `echo "===STAGE:SOURCE_EXTRACTION==="`,
-    `echo "Copying source files from ${_subPath ?? "(repo root)"} (excluding .git)..."`,
+    subPath
+      ? `echo "Copying source files from $SUB_PATH (excluding .git)..."`
+      : `echo "Copying source files from (repo root) (excluding .git)..."`,
     `mkdir -p /output/source`,
     `SOURCE_ROOT="${sourceRoot}"`,
     `cd "$SOURCE_ROOT"`,
@@ -73,6 +78,9 @@ export const buildCompileScript = (
   ].join(" && ");
 };
 
+// One line per source file, {"path":…,"content":…}, with backslashes, double
+// quotes and newlines escaped. printf, not echo: dash's echo expands backslash
+// escapes. The x stops $(…) from stripping the file's trailing newlines.
 export const buildReaderScript = (): string => {
   return `set -e
 echo "===COMMIT_HASH_START==="
@@ -88,8 +96,9 @@ echo "===SOURCES_START==="
 cd /output/source
 find . -type f \\( -name "*.nr" -o -name "Nargo.toml" -o -path './__repo_root__/LICENSE*' -o -path './__repo_root__/LICENCE*' \\) | sort | while read f; do
   clean_path=$(echo "$f" | sed 's|^\\./||')
-  content=$(cat "$f" | sed 's/\\\\/\\\\\\\\/g' | sed 's/"/\\\\"/g' | sed ':a;N;$!ba;s/\\n/\\\\n/g')
-  echo "{\\"path\\":\\"$clean_path\\",\\"content\\":\\"$content\\"}"
+  content=$({ cat "$f"; printf x; } | sed 's/\\\\/\\\\\\\\/g' | sed 's/"/\\\\"/g' | sed ':a;N;$!ba;s/\\n/\\\\n/g')
+  content=\${content%x}
+  printf '{"path":"%s","content":"%s"}\\n' "$clean_path" "$content"
 done
 echo "===SOURCES_END==="
 `;

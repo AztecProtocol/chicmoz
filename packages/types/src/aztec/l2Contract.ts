@@ -173,6 +173,11 @@ export const sourceCodeEntrySchema = z.object({
 
 export type SourceCodeEntry = z.infer<typeof sourceCodeEntrySchema>;
 
+/** https://github.com/<owner>/<repo>, optionally ending in .git or a slash: the only repositories source verification clones. */
+export const githubRepositoryUrlSchema = z
+  .string()
+  .regex(/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\.git)?\/?$/);
+
 export const compileSourceRequestSchema = z.object({
   jobId: z.string().uuid(),
   contractClassId: frSchema,
