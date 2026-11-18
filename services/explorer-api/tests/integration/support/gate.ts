@@ -41,6 +41,18 @@ export const createGate = () => {
       tickets = 2;
       waiting = [];
     },
+    disarm: () => {
+      tickets = 0;
+    },
+    /** Both callers wait before the call: neither has written yet. */
+    before:
+      <A extends unknown[], R>(fn: AsyncFn<A, R>): AsyncFn<A, R> =>
+      async (...args) => {
+        if (takeTicket()) {
+          await meet();
+        }
+        return fn(...args);
+      },
     /** Both callers wait after the call: each holds a result read before either went on. */
     after:
       <A extends unknown[], R>(fn: AsyncFn<A, R>): AsyncFn<A, R> =>

@@ -1,3 +1,4 @@
+import { verifyArtifactPayload } from "@chicmoz-pkg/contract-verification";
 import { EventHandler } from "@chicmoz-pkg/message-bus";
 import {
   CompileSourceResultEvent,
@@ -8,13 +9,14 @@ import { SERVICE_NAME } from "../../constants.js";
 import { L2_NETWORK_ID } from "../../environment.js";
 import { logger } from "../../logger.js";
 import { controllers as db } from "../../svcs/database/index.js";
-import { verifyArtifact } from "../../svcs/http-server/routes/controllers/contract-classes.js";
+import {
+  readClassWithArtifact,
+  storeArtifactIfAbsent,
+} from "../../svcs/http-server/routes/controllers/contract-classes.js";
 
 const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
   const {
     jobId,
-    contractClassId,
-    version,
     status,
     artifactJson,
     sourceFiles,
@@ -30,6 +32,16 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
   );
 
   try {
+    // The job record, not the event, names the class.
+    const job = await db.l2Contract.getSourceVerificationJob(jobId);
+    if (!job) {
+      logger.warn(
+        `Ignoring compile source result for job ${jobId}: no such job`,
+      );
+      return;
+    }
+    const { contractClassId, version } = job;
+
     if (status !== "success") {
       const errorMessage = error ?? `Compilation ${status.replace("_", " ")}`;
       await db.l2Contract.updateSourceVerificationJobStatus({
@@ -56,36 +68,36 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
       return;
     }
 
-    // Update job status to VERIFYING
-    await db.l2Contract.updateSourceVerificationJobStatus({
+    const { updated } = await db.l2Contract.updateSourceVerificationJobStatus({
       jobId,
       status: "VERIFYING",
       aztecVersion,
     });
+    if (!updated) {
+      logger.warn(
+        `Ignoring compile source result for job ${jobId}: no unfinished job has that id`,
+      );
+      return;
+    }
 
-    // Verify the artifact bytecode matches the on-chain contract class
     try {
-      const result = await verifyArtifact({
+      const registeredClass = await readClassWithArtifact(
         contractClassId,
         version,
-        stringifiedArtifactJson: artifactJson,
-      });
-
-      if (!result.success) {
+      );
+      const verification = await verifyArtifactPayload(
+        { stringifiedArtifactJson: artifactJson },
+        registeredClass,
+      );
+      if (!verification.isMatchingClassId) {
         await db.l2Contract.updateSourceVerificationJobStatus({
           jobId,
           status: "FAILED",
-          error: "Artifact verification failed: bytecode mismatch",
+          error: "Compiled artifact does not match the contract class",
           aztecVersion,
           failureStage: "ARTIFACT_VERIFICATION",
+          compileOutput,
         });
-        return;
-      }
-
-      // Get the job to retrieve the GitHub URL
-      const job = await db.l2Contract.getSourceVerificationJob(jobId);
-      if (!job) {
-        logger.error(`Job ${jobId} not found after verification`);
         return;
       }
 
@@ -115,23 +127,27 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
         return;
       }
 
-      await db.l2Contract.addSourceCode({
+      if (!registeredClass.artifactJson) {
+        await storeArtifactIfAbsent(registeredClass, verification);
+      }
+      const { written } = await db.l2Contract.storeVerifiedSource({
+        jobId,
         contractClassId,
         version,
         sourceCode: sourceFiles,
         sourceCodeUrl,
         sourceCodeCommitHash: commitHash,
-      });
-
-      // Mark job as verified (also persist the resolved commit hash)
-      await db.l2Contract.updateSourceVerificationJobStatus({
-        jobId,
-        status: "VERIFIED",
-        commitHash,
         aztecVersion,
-        failureStage: undefined,
-        compileOutput: undefined,
       });
+      if (!written) {
+        await db.l2Contract.updateSourceVerificationJobStatus({
+          jobId,
+          status: "FAILED",
+          error: "Source code is already verified for this contract class",
+          aztecVersion,
+        });
+        return;
+      }
 
       logger.info(
         `Source verification job ${jobId} completed successfully for contract class ${contractClassId}@${version}`,

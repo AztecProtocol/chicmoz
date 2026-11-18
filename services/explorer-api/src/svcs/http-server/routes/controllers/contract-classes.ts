@@ -347,11 +347,7 @@ export const verifyArtifact = async ({
 }) => {
   const registeredClass = await readClassWithArtifact(contractClassId, version);
   if (registeredClass.artifactJson) {
-    return {
-      success: true,
-      alreadyExists: true,
-      contractClass: registeredClass,
-    };
+    return { alreadyExists: true, contractClass: registeredClass };
   }
 
   const artifactJsonString =
@@ -377,11 +373,7 @@ export const verifyArtifact = async ({
     verification,
     standardData,
   );
-  return {
-    success: true,
-    alreadyExists: !written,
-    contractClass,
-  };
+  return { alreadyExists: !written, contractClass };
 };
 
 export const POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT = asyncHandler(

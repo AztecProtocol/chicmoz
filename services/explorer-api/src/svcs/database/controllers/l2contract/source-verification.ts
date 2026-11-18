@@ -3,11 +3,27 @@ import type {
   SourceVerificationFailureStage,
   SourceVerificationStatus,
 } from "@chicmoz-pkg/types";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  TransactionRollbackError,
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import {
   l2ContractClassRegistered,
   sourceVerificationJobs,
 } from "../../schema/l2contract/index.js";
+
+// A finished job's status is final: a late or repeated result changes nothing.
+const unfinishedJob = (jobId: string) =>
+  and(
+    eq(sourceVerificationJobs.id, jobId),
+    notInArray(sourceVerificationJobs.status, ["VERIFIED", "FAILED"]),
+  );
 
 export const createSourceVerificationJob = async ({
   id,
@@ -83,7 +99,7 @@ export const updateSourceVerificationJobStatus = async ({
   aztecVersion?: string;
   failureStage?: SourceVerificationFailureStage;
   compileOutput?: string;
-}): Promise<void> => {
+}): Promise<{ updated: boolean }> => {
   const updateValues: Record<string, unknown> = {
     status,
     error: error ?? null,
@@ -96,38 +112,81 @@ export const updateSourceVerificationJobStatus = async ({
   if (aztecVersion !== undefined) {
     updateValues.aztecVersion = aztecVersion;
   }
-  await db()
+  const updated = await db()
     .update(sourceVerificationJobs)
     .set(updateValues)
-    .where(eq(sourceVerificationJobs.id, jobId));
+    .where(unfinishedJob(jobId))
+    .returning({ id: sourceVerificationJobs.id });
+  return { updated: updated.length > 0 };
 };
 
-export const addSourceCode = async ({
+/**
+ * Stores a class's verified source and marks its job VERIFIED, both or
+ * neither: nothing is written when the class already has source or the job
+ * has finished. Database errors propagate.
+ */
+export const storeVerifiedSource = async ({
+  jobId,
   contractClassId,
   version,
   sourceCode,
   sourceCodeUrl,
   sourceCodeCommitHash,
+  aztecVersion,
 }: {
+  jobId: string;
   contractClassId: string;
   version: number;
   sourceCode: Array<{ path: string; content: string }>;
   sourceCodeUrl: string;
   sourceCodeCommitHash?: string;
-}): Promise<void> => {
-  await db()
-    .update(l2ContractClassRegistered)
-    .set({
-      sourceCode,
-      sourceCodeUrl,
-      sourceCodeCommitHash: sourceCodeCommitHash ?? null,
-    })
-    .where(
-      and(
-        eq(l2ContractClassRegistered.contractClassId, contractClassId),
-        eq(l2ContractClassRegistered.version, version),
-      ),
-    );
+  aztecVersion?: string;
+}): Promise<{ written: boolean }> => {
+  try {
+    return await db().transaction(async (tx) => {
+      const stored = await tx
+        .update(l2ContractClassRegistered)
+        .set({
+          sourceCode,
+          sourceCodeUrl,
+          sourceCodeCommitHash: sourceCodeCommitHash ?? null,
+        })
+        .where(
+          and(
+            eq(l2ContractClassRegistered.contractClassId, contractClassId),
+            eq(l2ContractClassRegistered.version, version),
+            isNull(l2ContractClassRegistered.sourceCodeUrl),
+          ),
+        )
+        .returning({ contractClassId: l2ContractClassRegistered.contractClassId });
+      if (stored.length === 0) {
+        return { written: false };
+      }
+      const verified = await tx
+        .update(sourceVerificationJobs)
+        .set({
+          status: "VERIFIED",
+          error: null,
+          failureStage: null,
+          compileOutput: null,
+          ...(sourceCodeCommitHash !== undefined
+            ? { commitHash: sourceCodeCommitHash }
+            : {}),
+          ...(aztecVersion !== undefined ? { aztecVersion } : {}),
+        })
+        .where(unfinishedJob(jobId))
+        .returning({ id: sourceVerificationJobs.id });
+      if (verified.length === 0) {
+        tx.rollback();
+      }
+      return { written: true };
+    });
+  } catch (error) {
+    if (error instanceof TransactionRollbackError) {
+      return { written: false };
+    }
+    throw error;
+  }
 };
 
 export const getActiveVerificationJobCount = async (): Promise<number> => {
