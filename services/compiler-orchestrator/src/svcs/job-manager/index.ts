@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import { z } from "zod";
 import { logger } from "../../logger.js";
 import {
   COMPILER_IMAGE,
@@ -416,6 +417,39 @@ const buildCompileOutput = ({
   return trimCompileOutput(sections.join("\n\n"));
 };
 
+const sourceRecordSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
+/**
+ * One reader-script line. The script escapes only backslashes, double quotes
+ * and newlines; JSON forbids the other control characters raw.
+ */
+const parseSourceRecord = (
+  line: string,
+): z.infer<typeof sourceRecordSchema> => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      line.replace(
+        // eslint-disable-next-line no-control-regex
+        /[\u0000-\u001f]/g,
+        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      ),
+    );
+  } catch {
+    parsed = undefined;
+  }
+  const record = sourceRecordSchema.safeParse(parsed);
+  if (!record.success) {
+    throw new Error(
+      `Could not parse source file record: ${line.slice(0, 200)}`,
+    );
+  }
+  return record.data;
+};
+
 const parseJobResults = (
   readerLog: string,
 ): {
@@ -440,22 +474,17 @@ const parseJobResults = (
   }
   const artifactJson = artifactMatch[1].trim();
 
-  // Parse source files
+  // A result must carry every listed file, so an unreadable listing fails the job.
   const sourcesMatch = logStr.match(
-    /===SOURCES_START===\n([\s\S]*?)\n===SOURCES_END===/,
+    /^===SOURCES_START===$([\s\S]*?)^===SOURCES_END===$/m,
   );
-  const sourceFiles: Array<{ path: string; content: string }> = [];
-  if (sourcesMatch) {
-    const lines = sourcesMatch[1].trim().split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line) as { path: string; content: string };
-        sourceFiles.push(parsed);
-      } catch {
-        logger.warn(`Failed to parse source file line: ${line}`);
-      }
-    }
+  if (!sourcesMatch) {
+    throw new Error("Could not parse source files from compile job logs");
   }
+  const sourceFiles = sourcesMatch[1]
+    .split("\n")
+    .filter(Boolean)
+    .map(parseSourceRecord);
 
   return { artifactJson, sourceFiles, commitHash };
 };

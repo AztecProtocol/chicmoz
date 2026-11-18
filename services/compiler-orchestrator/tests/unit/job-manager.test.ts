@@ -354,4 +354,51 @@ describe("job output reader", () => {
     });
     expect(result).not.toHaveProperty("artifactJson");
   });
+
+  it("keeps a source file whose content has tabs and carriage returns", async () => {
+    const file = {
+      path: "src/main.nr",
+      content: "contract Token {\r\n\tfn f() {}\r\n}",
+    };
+
+    const result = await finishJob({
+      compileLog: COMPILE_LOG,
+      readerLog: readerOutput([sourceRecord(file.path, file.content)]),
+    });
+
+    expect(result).toMatchObject({ status: "success", sourceFiles: [file] });
+  });
+
+  it.each([
+    [
+      "is cut off",
+      (lines: string[]) => readerOutput(lines).split("===SOURCES_END===")[0],
+    ],
+    [
+      "has a record split across lines",
+      (lines: string[]) =>
+        readerOutput([
+          ...lines,
+          '{"path":"src/lib.nr","content":"fn a() {}',
+          'fn b() {}"}',
+        ]),
+    ],
+    [
+      "has a record without content",
+      (lines: string[]) => readerOutput([...lines, '{"path":"src/lib.nr"}']),
+    ],
+  ])("fails a job whose source listing %s", async (_, readerLog) => {
+    const result = await finishJob({
+      compileLog: COMPILE_LOG,
+      readerLog: readerLog([
+        sourceRecord("Nargo.toml", '[package]\nname = "token"'),
+      ]),
+    });
+
+    expect(result).toMatchObject({
+      status: "compilation_failed",
+      failureStage: "SOURCE_EXTRACTION",
+    });
+    expect(result).not.toHaveProperty("sourceFiles");
+  });
 });
