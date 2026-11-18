@@ -1,12 +1,14 @@
 import {
   ARTIFACT_REFUSED_MESSAGE,
+  type ArtifactVerification,
   verifyArtifactPayload,
 } from "@chicmoz-pkg/contract-verification";
+import { NotFoundError } from "@chicmoz-pkg/error-middleware";
 import { setEntry } from "@chicmoz-pkg/redis-helper";
 import {
   type ChicmozL2ContractClassRegisteredEvent,
-  chicmozL2ContractClassRegisteredEventSchema,
   type ContractStandard,
+  jsonStringify,
 } from "@chicmoz-pkg/types";
 import asyncHandler from "express-async-handler";
 import { OpenAPIObject } from "openapi3-ts/oas31";
@@ -273,6 +275,65 @@ export const openapi_POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT: OpenAPIObject["
     },
   };
 
+export type VerifiedArtifact = Extract<
+  ArtifactVerification,
+  { isMatchingClassId: true }
+>;
+
+/** The class row with its artifact, from Postgres: write decisions never read the cache. */
+export const readClassWithArtifact = async (
+  contractClassId: string,
+  version: number,
+): Promise<ChicmozL2ContractClassRegisteredEvent> => {
+  const contractClass = await db.l2Contract.getL2RegisteredContractClass(
+    contractClassId,
+    version,
+    true,
+  );
+  if (!contractClass) {
+    throw new NotFoundError(
+      `Contract class ${contractClassId} version ${version} not found`,
+    );
+  }
+  return contractClass;
+};
+
+/**
+ * Stores a verified artifact unless the class already has one and returns
+ * the class as stored. Only the request that wrote names the class's public
+ * calls and refreshes the cache.
+ */
+export const storeArtifactIfAbsent = async (
+  { contractClassId, version }: ChicmozL2ContractClassRegisteredEvent,
+  { artifactJson, artifactContractName }: VerifiedArtifact,
+  standardData?: ContractStandard,
+) => {
+  const { written, selectorMap } = await db.l2Contract.addArtifactData({
+    contractClassId,
+    version,
+    artifactJson,
+    contractName: artifactContractName,
+    standardData,
+  });
+  const contractClass = await readClassWithArtifact(contractClassId, version);
+  if (written) {
+    await db.l2Contract.backfillPublicCallRequestNames({
+      contractClassId,
+      version,
+      selectorMap,
+      contractName: artifactContractName,
+    });
+    setEntry(
+      contractClassKeys(contractClassId, version, true),
+      jsonStringify(contractClass),
+      CACHE_TTL_SECONDS,
+    ).catch((err) => {
+      logger.warn(`Failed to cache contract class: ${err}`);
+    });
+  }
+  return { written, contractClass };
+};
+
 export const verifyArtifact = async ({
   contractClassId,
   version,
@@ -284,32 +345,13 @@ export const verifyArtifact = async ({
   stringifiedArtifactJson: string | NoirCompiledContract;
   standardData?: ContractStandard;
 }) => {
-  const contractClassString = await dbWrapper.get(
-    contractClassKeys(contractClassId, version, true),
-    () =>
-      db.l2Contract.getL2RegisteredContractClass(
-        contractClassId,
-        version,
-        true,
-      ),
-  );
-
-  let dbContractClass;
-  if (contractClassString) {
-    dbContractClass = chicmozL2ContractClassRegisteredEventSchema.parse(
-      JSON.parse(contractClassString),
-    );
-    if (dbContractClass.artifactJson) {
-      return {
-        success: true,
-        alreadyExists: true,
-        contractClass: dbContractClass,
-      };
-    }
-  }
-
-  if (!dbContractClass) {
-    throw new Error("Contract class found in DB is not valid");
+  const registeredClass = await readClassWithArtifact(contractClassId, version);
+  if (registeredClass.artifactJson) {
+    return {
+      success: true,
+      alreadyExists: true,
+      contractClass: registeredClass,
+    };
   }
 
   const artifactJsonString =
@@ -323,48 +365,22 @@ export const verifyArtifact = async ({
 
   const verification = await verifyArtifactPayload(
     { stringifiedArtifactJson: artifactJsonString },
-    dbContractClass,
+    registeredClass,
   );
 
   if (!verification.isMatchingClassId) {
     throw new Error(artifactRefusalText[verification.reason]);
   }
-  const { artifactJson, artifactContractName } = verification;
 
-  const completeContractClass = {
-    ...dbContractClass,
-    artifactJson,
-    artifactContractName,
-    standardContractType: standardData?.name ?? null,
-    standardContractVersion: standardData?.version ?? null,
-  };
-
-  setEntry(
-    contractClassKeys(contractClassId, version, true),
-    JSON.stringify(completeContractClass),
-    CACHE_TTL_SECONDS,
-  ).catch((err) => {
-    logger.warn(`Failed to cache contract class: ${err}`);
-  });
-
-  const { selectorMap } = await db.l2Contract.addArtifactData({
-    contractClassId: dbContractClass.contractClassId,
-    version: dbContractClass.version,
-    artifactJson,
-    contractName: artifactContractName,
-    standardData: standardData,
-  });
-  await db.l2Contract.backfillPublicCallRequestNames({
-    contractClassId: dbContractClass.contractClassId,
-    version: dbContractClass.version,
-    selectorMap,
-    contractName: artifactContractName,
-  });
-
+  const { written, contractClass } = await storeArtifactIfAbsent(
+    registeredClass,
+    verification,
+    standardData,
+  );
   return {
     success: true,
-    alreadyExists: false,
-    contractClass: completeContractClass,
+    alreadyExists: !written,
+    contractClass,
   };
 };
 
@@ -394,10 +410,6 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_ARTIFACT = asyncHandler(
       }
     } catch (error) {
       if (error instanceof Error) {
-        if (error.message === "Contract class found in DB is not valid") {
-          res.status(500).send(error.message);
-          return;
-        }
         if (isBadArtifactMessage(error.message)) {
           res.status(400).send(error.message);
           return;
