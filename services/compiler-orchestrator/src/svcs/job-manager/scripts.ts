@@ -73,6 +73,9 @@ export const buildCompileScript = (
   ].join(" && ");
 };
 
+// One line per source file, {"path":…,"content":…}, with backslashes, double
+// quotes and newlines escaped. printf, not echo: dash's echo expands backslash
+// escapes. The x stops $(…) from stripping the file's trailing newlines.
 export const buildReaderScript = (): string => {
   return `set -e
 echo "===COMMIT_HASH_START==="
@@ -88,8 +91,9 @@ echo "===SOURCES_START==="
 cd /output/source
 find . -type f \\( -name "*.nr" -o -name "Nargo.toml" -o -path './__repo_root__/LICENSE*' -o -path './__repo_root__/LICENCE*' \\) | sort | while read f; do
   clean_path=$(echo "$f" | sed 's|^\\./||')
-  content=$(cat "$f" | sed 's/\\\\/\\\\\\\\/g' | sed 's/"/\\\\"/g' | sed ':a;N;$!ba;s/\\n/\\\\n/g')
-  echo "{\\"path\\":\\"$clean_path\\",\\"content\\":\\"$content\\"}"
+  content=$({ cat "$f"; printf x; } | sed 's/\\\\/\\\\\\\\/g' | sed 's/"/\\\\"/g' | sed ':a;N;$!ba;s/\\n/\\\\n/g')
+  content=\${content%x}
+  printf '{"path":"%s","content":"%s"}\\n' "$clean_path" "$content"
 done
 echo "===SOURCES_END==="
 `;

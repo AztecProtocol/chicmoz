@@ -4,7 +4,10 @@ import {
   generateL2TopicName,
 } from "@chicmoz-pkg/message-registry";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type JobLogs } from "../../src/svcs/job-manager/backend.js";
 import {
@@ -368,6 +371,68 @@ describe("job output reader", () => {
 
     expect(result).toMatchObject({ status: "success", sourceFiles: [file] });
   });
+
+  // The host's /bin/sh and coreutils run the script (dash and GNU on CI), not the job's image.
+  it.skipIf(process.platform !== "linux")(
+    "reads back every file the reader script lists, byte for byte",
+    async () => {
+      const output = await mkdtemp(path.join(tmpdir(), "reader-output-"));
+      try {
+        const files = [
+          { path: "Nargo.toml", content: '[package]\nname = "token"\n' },
+          {
+            path: "src/main.nr",
+            content:
+              'contract Token {\r\n\tfn f() -> str<2> { "\\\\n" }\n}\n\n',
+          },
+          { path: "src/empty.nr", content: "" },
+          { path: "__repo_root__/LICENSE", content: "MIT" },
+        ];
+        for (const file of [
+          ...files,
+          { path: "README.md", content: "not listed" },
+        ]) {
+          await mkdir(path.dirname(path.join(output, "source", file.path)), {
+            recursive: true,
+          });
+          await writeFile(path.join(output, "source", file.path), file.content);
+        }
+        await mkdir(path.join(output, "artifact"));
+        await writeFile(
+          path.join(output, "artifact", "token.json"),
+          ARTIFACT_JSON,
+        );
+        await writeFile(path.join(output, "commit_hash"), `${COMMIT_HASH}\n`);
+        const { execFile } =
+          await vi.importActual<typeof import("node:child_process")>(
+            "node:child_process",
+          );
+        // The script reads the job's fixed /output mount.
+        const { stdout } = await promisify(execFile)("/bin/sh", [
+          "-c",
+          buildReaderScript().replaceAll("/output", output),
+        ]);
+
+        const result = await finishJob({
+          compileLog: COMPILE_LOG,
+          readerLog: stdout,
+        });
+
+        const byPath = (a: { path: string }, b: { path: string }) =>
+          a.path.localeCompare(b.path);
+        expect(result).toMatchObject({
+          status: "success",
+          artifactJson: ARTIFACT_JSON,
+          commitHash: COMMIT_HASH,
+        });
+        expect([...(result.sourceFiles as typeof files)].sort(byPath)).toEqual(
+          [...files].sort(byPath),
+        );
+      } finally {
+        await rm(output, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.each([
     [
