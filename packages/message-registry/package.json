@@ -16,7 +16,6 @@
     "test-once": "vitest run --dir src"
   },
   "dependencies": {
-    "@aztec-labs/aztec.js": "6.0.0",
     "@chicmoz-pkg/types": "workspace:^"
   },
   "devDependencies": {

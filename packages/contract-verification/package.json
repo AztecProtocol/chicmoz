@@ -17,12 +17,12 @@
   },
   "dependencies": {
     "@aztec-labs/aztec.js": "6.0.0",
-    "@aztec-labs/noir-contracts.js": "6.0.0",
     "@aztec-labs/stdlib": "6.0.0",
     "@chicmoz-pkg/types": "workspace:^",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@aztec-labs/noir-contracts.js": "6.0.0",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "eslint": "8.53.0",
