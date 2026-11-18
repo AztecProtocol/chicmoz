@@ -45,7 +45,8 @@ export const checkArtifactShape = (root: unknown): void => {
   }
 };
 
-const parseJson = (json: string): unknown => {
+/** Parses artifact JSON; throws the refusal when it is not JSON. */
+export const parseArtifactJson = (json: string): unknown => {
   try {
     return JSON.parse(json) as unknown;
   } catch {
@@ -62,12 +63,15 @@ const loadParsed = (parsed: unknown): ContractArtifact => {
   }
 };
 
-/** Parses artifact JSON, checks its shape and loads it with the SDK; throws only the refusal. */
-export const loadArtifactJson = (json: string): ContractArtifact => {
-  const parsed = parseJson(json);
+/** Checks a parsed artifact's shape and loads it with the SDK; throws only the refusal. */
+export const loadArtifact = (parsed: unknown): ContractArtifact => {
   checkArtifactShape(parsed);
   return loadParsed(parsed);
 };
+
+/** Parses, checks and loads artifact JSON; throws only the refusal. */
+export const loadArtifactJson = (json: string): ContractArtifact =>
+  loadArtifact(parseArtifactJson(json));
 
 /**
  * `loadArtifactJson` without the shape check, for stored JSON or an upload that
@@ -75,4 +79,4 @@ export const loadArtifactJson = (json: string): ContractArtifact => {
  * still load.
  */
 export const loadStoredArtifactJson = (json: string): ContractArtifact =>
-  loadParsed(parseJson(json));
+  loadParsed(parseArtifactJson(json));

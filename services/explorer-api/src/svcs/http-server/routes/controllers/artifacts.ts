@@ -1,4 +1,3 @@
-import { ARTIFACT_REFUSED_MESSAGE } from "@chicmoz-pkg/contract-verification";
 import asyncHandler from "express-async-handler";
 import { OpenAPIObject } from "openapi3-ts/oas31";
 import { getProtocolContractArtifactByHash } from "../../../../utils/protocol-contracts.js";
@@ -8,7 +7,7 @@ import {
   getArtifactsByArtifactHashSchema,
   postContrctClassStandardArtifactSchema,
 } from "../paths_and_validation.js";
-import { verifyArtifact } from "./contract-classes.js";
+import { isBadArtifactMessage, verifyArtifact } from "./contract-classes.js";
 import { dbWrapper } from "./utils/index.js";
 
 export const openapi_GET_L2_ARTIFACTS_BY_ARTIFACT_HASH: OpenAPIObject["paths"] =
@@ -106,11 +105,7 @@ export const POST_L2_REGISTERED_CONTRACT_CLASS_STANDARD_ARTIFACT = asyncHandler(
           res.status(500).send(error.message);
           return;
         }
-        if (
-          error.message === "Missing artifact json" ||
-          error.message === "Incorrect artifact" ||
-          error.message === ARTIFACT_REFUSED_MESSAGE
-        ) {
+        if (isBadArtifactMessage(error.message)) {
           res.status(400).send(error.message);
           return;
         }
