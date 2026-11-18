@@ -561,16 +561,3 @@ export const AZTEC_SCAN_NOTES: Record<
     },
   },
 };
-
-export const AZTEC_SCAN_MANUAL_SOURCE_CODE_URLS: Record<
-  L2NetworkId,
-  Record<AztecAddress, string>
-> = {
-  MAINNET: {},
-  SANDBOX: {},
-  TESTNET: {
-    //  "0x1848f4a84947391632f106de66335b649b8356b05f64feed80889d899ee82187":
-    //    "https://github.com/defi-wonderland/aztec-standards/tree/9fcc5cabca6054053e54b1b48798e37b4bb0f685/src/token_contract",
-  },
-  DEVNET: {},
-};

@@ -1,7 +1,4 @@
-import {
-  AZTEC_SCAN_MANUAL_SOURCE_CODE_URLS,
-  AZTEC_SCAN_NOTES,
-} from "./constants.js";
+import { AZTEC_SCAN_NOTES } from "./constants.js";
 import {
   ARCHIVE_MODE,
   L1_GOVERNANCE_URI_RECONCILIATION_ENABLED,
@@ -14,7 +11,6 @@ import { removeDroppedThatHaveTxEffects } from "./svcs/database/controllers/drop
 import { updateContractInstanceAztecScanNotes } from "./svcs/database/controllers/l2/aztec-scan-notes.js";
 import { initializeRollupVersionCache } from "./svcs/database/controllers/l2/chain-info/rollup-version-cache.js";
 import { deleteAllTxs } from "./svcs/database/controllers/l2Tx/delete-all-txs.js";
-import { updateContractClassManualSourceCodeUrl } from "./svcs/database/controllers/l2contract/update.js";
 import { initializeProtocolContracts } from "./utils/protocol-contracts.js";
 import {
   runL2BlockReconciliationOnce,
@@ -40,20 +36,6 @@ ORIGIN: ${notes.origin}`);
       await updateContractInstanceAztecScanNotes({
         contractInstanceAddress,
         aztecScanNotes: notes,
-      });
-    }
-  }
-  const aztecScanManualSourceCodeUrls =
-    AZTEC_SCAN_MANUAL_SOURCE_CODE_URLS[L2_NETWORK_ID];
-  if (aztecScanManualSourceCodeUrls) {
-    for (const [contractClassId, sourceCodeUrl] of Object.entries(
-      aztecScanManualSourceCodeUrls,
-    )) {
-      logger.info(`Updating with hardcoded aztec scan manual source code urls for contract: ${contractClassId}
-URL: ${sourceCodeUrl}`);
-      await updateContractClassManualSourceCodeUrl({
-        contractClassId,
-        sourceCodeUrl,
       });
     }
   }
