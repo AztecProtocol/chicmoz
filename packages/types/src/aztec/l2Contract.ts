@@ -44,6 +44,8 @@ export type ChicmozL2ContractInstanceUpdatedEvent = z.infer<
   typeof chicmozL2ContractInstanceUpdatedEventSchema
 >;
 
+export const CONSTRUCTOR_ARGS_MAX = 4096;
+
 export const chicmozL2ContractInstanceVerifiedDeploymentArgumentsSchema =
   z.object({
     id: z.string().uuid().optional(),
@@ -52,7 +54,14 @@ export const chicmozL2ContractInstanceVerifiedDeploymentArgumentsSchema =
     deployer: aztecAddressSchema,
     immutablesHash: frSchema.optional(),
     publicKeysString: z.string(),
-    constructorArgs: z.string().array(),
+    // zod 3 records one issue per failing element, so a longer array is cut to MAX + 1 first.
+    constructorArgs: z.preprocess(
+      (v) =>
+        Array.isArray(v) && v.length > CONSTRUCTOR_ARGS_MAX
+          ? v.slice(0, CONSTRUCTOR_ARGS_MAX + 1)
+          : v,
+      z.string().array().max(CONSTRUCTOR_ARGS_MAX),
+    ),
   });
 
 export type ChicmozL2ContractInstanceVerifiedDeploymentArgumnetsSchema =
