@@ -33,12 +33,11 @@ import {
 import { NoirCompiledContract } from "@aztec-labs/aztec.js/abi";
 
 
-const artifactRefusalText = {
+export const artifactRefusalText = {
   CLASS_ID_MISMATCH: "Incorrect artifact",
   NOT_COMPILER_OUTPUT: "Artifact must be the raw aztec compile output",
+  FUNCTION_LIST_MISMATCH: "Artifact functions must match its outputs",
 } as const;
-
-export const NOT_COMPILER_OUTPUT_TEXT = artifactRefusalText.NOT_COMPILER_OUTPUT;
 
 const badArtifactMessages: string[] = [
   "Missing artifact json",

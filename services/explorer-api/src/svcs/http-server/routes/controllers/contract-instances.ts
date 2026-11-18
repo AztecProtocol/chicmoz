@@ -40,7 +40,7 @@ import {
   dbWrapper,
 } from "./utils/index.js";
 import {
-  NOT_COMPILER_OUTPUT_TEXT,
+  artifactRefusalText,
   readClassWithArtifact,
   storeArtifactIfAbsent,
   type VerifiedArtifact,
@@ -418,8 +418,8 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         res
           .status(400)
           .send(
-            verification.reason === "NOT_COMPILER_OUTPUT"
-              ? NOT_COMPILER_OUTPUT_TEXT
+            verification.reason !== "CLASS_ID_MISMATCH"
+              ? artifactRefusalText[verification.reason]
               : registeredClass.artifactJson
                 ? "Contract class already has a registered artifact that does not match the uploaded artifact"
                 : "Uploaded artifact does not match contract class",
