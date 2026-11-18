@@ -1,6 +1,6 @@
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import { HexString, type ChicmozL2Block } from "@chicmoz-pkg/types";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import {
   archive,
   body,
@@ -30,7 +30,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       orphan_hasOrphanedParent: block.orphan?.hasOrphanedParent ?? false,
     });
 
-    const headerId = uuidv4();
+    const headerId = randomUUID();
     // Insert header
     await dbTx.insert(header).values({
       id: headerId,
@@ -48,7 +48,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: block.hash,
     });
 
-    const lastArchiveId = uuidv4();
+    const lastArchiveId = randomUUID();
     // Insert last archive
     await dbTx.insert(lastArchive).values({
       id: lastArchiveId,
@@ -57,14 +57,14 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: headerId,
     });
 
-    const stateId = uuidv4();
+    const stateId = randomUUID();
     // Insert state
     await dbTx.insert(state).values({
       id: stateId,
       headerId,
     });
 
-    const l1ToL2MessageTreeId = uuidv4();
+    const l1ToL2MessageTreeId = randomUUID();
     // Insert l1ToL2MessageTree
     await dbTx.insert(l1ToL2MessageTree).values({
       id: l1ToL2MessageTreeId,
@@ -74,14 +74,14 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: stateId,
     });
 
-    const partialId = uuidv4();
+    const partialId = randomUUID();
     // Insert partial
     await dbTx.insert(partial).values({
       id: partialId,
       stateId,
     });
 
-    const noteHashTreeId = uuidv4();
+    const noteHashTreeId = randomUUID();
     // Insert partial state trees
     await dbTx.insert(noteHashTree).values({
       id: noteHashTreeId,
@@ -91,7 +91,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: partialId,
     });
 
-    const nullifierTreeId = uuidv4();
+    const nullifierTreeId = randomUUID();
     await dbTx.insert(nullifierTree).values({
       id: nullifierTreeId,
       root: block.header.state.partial.nullifierTree.root,
@@ -100,7 +100,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: partialId,
     });
 
-    const publicDataTreeId = uuidv4();
+    const publicDataTreeId = randomUUID();
     await dbTx.insert(publicDataTree).values({
       id: publicDataTreeId,
       root: block.header.state.partial.publicDataTree.root,
@@ -109,7 +109,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       fk: partialId,
     });
 
-    const globalVariablesId = uuidv4();
+    const globalVariablesId = randomUUID();
     // Insert global variables
     await dbTx.insert(globalVariables).values({
       id: globalVariablesId,
@@ -123,7 +123,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       feeRecipient: block.header.globalVariables.feeRecipient,
     });
 
-    const gasFeesId = uuidv4();
+    const gasFeesId = randomUUID();
     // Insert gas fees
     await dbTx.insert(gasFees).values({
       id: gasFeesId,
@@ -132,7 +132,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
       feePerL2Gas: block.header.globalVariables.gasFees.feePerL2Gas,
     });
 
-    const bodyId = uuidv4();
+    const bodyId = randomUUID();
     // Insert body
     await dbTx.insert(body).values({
       id: bodyId,
@@ -160,7 +160,7 @@ export const store = async (block: ChicmozL2Block): Promise<void> => {
 
       // Insert public data writes
       for (const [pdwIndex, pdw] of Object.entries(txEff.publicDataWrites)) {
-        const publicDataWriteId = uuidv4();
+        const publicDataWriteId = randomUUID();
         await dbTx.insert(publicDataWrite).values({
           id: publicDataWriteId,
           txEffectHash: txEff.txHash,

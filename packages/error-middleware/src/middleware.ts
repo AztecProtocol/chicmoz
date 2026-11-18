@@ -1,9 +1,5 @@
 import { Logger } from "@chicmoz-pkg/logger-server";
 import { ErrorRequestHandler } from "express";
-import {
-  InsufficientScopeError,
-  UnauthorizedError,
-} from "express-oauth2-jwt-bearer";
 import { ZodError } from "zod";
 import { CHICMOZ_ERRORS } from "./errors.js";
 
@@ -75,14 +71,6 @@ export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
       } else {
         logger.error(err);
       }
-    }
-
-    if (
-      err instanceof UnauthorizedError ||
-      err instanceof InsufficientScopeError
-    ) {
-      res.status(err.status).header(err.headers).send(err.message);
-      return;
     }
 
     if (err instanceof ZodError) {
