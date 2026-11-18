@@ -1,3 +1,4 @@
+import { githubRepositoryUrlSchema } from "@chicmoz-pkg/types";
 import asyncHandler from "express-async-handler";
 import { randomUUID } from "crypto";
 import { OpenAPIObject } from "openapi3-ts/oas31";
@@ -134,10 +135,7 @@ export const POST_VERIFY_SOURCE = asyncHandler(async (req, res) => {
     return;
   }
 
-  // Validate GitHub URL format — only allow https://github.com/<owner>/<repo> (optional .git / trailing slash)
-  const githubUrlPattern =
-    /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\.git)?\/?$/;
-  if (!githubUrlPattern.test(githubUrl)) {
+  if (!githubRepositoryUrlSchema.safeParse(githubUrl).success) {
     res.status(400).json({
       error: "Invalid GitHub URL. Must be a public GitHub repository URL.",
     });

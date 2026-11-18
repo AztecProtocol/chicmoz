@@ -1,6 +1,9 @@
 import type { CompileSourceRequestEvent } from "@chicmoz-pkg/message-registry";
 import type { MicroserviceBaseSvc } from "@chicmoz-pkg/microservice-base";
-import type { SourceVerificationFailureStage } from "@chicmoz-pkg/types";
+import {
+  githubRepositoryUrlSchema,
+  type SourceVerificationFailureStage,
+} from "@chicmoz-pkg/types";
 import { execFile } from "child_process";
 import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import os from "os";
@@ -623,6 +626,31 @@ const stopJobPoller = (): void => {
   }
 };
 
+/** Fails a request at INPUT_VALIDATION before git or the backend runs. */
+const rejectInput = async (
+  event: CompileSourceRequestEvent,
+  compileOutput: string,
+): Promise<void> => {
+  logger.warn(
+    `Rejected compile request jobId=${event.jobId}: ${compileOutput}`,
+  );
+  try {
+    await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
+      jobId: event.jobId,
+      contractClassId: event.contractClassId,
+      version: event.version,
+      status: "compilation_failed",
+      error: summarizeFailure("INPUT_VALIDATION"),
+      failureStage: "INPUT_VALIDATION",
+      compileOutput,
+    });
+  } catch (e) {
+    logger.error(
+      `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
+    );
+  }
+};
+
 // --- Public API ---
 export const handleCompileRequest = async (
   event: CompileSourceRequestEvent,
@@ -650,45 +678,27 @@ export const handleCompileRequest = async (
     return;
   }
 
+  if (!githubRepositoryUrlSchema.safeParse(event.githubUrl).success) {
+    await rejectInput(
+      event,
+      "Invalid repository URL. Only https://github.com/<owner>/<repo> repositories are allowed.",
+    );
+    return;
+  }
+
   if (event.gitRef && !isValidGitRef(event.gitRef)) {
-    logger.warn(`Invalid gitRef for jobId=${event.jobId}: ${event.gitRef}`);
-    try {
-      await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
-        jobId: event.jobId,
-        contractClassId: event.contractClassId,
-        version: event.version,
-        status: "compilation_failed",
-        error: summarizeFailure("INPUT_VALIDATION"),
-        failureStage: "INPUT_VALIDATION",
-        compileOutput:
-          "Invalid git ref. Only alphanumeric characters, '.', '-', '_', and '/' are allowed.",
-      });
-    } catch (e) {
-      logger.error(
-        `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
-      );
-    }
+    await rejectInput(
+      event,
+      "Invalid git ref. Only alphanumeric characters, '.', '-', '_', and '/' are allowed.",
+    );
     return;
   }
 
   if (event.subPath && !isValidSubPath(event.subPath)) {
-    logger.warn(`Invalid subPath for jobId=${event.jobId}: ${event.subPath}`);
-    try {
-      await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
-        jobId: event.jobId,
-        contractClassId: event.contractClassId,
-        version: event.version,
-        status: "compilation_failed",
-        error: summarizeFailure("INPUT_VALIDATION"),
-        failureStage: "INPUT_VALIDATION",
-        compileOutput:
-          "Invalid sub-path. Only alphanumeric characters, '.', '-', '_', and '/' are allowed (no '..').",
-      });
-    } catch (e) {
-      logger.error(
-        `Failed to publish rejection for jobId=${event.jobId}: ${(e as Error).message}`,
-      );
-    }
+    await rejectInput(
+      event,
+      "Invalid sub-path. Only alphanumeric characters, '.', '-', '_', and '/' are allowed (no '..').",
+    );
     return;
   }
 
@@ -748,11 +758,7 @@ export const handleCompileRequest = async (
 
   try {
     await backend.launch(state, {
-      compileScript: buildCompileScript(
-        state.githubUrl,
-        state.gitRef,
-        state.subPath,
-      ),
+      compileScript: buildCompileScript(state.gitRef, state.subPath),
       readerScript: buildReaderScript(),
     });
     activeJobs.set(event.jobId, state);

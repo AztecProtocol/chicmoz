@@ -217,14 +217,17 @@ describe("compile request handler", () => {
         compilerImage: "contract-compiler:6.1.0",
       }),
       {
-        compileScript: buildCompileScript(
-          event.githubUrl,
-          event.gitRef,
-          event.subPath,
-        ),
+        compileScript: buildCompileScript(event.gitRef, event.subPath),
         readerScript: buildReaderScript(),
       },
     );
+    const [, { compileScript }] = mocks.backend.launch.mock.calls[0] as [
+      unknown,
+      { compileScript: string },
+    ];
+    for (const value of [event.githubUrl, event.gitRef, event.subPath]) {
+      expect(compileScript).not.toContain(value);
+    }
     expect(mocks.publishMessage).not.toHaveBeenCalled();
   });
 
@@ -257,6 +260,10 @@ describe("compile request handler", () => {
   });
 
   it.each([
+    [
+      "repository URL that is not a GitHub repository URL",
+      { githubUrl: "https://gitlab.com/example/aztec-token" },
+    ],
     ["git ref with a space", { gitRef: "main branch" }],
     ["git ref starting with a dash", { gitRef: "--help" }],
     ["git ref containing ..", { gitRef: "main..other" }],

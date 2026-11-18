@@ -105,9 +105,7 @@ describe("job naming", () => {
 
 describe("compile script", () => {
   it("clones, checks out and enters the repository through the job's environment", () => {
-    const commands = buildCompileScript(githubUrl, gitRef, subPath).split(
-      " && ",
-    );
+    const commands = buildCompileScript(gitRef, subPath).split(" && ");
     expect(commands).toEqual(
       expect.arrayContaining([
         `git clone "$GIT_URL" /workspace/repo`,
@@ -116,16 +114,11 @@ describe("compile script", () => {
         `SOURCE_ROOT="/workspace/repo/$SUB_PATH"`,
       ]),
     );
-    const repoCommands = commands.filter((command) =>
-      /^(git|cd|SOURCE_ROOT=)/.test(command),
-    );
     for (const value of [githubUrl, gitRef, subPath]) {
-      expect(repoCommands.filter((command) => command.includes(value))).toEqual(
-        [],
-      );
+      expect(commands.filter((command) => command.includes(value))).toEqual([]);
     }
 
-    const defaults = buildCompileScript(githubUrl).split(" && ");
+    const defaults = buildCompileScript().split(" && ");
     expect(defaults).toContain("cd /workspace/repo");
     expect(
       defaults.filter((command) => command.startsWith("git checkout")),
