@@ -27,7 +27,7 @@
     "eslint-plugin-n": "15.0.0 || 16.0.0 ",
     "eslint-plugin-promise": "6.0.0",
     "typescript": "5.8.3",
-    "vitest": "3.2.4"
+    "vitest": "3.2.7"
   },
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
