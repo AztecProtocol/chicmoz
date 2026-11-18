@@ -7,6 +7,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
+  # Weekly on main, so the audit summary still records what a pull request merged while the audit
+  # delta could not compare.
+  schedule:
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 # A new push to a PR cancels its older run; every main commit keeps its own.
@@ -126,6 +130,35 @@ jobs:
             echo "::warning title=Dependency audit::unavailable (yarn npm audit exit $code)"
           fi
 
+  # Fails on a high or critical (GHSA id, package) pair that the PR adds. New pairs only: a second
+  # vulnerable version of a flagged package passes. A tripwire for honest mistakes, not a boundary:
+  # a pull request controls this workflow, the script and Yarn's configuration.
+  dependency-audit-delta:
+    name: Dependency audit (new high or critical)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+      - uses: ./.github/actions/setup-yarn
+        with:
+          install: "false"
+      # Without --no-deprecations the output also carries deprecation records, which have no URL.
+      - name: Audit the base and the head, then compare
+        run: |
+          (cd base && yarn npm audit --all --recursive --no-deprecations --json > ../base.ndjson) \
+            && base_exit=0 || base_exit=$?
+          yarn npm audit --all --recursive --no-deprecations --json > head.ndjson \
+            && head_exit=0 || head_exit=$?
+          bash .github/scripts/audit-delta.sh compare base.ndjson "$base_exit" head.ndjson "$head_exit"
+
   commitlint:
     name: Commitlint
     if: github.event_name == 'pull_request'
@@ -156,7 +189,7 @@ jobs:
     name: quality-status
     if: always()
     # The advisory audit is deliberately absent: it must never block a merge.
-    needs: [build, lint, unit-tests, commitlint]
+    needs: [build, lint, unit-tests, commitlint, dependency-audit-delta]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -170,4 +203,5 @@ jobs:
             lint|${{ needs.lint.result }}|success
             unit-tests|${{ needs.unit-tests.result }}|success
             commitlint|${{ needs.commitlint.result }}|${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
+            dependency-audit-delta|${{ needs.dependency-audit-delta.result }}|${{ github.event_name == 'pull_request' && 'success' || 'skipped' }}
         run: bash .github/scripts/check-job-results.sh
