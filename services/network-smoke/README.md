@@ -17,7 +17,7 @@ Needs Linux (`/proc`), Docker with the compose plugin, Node 24 with npm, and fou
 | ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `NETWORK_SMOKE_DIR`           | `<repo>/.network-smoke`                                  | run directories                                                                |
 | `NETWORK_SMOKE_TOOLCHAIN_DIR` | `$XDG_CACHE_HOME/chicmoz-network-smoke` (`~/.cache/...`) | one installed toolchain per lock hash; delete old `aztec-*` dirs at will       |
-| `NETWORK_SMOKE_PORTS`         | free ports from the OS                                   | `anvil,aztec,aztecAdmin,aztecP2p,explorerApi,ws,wsHealth`; `wsHealth = ws + 1` |
+| `NETWORK_SMOKE_PORTS`         | random free ports below the kernel's ephemeral range     | `anvil,aztec,aztecAdmin,aztecP2p,explorerApi,ws,wsHealth`; `wsHealth = ws + 1` |
 | `FOUNDRY_BIN_DIR`             | `PATH`                                                   | directory holding `anvil` and `forge`                                          |
 
 Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose project and databases, and its own process groups, so parallel runs on one host do not collide. Teardown stops only the run's own groups and project, on success, failure, Ctrl-C or SIGTERM.
