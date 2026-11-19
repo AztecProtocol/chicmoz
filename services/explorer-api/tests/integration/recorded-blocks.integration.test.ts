@@ -57,6 +57,14 @@ const CLASS_VERSION = 1;
 const TX_EFFECT_DB: DbFilled = { dbTimeKeys: ["txBirthTimestamp"] };
 // Verified arguments `id`: `defaultRandom()`; deployer metadata `uploaded_at`
 // and notes `uploaded_at`/`updated_at`: `defaultNow()`.
+// Notes `uploaded_at`/`updated_at`, deployer metadata `uploaded_at`:
+// `defaultNow()`; verified arguments `id`: `defaultRandom()`.
+const NOTES_ENTRY_DB: DbFilledAt[] = [
+  { path: ["aztecScanNotes", "uploadedAt"], wire: "iso" },
+  { path: ["aztecScanNotes", "updatedAt"], wire: "iso" },
+  { path: ["deployerMetadata", "uploadedAt"], wire: "iso" },
+  { path: ["verifiedDeploymentArguments", "id"], wire: "uuid" },
+];
 const VERIFIED_DB: DbFilled = {
   dbTimeKeys: ["uploadedAt", "updatedAt"],
   dbUuidKeys: ["id"],
@@ -189,6 +197,13 @@ describe("recorded chain data read back through Postgres and Redis", () => {
 
   describe("testnet blocks", () => {
     beforeAll(() => {
+      // Once the local network's later-seen rollup version is current, the
+      // testnet rows no longer read back.
+      if (localNetwork) {
+        throw new Error(
+          "run the testnet blocks before any local-network suite",
+        );
+      }
       vi.setSystemTime(TESTNET_DAY);
       return deliverBlocks(TESTNET);
     });
@@ -397,6 +412,50 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         );
         expect(notes).toHaveLength(1);
         expect(snapshotOf(notes, VERIFIED_DB)).toMatchSnapshot("notes route");
+      });
+
+      // The entry now carries the notes and metadata, which the POST's reader
+      // parses too; the salt control proves the committed string answered.
+      it("POST verifies from the committed cache string that carries the notes and metadata", async () => {
+        const entry = instanceEntry();
+        await entry.remove();
+        const miss = await verify({
+          verifiedDeploymentArguments: {
+            ...deploymentArguments,
+            salt: new Fr(3).toString(),
+          },
+        });
+        expect([miss.status, miss.text]).toEqual([
+          400,
+          "Uploaded salt does not match the DB",
+        ]);
+        const committed = await pinCacheString(
+          entry,
+          "contract-instance-with-notes",
+          NOTES_ENTRY_DB,
+        );
+
+        onTestFinished(async () => {
+          await setInstanceSalt(address, deploymentArguments.salt);
+          await entry.remove();
+        });
+        await setInstanceSalt(address, new Fr(2).toString());
+        await entry.remove();
+        const fromDatabase = await verify({
+          verifiedDeploymentArguments: deploymentArguments,
+        });
+        expect([fromDatabase.status, fromDatabase.text]).toEqual([
+          400,
+          "Uploaded salt does not match the DB",
+        ]);
+        await entry.seed(committed);
+        const fromCache = await verify({
+          verifiedDeploymentArguments: deploymentArguments,
+        });
+        expect([fromCache.status, fromCache.text]).toEqual([
+          200,
+          "Contract instance deployment arguments verified and stored",
+        ]);
       });
 
       // Their cache entries are removed, as when they expire, so the routes

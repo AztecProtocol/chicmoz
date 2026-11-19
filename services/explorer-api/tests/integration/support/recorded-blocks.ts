@@ -221,6 +221,7 @@ type OpenApiSchema = {
   anyOf?: OpenApiSchema[];
   oneOf?: OpenApiSchema[];
   properties?: Record<string, OpenApiSchema>;
+  nullable?: boolean;
 };
 
 type OpenApiDocument = {
@@ -261,6 +262,8 @@ const hasRequiredKeys = (schema: OpenApiSchema): boolean =>
 // OpenAPI 3.1 allows a list of types (e.g. ["object", "null"]).
 const declares = (schema: OpenApiSchema, type: string) =>
   [schema.type].flat().includes(type) ||
+  (type === "number" && [schema.type].flat().includes("integer")) ||
+  (type === "null" && schema.nullable === true) ||
   (type === "object" && schema.properties !== undefined) ||
   (type === "array" && schema.items !== undefined);
 
@@ -276,7 +279,28 @@ const collectMismatches = (
     variants.length === 0
       ? schema
       : variants.find((variant) => declares(variant, type));
-  if (own === undefined || (type !== "object" && type !== "array")) {
+  if (type !== "object" && type !== "array") {
+    // A scalar or null where only an object or array is documented would
+    // otherwise skip every required key below it.
+    const shapes = variants.length === 0 ? [schema] : variants;
+    const allowed =
+      (type === "null" && schema.nullable === true) ||
+      shapes.some(
+        (s) =>
+          declares(s, type) ||
+          (s.type === undefined &&
+            s.properties === undefined &&
+            s.items === undefined),
+      );
+    if (
+      !allowed &&
+      shapes.some((s) => declares(s, "object") || declares(s, "array"))
+    ) {
+      out.push(`${at || "/"}: ${type}, not an object or array`);
+    }
+    return;
+  }
+  if (own === undefined) {
     return;
   }
   if (own.type !== undefined && !declares(own, type)) {
