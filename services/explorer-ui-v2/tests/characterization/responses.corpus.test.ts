@@ -1,6 +1,8 @@
+import { chicmozL2PendingTxSchema, jsonStringify } from "@chicmoz-pkg/types";
 import { canonical, listFixtures, loadFixture } from "@chicmoz/test-harness";
 import { type AxiosAdapter } from "axios";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 // What a page shows for an API body is decided by the UI's own schemas and
 // validateResponse; explorer-api's tests never run them.
@@ -86,7 +88,7 @@ const RECORDED: Record<string, Case> = {
   },
 };
 
-const DROPPED_TX_HASH =
+const PENDING_TX_HASH =
   "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a";
 const DEPOSIT_RECIPIENT =
   "0x2cbf857a43f5e01983c3ec6da10e7e3c4cd215fca8e43a45e11c8f7fb49b51d5";
@@ -100,14 +102,52 @@ const CONSTRUCTED: [string, Case & { path: string; body: unknown }][] = [
     "dropped-tx",
     {
       uiModule: "dropped-tx",
-      path: `/l2/dropped-txs/${DROPPED_TX_HASH}`,
+      path: `/l2/dropped-txs/${PENDING_TX_HASH}`,
       call: (at) => api.DroppedTxAPI.getDroppedTxByHash(lastSegment(at)),
       body: {
-        txHash: DROPPED_TX_HASH,
+        txHash: PENDING_TX_HASH,
         createdAsPendingAt: 1795115670208,
         droppedAt: 1795133670208,
         dropReason: "expired",
       },
+    },
+  ],
+  [
+    // The recorded pending-txs frame's tx as its `tx` row holds it (no
+    // initiator: NULL); GET /l2/txs serves jsonStringify of the parsed rows.
+    "pending-txs",
+    {
+      ...RECORDED["pending-txs"],
+      path: "/l2/txs",
+      body: JSON.parse(
+        jsonStringify(
+          z.array(chicmozL2PendingTxSchema).parse([
+            {
+              txHash: PENDING_TX_HASH,
+              feePayer:
+                "0x0e900d357d0a7b9de3c0293c6b1a58dccfc1862f31c745ba5d3a5a5aaf4ac1fd",
+              birthTimestamp: 1795115670208,
+              initiator: null,
+              expirationTimestamp: 1795198736,
+              gasLimitDa: 916,
+              gasLimitL2: 549670,
+              teardownGasLimitDa: 0,
+              teardownGasLimitL2: 0,
+              maxFeePerDaGas: "0",
+              maxFeePerL2Gas: "1480569393941",
+              maxPriorityFeePerDaGas: "0",
+              maxPriorityFeePerL2Gas: "0",
+              gasUsedDa: 832,
+              gasUsedL2: 499700,
+              feePaymentMethod: "fee_juice",
+              noteHashCount: 1,
+              nullifierCount: 3,
+              l2ToL1MsgCount: 0,
+              privateLogCount: 1,
+            },
+          ]),
+        ),
+      ) as unknown,
     },
   ],
   [

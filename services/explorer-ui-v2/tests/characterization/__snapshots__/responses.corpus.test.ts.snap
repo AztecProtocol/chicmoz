@@ -35,6 +35,32 @@ exports[`UI parsing of explorer-api bodies > parses the constructed fee-juice-po
 ]
 `;
 
+exports[`UI parsing of explorer-api bodies > parses the constructed pending-txs body to the same value 1`] = `
+[
+  {
+    "birthTimestamp": 1795115670208,
+    "expirationTimestamp": 1795198736,
+    "feePayer": "0x0e900d357d0a7b9de3c0293c6b1a58dccfc1862f31c745ba5d3a5a5aaf4ac1fd",
+    "feePaymentMethod": "fee_juice",
+    "gasLimitDa": 916,
+    "gasLimitL2": 549670,
+    "gasUsedDa": 832,
+    "gasUsedL2": 499700,
+    "l2ToL1MsgCount": 0,
+    "maxFeePerDaGas": "0",
+    "maxFeePerL2Gas": "1480569393941",
+    "maxPriorityFeePerDaGas": "0",
+    "maxPriorityFeePerL2Gas": "0",
+    "noteHashCount": 1,
+    "nullifierCount": 3,
+    "privateLogCount": 1,
+    "teardownGasLimitDa": 0,
+    "teardownGasLimitL2": 0,
+    "txHash": "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
+  },
+]
+`;
+
 exports[`UI parsing of explorer-api bodies > parses the recorded block-by-height body to the same value 1`] = `
 {
   "archive": {
