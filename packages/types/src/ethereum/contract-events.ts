@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { frSchema, frTimestampSchema } from "../aztec/utils.js";
-import { ethAddressSchema } from "../index.js";
+import { ethAddressSchema } from "../general.js";
 
 export const chicmozL1L2BlockProposedSchema = z.object({
   l1ContractAddress: ethAddressSchema,
