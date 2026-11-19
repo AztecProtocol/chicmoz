@@ -10,6 +10,7 @@ import {
   useGovernanceSignals,
 } from "~/hooks/api";
 import { usePaginated } from "~/hooks/use-paginated";
+import { toExternalHref } from "~/lib/external-href";
 import { PROPOSAL_STATES, type ProposalState } from "@chicmoz-pkg/types";
 import {
   ageStr,
@@ -272,6 +273,8 @@ export const GovernancePage: FC = () => {
               <div className="right">Age</div>
             </div>
             {proposalPage.paged.map((p) => {
+              const forumHref = toExternalHref(p.forum_link);
+              const githubPrHref = toExternalHref(p.github_pr?.url);
               return (
                 <div
                   key={`proposal-${p.proposalId}`}
@@ -292,8 +295,8 @@ export const GovernancePage: FC = () => {
                     {getProposalTitle(p)}
                   </Link>
                   <span className="forum-link">
-                    {p.forum_link ? (
-                      <a href={p.forum_link} target="_blank" rel="noopener noreferrer" className="external-link">
+                    {forumHref ? (
+                      <a href={forumHref} target="_blank" rel="noopener noreferrer" className="external-link">
                         Link
                       </a>
                     ) : (
@@ -301,8 +304,8 @@ export const GovernancePage: FC = () => {
                     )}
                   </span>
                   <span className="github-pr">
-                    {p.github_pr ? (
-                      <a href={p.github_pr.url} target="_blank" rel="noopener noreferrer" className="external-link">
+                    {p.github_pr && githubPrHref ? (
+                      <a href={githubPrHref} target="_blank" rel="noopener noreferrer" className="external-link">
                         #{p.github_pr.number}
                       </a>
                     ) : (

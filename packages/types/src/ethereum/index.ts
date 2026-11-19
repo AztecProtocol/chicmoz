@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ethAddressSchema } from "../general.js";
 export * from "./contract-events.js";
+export * from "./governance-links.js";
 export * from "./governance.js";
 
 // NOTE: explaination copied from aztec-packages: l1-contracts/src/core/interfaces/IStaking.sol
