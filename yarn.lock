@@ -2039,7 +2039,7 @@ __metadata:
     "@chicmoz-pkg/logger-server": "workspace:^"
     "@chicmoz-pkg/message-registry": "workspace:^"
     "@chicmoz-pkg/microservice-base": "workspace:^"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     auto-bind: "npm:5.0.1"
@@ -2144,7 +2144,7 @@ __metadata:
     "@types/cors": "npm:2.8.13"
     "@types/express": "npm:4.17.17"
     "@types/morgan": "npm:1.9.4"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     auto-bind: "npm:5.0.1"
@@ -2180,7 +2180,7 @@ __metadata:
     "@chicmoz-pkg/postgres-helper": "workspace:^"
     "@chicmoz-pkg/types": "workspace:^"
     "@chicmoz/test-harness": "workspace:^"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/pg": "npm:8.11.8"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -2211,7 +2211,7 @@ __metadata:
     "@chicmoz-pkg/microservice-base": "workspace:^"
     "@chicmoz-pkg/types": "workspace:^"
     "@kubernetes/client-node": "npm:1.0.0"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.53.0"
@@ -2236,7 +2236,7 @@ __metadata:
     "@chicmoz-pkg/postgres-helper": "workspace:^"
     "@chicmoz-pkg/types": "workspace:^"
     "@chicmoz/test-harness": "workspace:^"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/pg": "npm:8.11.8"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -2272,7 +2272,7 @@ __metadata:
     "@chicmoz-pkg/types": "workspace:^"
     "@defi-wonderland/aztec-standards-v410": "npm:@defi-wonderland/aztec-standards@4.1.0-rc.4"
     "@defi-wonderland/aztec-standards-v420": "npm:@defi-wonderland/aztec-standards@4.2.0-aztecnr-rc.2"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.53.0"
@@ -2309,7 +2309,7 @@ __metadata:
     "@types/cors": "npm:2.8.13"
     "@types/express": "npm:4.17.17"
     "@types/morgan": "npm:1.9.4"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/supertest": "npm:6.0.2"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -2345,7 +2345,7 @@ __metadata:
     "@tanstack/react-router": "npm:1.45.2"
     "@tanstack/router-devtools": "npm:1.45.2"
     "@tanstack/router-plugin": "npm:1.45.2"
-    "@types/node": "npm:20.14.12"
+    "@types/node": "npm:24.19.2"
     "@types/react": "npm:18.3.3"
     "@types/react-dom": "npm:18.3.0"
     "@types/react-syntax-highlighter": "npm:^15.5.13"
@@ -2391,7 +2391,7 @@ __metadata:
     "@aztec-labs/wallets": "npm:6.0.0"
     "@chicmoz-pkg/types": "workspace:^"
     "@chicmoz/test-harness": "workspace:^"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/ws": "npm:8.5.12"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -2415,7 +2415,7 @@ __metadata:
     "@aztec-labs/foundation": "npm:6.0.0"
     "@aztec-labs/protocol-contracts": "npm:6.0.0"
     "@aztec-labs/stdlib": "npm:6.0.0"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/pg": "npm:8.11.8"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -2443,7 +2443,7 @@ __metadata:
     "@chicmoz-pkg/message-bus": "workspace:^"
     "@chicmoz-pkg/message-registry": "workspace:^"
     "@chicmoz-pkg/types": "workspace:^"
-    "@types/node": "npm:20.5.0"
+    "@types/node": "npm:24.19.2"
     "@types/ws": "npm:8.5.12"
     eslint: "npm:8.53.0"
     eslint-config-prettier: "npm:9.0.0"
@@ -6279,19 +6279,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:20.14.12":
-  version: 20.14.12
-  resolution: "@types/node@npm:20.14.12"
+"@types/node@npm:24.19.2":
+  version: 24.19.2
+  resolution: "@types/node@npm:24.19.2"
   dependencies:
-    undici-types: "npm:~5.26.4"
-  checksum: 10c0/59bc5fa11fdd23fd517f859063118f54a1ab53d3399ef63c926f8902429d7453abc0db22ef4b0a6110026b6ab81b6472fee894e1d235c24b01a0b3e10cfae0bb
-  languageName: node
-  linkType: hard
-
-"@types/node@npm:20.5.0":
-  version: 20.5.0
-  resolution: "@types/node@npm:20.5.0"
-  checksum: 10c0/3288e2dbffdf5ae1a96c8938ef9f9b5403237d74b28795c630f8db36176139725f86b2d534bbbaa8b456986fe841d24241a7850247353edbd2c9b8d180a9de0e
+    undici-types: "npm:>=7.24.0 <7.24.7"
+  checksum: 10c0/b51a7f8854007ad579dffdd0633d8addbfeb2c97cceb380f2eba0ed163638ec52e17565385a6cc04d54ac4ff99c70c64aee68a4ca45b6128c035e828794e29c5
   languageName: node
   linkType: hard
 
@@ -14727,10 +14720,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici-types@npm:~5.26.4":
-  version: 5.26.5
-  resolution: "undici-types@npm:5.26.5"
-  checksum: 10c0/bb673d7876c2d411b6eb6c560e0c571eef4a01c1c19925175d16e3a30c4c428181fb8d7ae802a261f283e4166a0ac435e2f505743aa9e45d893f9a3df017b501
+"undici-types@npm:>=7.24.0 <7.24.7":
+  version: 7.24.6
+  resolution: "undici-types@npm:7.24.6"
+  checksum: 10c0/d9cd8befb643ac904615c280a095ba4240531f6bb4a5e75a22a7483630ca8d3f1016d2ab6ace6ceda1f63b3a2db2fe037fafe121d6917a0187573aa548ff78ca
   languageName: node
   linkType: hard
 

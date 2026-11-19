@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@chicmoz/test-harness": "workspace:^",
-    "@types/node": "20.5.0",
+    "@types/node": "24.19.2",
     "@types/pg": "8.11.8",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
