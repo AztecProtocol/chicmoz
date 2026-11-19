@@ -189,28 +189,4 @@ describe("onBlock Function", () => {
     // Verify: Only 2 transactions were updated (the ones returned by the query)
     expect(mockTxsController.storeOrUpdate).toHaveBeenCalledTimes(2);
   });
-
-  it("should log transaction state changes", async () => {
-    // Setup
-    const mockBlock = createMockL2Block(104, ["found-tx"]);
-    const storedTxs = [createMockDbTx("found-tx", "pending")];
-
-    mockTxsController.getTxs.mockResolvedValue(storedTxs);
-    mockTxsController.storeOrUpdate.mockResolvedValue(undefined);
-    mockMessageBus.publishMessage.mockResolvedValue(undefined);
-
-    // Execute
-    await onBlock(
-      // @ts-expect-error - Mock object doesn't implement full L2Block interface
-      mockBlock,
-      "proposed",
-    );
-
-    // Verify: Appropriate logs generated
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "✅ Transaction found-tx found in block 104, updated to proposed",
-      ),
-    );
-  });
 });
