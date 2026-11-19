@@ -161,7 +161,7 @@ describe("explorer pipeline on a local Aztec network", () => {
     );
   });
 
-  it("has no handler failing over and over on real traffic", () => {
+  it("logs fewer than three handler failures on any topic by the end of the run", () => {
     const counts = new Map<string, number>();
     for (const service of endpoints.consumerLogs) {
       const log = readFileSync(
@@ -181,9 +181,10 @@ describe("explorer pipeline on a local Aztec network", () => {
         `handler failures: ${JSON.stringify(Object.fromEntries(counts))}\n`,
       );
     }
-    // One or two failures that succeed on redelivery are at-least-once
-    // delivery working; a message no handler accepts fails on every
-    // redelivery.
+    // A snapshot of the logs, not of messages. Two failures on a topic are
+    // allowed because a message may fail once or twice before a retry
+    // succeeds; a handler that rejects a message logs a failure on every
+    // redelivery and passes three within the run.
     const repeated = Object.fromEntries([...counts].filter(([, n]) => n >= 3));
     expect(repeated, "handler failures per service and topic").toEqual({});
   });
