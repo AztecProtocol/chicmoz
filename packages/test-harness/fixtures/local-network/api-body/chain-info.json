@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.429Z",
+  "origin": "GET /l2/info",
+  "features": [],
+  "data": {
+    "route": "/l2/info",
+    "path": "/l2/info",
+    "status": 200,
+    "uiModule": "chain-info",
+    "body": {
+      "l2NetworkId": "SANDBOX",
+      "l1ChainId": 31337,
+      "rollupVersion": "1685378643",
+      "l1ContractAddresses": {
+        "rollupAddress": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+        "registryAddress": "0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0",
+        "inboxAddress": "0x46682ca783d96a4a65390211934d5714cdb788e4",
+        "outboxAddress": "0x0a41804810f008e5ee565aa4b95a6a7c50a09082",
+        "feeJuiceAddress": "0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6",
+        "feeJuicePortalAddress": "0x3e180b566a1ef3ad836ee42c9519be95b13e7473",
+        "coinIssuerAddress": "0x610178da211fef7d417bc0e6fed39f05609ad788",
+        "rewardDistributorAddress": "0x1f708c24a0d3a740cd47cc0444e9480899f3da7d",
+        "governanceProposerAddress": "0x0dcd1bf9a1b36ce34237eeafef220932846bcd82",
+        "governanceAddress": "0x9a676e781a523b5d0c0e43731313a708cb607508",
+        "stakingAssetAddress": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853"
+      },
+      "protocolContractAddresses": {
+        "classRegistry": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "feeJuice": "0x0000000000000000000000000000000000000000000000000000000000000003",
+        "instanceRegistry": "0x0000000000000000000000000000000000000000000000000000000000000002",
+        "multiCallEntrypoint": "0x2d464e835406c6057bf147843d1541e0b338a13f8fedd5cba697629172dd8105"
+      },
+      "stakingAssetSymbol": "STK",
+      "stakingAssetDecimals": 18,
+      "feeJuiceSymbol": "FEE",
+      "feeJuiceDecimals": 18
+    }
+  }
+}

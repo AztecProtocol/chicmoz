@@ -1,0 +1,82 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.325Z",
+  "origin": "GET /l2/blocks/:heightOrHash",
+  "features": [],
+  "data": {
+    "route": "/l2/blocks/:heightOrHash",
+    "path": "/l2/blocks/11",
+    "status": 200,
+    "uiModule": "block",
+    "body": {
+      "hash": "0x0e41726e74926815b4e7c1815e2114a77a9434c3637fd488a81e0bd95c0d1977",
+      "height": "11",
+      "nativeStatus": "finalized",
+      "proposedOnL1": {
+        "l1ContractAddress": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+        "l1BlockNumber": "27",
+        "l1BlockTimestamp": 1795116440000,
+        "l1BlockHash": "0x8758b9325f0b292cd1911465eb93df0a15ce1a49c48c008d50ba0ffec7d12ad8",
+        "l1TransactionHash": "0x63a13fab9e0ea3fc198374a7dec9e0cce894586a55aff693d93cd9799151ad94",
+        "isFinalized": true,
+        "archive": "0x1f964e514d72682f4d5788bdb3bff783694050ef38b84d164b470319fbf9ab41"
+      },
+      "archive": {
+        "root": "0x1f964e514d72682f4d5788bdb3bff783694050ef38b84d164b470319fbf9ab41",
+        "nextAvailableLeafIndex": 12
+      },
+      "header": {
+        "lastArchive": {
+          "root": "0x0045d0c6d21f2244f154749d990bf209baec9884458568df075973ce137b8c07",
+          "nextAvailableLeafIndex": 11
+        },
+        "spongeBlobHash": "0x223136bf2502124fbfc6883593b222cc8f61b9efd0f053357eee4c305a5ff3c2",
+        "state": {
+          "l1ToL2MessageTree": {
+            "root": "0x0fef6d80d31109ddb56d6b3f607cbc9c0af0bff3ea0d43e8f278983c64c11f7a",
+            "nextAvailableLeafIndex": 0
+          },
+          "partial": {
+            "noteHashTree": {
+              "root": "0x2fb6da94457f5936acd1c2257843db350b320d42a3304ebe9649bd088d75223a",
+              "nextAvailableLeafIndex": 704
+            },
+            "nullifierTree": {
+              "root": "0x1ba66e1fa2c13138be12d7d0067cc678db762600fc403475d7fffff55833db36",
+              "nextAvailableLeafIndex": 832
+            },
+            "publicDataTree": {
+              "root": "0x1e9806c3e8edd0a1cae6bdb2abb970ec6d0f800403ebdf216e6d1c58b6e4615f",
+              "nextAvailableLeafIndex": 151
+            }
+          }
+        },
+        "globalVariables": {
+          "chainId": 31337,
+          "version": 1685378643,
+          "blockNumber": 11,
+          "slotNumber": 11,
+          "timestamp": 1795116440000,
+          "coinbase": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+          "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "gasFees": {
+            "feePerDaGas": "0",
+            "feePerL2Gas": "121712500000"
+          }
+        },
+        "totalFees": "83831918625000000",
+        "totalManaUsed": "688770"
+      },
+      "body": {
+        "txEffects": [
+          {
+            "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -11,7 +11,8 @@
     "test": "vitest run --dir src --exclude '**/*.integration.test.ts'",
     "test-once": "vitest run --dir src --exclude '**/*.integration.test.ts'",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "harness": "yarn build > /dev/null && node build/cli.js"
+    "harness": "yarn build > /dev/null && node build/cli.js",
+    "record-fixtures": "yarn build > /dev/null && node build/recorder/cli.js"
   },
   "dependencies": {
     "bson": "6.2.0",
@@ -20,6 +21,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@aztec-foundation/l1-artifacts": "6.0.0",
+    "@aztec-labs/aztec.js": "6.0.0",
+    "@aztec-labs/foundation": "6.0.0",
+    "@aztec-labs/protocol-contracts": "6.0.0",
+    "@aztec-labs/stdlib": "6.0.0",
     "@types/node": "20.5.0",
     "@types/pg": "8.11.8",
     "@typescript-eslint/eslint-plugin": "6.11.0",
@@ -27,7 +33,9 @@
     "eslint": "8.53.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-import": "2.29.0",
+    "kafkajs": "2.2.4",
     "typescript": "5.8.3",
+    "viem": "2.20.0",
     "vitest": "3.2.7",
     "yaml": "2.7.1"
   },

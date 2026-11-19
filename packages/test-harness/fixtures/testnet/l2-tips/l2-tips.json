@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "kind": "l2-tips",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:00:29.746Z",
+  "origin": "aztec_getChainTips()",
+  "features": [],
+  "data": {
+    "result": {
+      "proposed": {
+        "number": 47267,
+        "hash": "0x1d36e094e4beb680adb95ab292c075ec2318e96b9b39221d097fab6b3491f789"
+      },
+      "checkpointed": {
+        "block": {
+          "number": 47267,
+          "hash": "0x1d36e094e4beb680adb95ab292c075ec2318e96b9b39221d097fab6b3491f789"
+        },
+        "checkpoint": {
+          "number": 33701,
+          "hash": "0x008d4678ef796ec0d9e72757ea83eafc79da16788579558f89a8b182169b88fb"
+        }
+      },
+      "proven": {
+        "block": {
+          "number": 47183,
+          "hash": "0x03c934f289a0b47c140d4d90a5ed934f506c9d8fcfe3f3700b09d1eea4e43a17"
+        },
+        "checkpoint": {
+          "number": 33672,
+          "hash": "0x005752f1e1036467622a231d0620e2098487f26c40530f42219e460f148be148"
+        }
+      },
+      "finalized": {
+        "block": {
+          "number": 47183,
+          "hash": "0x03c934f289a0b47c140d4d90a5ed934f506c9d8fcfe3f3700b09d1eea4e43a17"
+        },
+        "checkpoint": {
+          "number": 33672,
+          "hash": "0x005752f1e1036467622a231d0620e2098487f26c40530f42219e460f148be148"
+        }
+      }
+    }
+  }
+}

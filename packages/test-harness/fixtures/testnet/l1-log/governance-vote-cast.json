@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:31.059Z",
+  "origin": "eth_getLogs governance.VoteCast at L1 block 11969294",
+  "features": [],
+  "data": {
+    "contract": "governance",
+    "eventName": "VoteCast",
+    "log": {
+      "address": "0xcaf7447721447b22cd0076ac7c63877c3afd329f",
+      "blockHash": "0x0c8ad57386c987a297c3dab1252f538a7e7b4224ded7472d67cd9844f91ba26c",
+      "blockNumber": {
+        "$bigint": "11969294"
+      },
+      "data": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000002348cff22d55785ba800000",
+      "logIndex": 442,
+      "removed": false,
+      "topics": [
+        "0xcbdf6214089cba887ecbf35a0b6a734589959c9763342c756bb2a80ca2bc9f6e",
+        "0x0000000000000000000000000000000000000000000000000000000000000008",
+        "0x0000000000000000000000003b218d0f26d15b36c715cb06c949210a0d630637"
+      ],
+      "transactionHash": "0x486a5d3f73c20f666dc60644103c42a59e14398f13756fe9f4b7d126a0bfd5d9",
+      "transactionIndex": 132,
+      "eventName": "VoteCast",
+      "args": {
+        "proposalId": {
+          "$bigint": "8"
+        },
+        "voter": "0x3b218d0F26d15B36C715cB06c949210a0d630637",
+        "support": true,
+        "amount": {
+          "$bigint": "682500000000000000000000000"
+        }
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1792669080"
+    },
+    "transactionFrom": "0x3b218d0f26d15b36c715cb06c949210a0d630637"
+  }
+}

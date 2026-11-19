@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "kind": "checkpoint",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:00:36.748Z",
+  "origin": "aztec_getCheckpoint(33600, { includeL1PublishInfo: true })",
+  "features": ["multi-block-checkpoint"],
+  "data": {
+    "number": 33600,
+    "archiveRoot": "0x0b1c5bf2ffa43817b11727b5604637684de653b422dd402ced4c41890c25dff3",
+    "startBlock": 46972,
+    "blockCount": 6,
+    "l1": {
+      "blockNumber": {
+        "$bigint": "12169706"
+      },
+      "blockHash": "0xed30ba5df691ef19134e947ff3873f86d9770acfd0378e3c111aaae137f95343",
+      "timestamp": {
+        "$bigint": "1795107396"
+      }
+    }
+  }
+}

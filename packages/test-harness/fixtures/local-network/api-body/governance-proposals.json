@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.448Z",
+  "origin": "GET /l1/governance/proposals",
+  "features": ["empty"],
+  "data": {
+    "route": "/l1/governance/proposals",
+    "path": "/l1/governance/proposals",
+    "status": 200,
+    "uiModule": "governance",
+    "body": []
+  }
+}

@@ -11,7 +11,9 @@
     "dev": "yarn node build/index.js",
     "start": "yarn node build/index.js",
     "lint": "yarn run lint-base --ext .ts .",
-    "lint-base": "yarn run g:lint"
+    "lint-base": "yarn run g:lint",
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test-once": "vitest run --config tests/vitest.config.ts"
   },
   "dependencies": {
     "@aztec-labs/aztec.js": "6.0.0",
@@ -21,13 +23,15 @@
     "pg": "8.11.3"
   },
   "devDependencies": {
+    "@chicmoz/test-harness": "workspace:^",
     "@types/pg": "8.11.8",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "eslint": "8.53.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-import": "2.29.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vitest": "3.2.7"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",

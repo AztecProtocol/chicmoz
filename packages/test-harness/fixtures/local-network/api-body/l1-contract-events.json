@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.462Z",
+  "origin": "GET /l1/contract-events",
+  "features": [],
+  "data": {
+    "route": "/l1/contract-events",
+    "path": "/l1/contract-events",
+    "status": 200,
+    "uiModule": "l1-contract-event",
+    "body": [
+      {
+        "id": "576c9b24-0dba-45df-ace9-3ab69e8268a3",
+        "eventName": "CanonicalRollupUpdated",
+        "eventArgs": {
+          "version": 1685378643,
+          "instance": "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f"
+        },
+        "l1BlockNumber": "5",
+        "l1BlockHash": "0x14fb5b27dcf7d0d05441aaae21ec37f520a4be65223f7e0366dbc23f2e920125",
+        "l1BlockTimestamp": 1795115648000,
+        "l1ContractAddress": "0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0",
+        "isFinalized": false,
+        "l1TransactionHash": "0xfa3e36195791b38cc34c42bd7f86fd0383a551284dbf99d4564b18d355969340",
+        "l1LogIndex": 13
+      },
+      {
+        "id": "d3663889-3013-4bf0-baa1-adc5d9ea711b",
+        "eventName": "CanonicalRollupUpdated",
+        "eventArgs": {
+          "version": 1685378643,
+          "instance": "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f"
+        },
+        "l1BlockNumber": "5",
+        "l1BlockHash": "0x14fb5b27dcf7d0d05441aaae21ec37f520a4be65223f7e0366dbc23f2e920125",
+        "l1BlockTimestamp": 1795115648000,
+        "l1ContractAddress": "0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0",
+        "isFinalized": true,
+        "l1TransactionHash": "0xfa3e36195791b38cc34c42bd7f86fd0383a551284dbf99d4564b18d355969340",
+        "l1LogIndex": 13
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.375Z",
+  "origin": "GET /l2/txs",
+  "features": ["empty"],
+  "data": {
+    "route": "/l2/txs",
+    "path": "/l2/txs",
+    "status": 200,
+    "uiModule": "tx",
+    "body": []
+  }
+}

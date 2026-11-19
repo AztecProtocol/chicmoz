@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "kind": "l2-tips",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:16:56.094Z",
+  "origin": "aztec_getChainTips()",
+  "features": [],
+  "data": {
+    "result": {
+      "proposed": {
+        "number": 12,
+        "hash": "0x1965616a951432e0b55a044bdf4972ddf3ac0398ed35de7549a9e27e85d10beb"
+      },
+      "checkpointed": {
+        "block": {
+          "number": 12,
+          "hash": "0x1965616a951432e0b55a044bdf4972ddf3ac0398ed35de7549a9e27e85d10beb"
+        },
+        "checkpoint": {
+          "number": 12,
+          "hash": "0x00bd834a9de1edf8f37ca803559af66cae297f1218b6ed7618fa4c2bdefb484e"
+        }
+      },
+      "proven": {
+        "block": {
+          "number": 12,
+          "hash": "0x1965616a951432e0b55a044bdf4972ddf3ac0398ed35de7549a9e27e85d10beb"
+        },
+        "checkpoint": {
+          "number": 12,
+          "hash": "0x00bd834a9de1edf8f37ca803559af66cae297f1218b6ed7618fa4c2bdefb484e"
+        }
+      },
+      "finalized": {
+        "block": {
+          "number": 11,
+          "hash": "0x0e41726e74926815b4e7c1815e2114a77a9434c3637fd488a81e0bd95c0d1977"
+        },
+        "checkpoint": {
+          "number": 11,
+          "hash": "0x009151cb160d95da657af58c2a8d1fce1cfe85fc4152d5acfde7b4efab6bc52f"
+        }
+      }
+    }
+  }
+}

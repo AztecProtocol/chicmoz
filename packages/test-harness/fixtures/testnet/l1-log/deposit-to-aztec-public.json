@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:21.260Z",
+  "origin": "eth_getLogs feeJuicePortal.DepositToAztecPublic at L1 block 12168183",
+  "features": [],
+  "data": {
+    "contract": "feeJuicePortal",
+    "eventName": "DepositToAztecPublic",
+    "log": {
+      "address": "0xe59acba462a0324b1d619a7a1b219419f156f505",
+      "blockHash": "0xd373900cc034f5a6eac9d6bc2194ec2c7e557e9df9c879197d32cdded3dcc11d",
+      "blockNumber": {
+        "$bigint": "12168183"
+      },
+      "data": "0x00000000000000000000000000000000000000000000003635c9adc5dea00000125d729e69fd88cd8923813073df8317962b1e41ca9f0f158840c7f1d59cd9dd008b75ab3e522b2d8a62948f09db17c0f4ba3b3f4b9e6b342bf5723a3fa5eff00000000000000000000000000000000000000000000000000000000000000d9f",
+      "logIndex": 174,
+      "removed": false,
+      "topics": [
+        "0xcb43dda0de11e57048e9d074ae7474446335afc906a0e5789d624fa5422629e3",
+        "0x2cbf857a43f5e01983c3ec6da10e7e3c4cd215fca8e43a45e11c8f7fb49b51d5"
+      ],
+      "transactionHash": "0x2050c37e80d667366d9f2768c8c5514be5f328a9a6f8ee88472498019dfc2e7e",
+      "transactionIndex": 90,
+      "eventName": "DepositToAztecPublic",
+      "args": {
+        "to": "0x2cbf857a43f5e01983c3ec6da10e7e3c4cd215fca8e43a45e11c8f7fb49b51d5",
+        "amount": {
+          "$bigint": "1000000000000000000000"
+        },
+        "secretHash": "0x125d729e69fd88cd8923813073df8317962b1e41ca9f0f158840c7f1d59cd9dd",
+        "key": "0x008b75ab3e522b2d8a62948f09db17c0f4ba3b3f4b9e6b342bf5723a3fa5eff0",
+        "index": {
+          "$bigint": "3487"
+        }
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1795088376"
+    },
+    "transactionFrom": "0xab9ad51e9838325fd61a76ed9ae5ace3896f232b"
+  }
+}
