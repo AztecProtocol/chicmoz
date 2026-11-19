@@ -91,7 +91,7 @@ export const startServices = (
 ) => {
   const common = {
     ...stack.env,
-    NODE_ENV: "development",
+    NODE_ENV: "production",
     L2_NETWORK_ID: "SANDBOX",
     KAFKA_NAMESPACE: runId,
   };
@@ -99,6 +99,8 @@ export const startServices = (
     "explorer-api": {
       PORT: String(ports.explorerApi),
       INSTANCE_NAME: "smoke-explorer-api",
+      // Production has no default for it: the OpenAPI page's key field.
+      PUBLIC_API_KEY: "dev-api-key",
       // Seconds. The defaults (60 and 10) would serve a block cached before
       // its L1 proposal arrived for a minute.
       CACHE_TTL: "5",
