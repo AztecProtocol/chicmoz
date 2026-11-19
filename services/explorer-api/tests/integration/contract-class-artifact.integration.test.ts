@@ -1,4 +1,11 @@
-import { loadContractArtifact } from "@aztec-labs/aztec.js/abi";
+import {
+  loadContractArtifact,
+  type NoirCompiledContract,
+} from "@aztec-labs/aztec.js/abi";
+import {
+  ARTIFACT_REFUSED_MESSAGE,
+  checkArtifactShape,
+} from "@chicmoz-pkg/contract-verification";
 import { type ContractStandard } from "@chicmoz-pkg/types";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -36,6 +43,23 @@ vi.mock(
     };
   },
 );
+
+// A struct list the SDK's artifact schema refuses inside a nested union, in an
+// artifact the size walk accepts; the SDK's error message quotes its record key.
+const SDK_MESSAGE_MARKER = "zzmarker7f3a";
+const refusedBySdkSchema = (artifact: NoirCompiledContract) => {
+  (artifact.outputs.structs as Record<string, unknown>)[SDK_MESSAGE_MARKER] = [
+    {
+      kind: "struct",
+      path: "x::Y",
+      fields: [{ name: "f", type: { kind: "unknown" } }],
+    },
+  ];
+  const json = JSON.stringify(artifact);
+  expect(() => checkArtifactShape(JSON.parse(json))).not.toThrow();
+  expect(() => loadContractArtifact(artifact)).toThrow(SDK_MESSAGE_MARKER);
+  return json;
+};
 
 const TOKEN_STANDARD = {
   name: "token",
@@ -108,7 +132,13 @@ describe("contract class artifact uploads", () => {
     const { jsonStringify } = await import("@chicmoz-pkg/types");
     const { setEntry } = await import("@chicmoz-pkg/redis-helper");
     await setEntry(
-      ["l2", "contract-classes", seeded.contractClassId, seeded.version, "with-artifact"],
+      [
+        "l2",
+        "contract-classes",
+        seeded.contractClassId,
+        seeded.version,
+        "with-artifact",
+      ],
       jsonStringify(
         await controllers.l2Contract.getL2RegisteredContractClass(
           seeded.contractClassId,
@@ -143,11 +173,47 @@ describe("contract class artifact uploads", () => {
     const { artifactJson } = await readClassRow(seeded);
     expect(responses.map((res) => res.status).sort()).toEqual([200, 201]);
     expect(
-      responses.map((res) => (res.body as { artifactJson: string }).artifactJson),
-    ).toEqual([
-      artifactJson,
-      artifactJson,
-    ]);
+      responses.map(
+        (res) => (res.body as { artifactJson: string }).artifactJson,
+      ),
+    ).toEqual([artifactJson, artifactJson]);
+  });
+
+  describe("an artifact the SDK's schema refuses", () => {
+    it("the class artifact route answers the fixed refusal, not the SDK's message", async () => {
+      const artifact = rawArtifact("auth_contract-Auth");
+      const seeded = await seedClass(artifact);
+
+      const res = await api.request
+        .post(classPath(seeded))
+        .send({ stringifiedArtifactJson: refusedBySdkSchema(artifact) });
+
+      expect({ status: res.status, text: res.text }).toEqual({
+        status: 400,
+        text: ARTIFACT_REFUSED_MESSAGE,
+      });
+      expect((await readClassRow(seeded)).artifactJson).toBeNull();
+    });
+
+    it("the deployment verification route answers the fixed refusal, not the SDK's message", async () => {
+      const artifact = rawArtifact(
+        "handshake_registry_contract-HandshakeRegistry",
+      );
+      const seeded = await seedClass(artifact);
+      const { address, deploymentArguments } = await seedInstance(artifact);
+
+      const res = await verifyDeployment(address, {
+        ...deploymentArguments,
+        stringifiedArtifactJson: refusedBySdkSchema(artifact),
+      });
+
+      expect({ status: res.status, text: res.text }).toEqual({
+        status: 400,
+        text: ARTIFACT_REFUSED_MESSAGE,
+      });
+      expect((await readClassRow(seeded)).artifactJson).toBeNull();
+      expect(await readDeploymentArguments(address)).toBeUndefined();
+    });
   });
 
   describe("deployment verification", () => {
