@@ -57,8 +57,6 @@ const CLASS_VERSION = 1;
 const TX_EFFECT_DB: DbFilled = { dbTimeKeys: ["txBirthTimestamp"] };
 // Verified arguments `id`: `defaultRandom()`; deployer metadata `uploaded_at`
 // and notes `uploaded_at`/`updated_at`: `defaultNow()`.
-// Notes `uploaded_at`/`updated_at`, deployer metadata `uploaded_at`:
-// `defaultNow()`; verified arguments `id`: `defaultRandom()`.
 const NOTES_ENTRY_DB: DbFilledAt[] = [
   { path: ["aztecScanNotes", "uploadedAt"], wire: "iso" },
   { path: ["aztecScanNotes", "updatedAt"], wire: "iso" },
