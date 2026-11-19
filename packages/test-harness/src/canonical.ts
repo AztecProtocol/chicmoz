@@ -127,6 +127,7 @@ const toCanonical = (
     const keys = Reflect.ownKeys(value);
     if (
       keys.length !== value.length + 1 ||
+      Object.keys(value).length !== value.length ||
       keys.some((key, i) => key !== (i < value.length ? String(i) : "length"))
     ) {
       throw new TypeError(

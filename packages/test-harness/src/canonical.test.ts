@@ -48,6 +48,9 @@ describe("canonical", () => {
       canonical(Object.defineProperty([], "hidden", { value: 1 })),
     ).toThrow(/extra keys/);
     expect(() =>
+      canonical(Object.defineProperty([1], "0", { enumerable: false })),
+    ).toThrow(/extra keys/);
+    expect(() =>
       canonical(Object.defineProperty({}, "hidden", { value: 1 })),
     ).toThrow(/non-enumerable/);
     expect(() => canonical({ [Symbol("s")]: 1 })).toThrow(/symbol/);
