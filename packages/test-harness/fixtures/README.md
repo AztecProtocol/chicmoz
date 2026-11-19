@@ -48,19 +48,21 @@ data; there is none yet.
 
 Fixtures are public. The recorder keeps only known fields, replaces ENRs, IP
 addresses outside loopback and the documentation ranges, and URLs to other
-hosts, reduces allowed URLs to their origin, and drops secret-named keys.
-`src/fixtures/fixtures.test.ts` re-checks every committed file (and every
-frame's decoded BSON) and fails on anything the recorder would have changed, a
-host name or home path. Its messages never quote the offending value. Block
-bytes are byte-exact chain data and cannot be rewritten; only public-chain or
-local-network blocks belong here.
+hosts, reduces allowed URLs to their origin, and drops secret-named keys. It
+refuses to write a file that still holds a private-zone or cloud host name, a
+home path, a secret-named query parameter, this machine's name, or (in a
+frame) a BSON binary value. `src/fixtures/fixtures.test.ts` applies the same
+checks to every committed file and every frame's decoded BSON; its messages
+never quote the offending value. Block bytes are byte-exact chain data and
+cannot be rewritten; only public-chain or local-network blocks belong here.
+Fixture names are lowercase words joined by `-`.
 
 ## Recording
 
 From `packages/test-harness`, `yarn record-fixtures <target> --source <source> ...`
 (builds the harness, then runs `build/recorder/cli.js`; with no arguments it
-prints the usage). Requests to non-loopback hosts are at least 1 s apart and each is logged
-to stderr. No command takes or sends a key.
+prints the usage). Within one run, requests to a non-loopback host are at least
+1 s apart; each is logged to stderr. No command takes or sends a key.
 
 **Testnet** (`<testnet node>` and `<sepolia rpc>` are public keyless endpoints):
 
@@ -91,25 +93,16 @@ yarn record-fixtures kafka --source local-network --connection 127.0.0.1:<kafka 
   --namespace <namespace> --network SANDBOX --events PENDING_TXS_EVENT,L2_TIPS_EVENT,CHAIN_INFO_EVENT \
   --aztec-version 6.0.0 --max 1
 yarn record-fixtures api --source local-network --base-url http://127.0.0.1:<explorer-api port> \
-  --routes routes.json --aztec-version 6.0.0
+  --routes src/recorder/local-network-routes.json --aztec-version 6.0.0
 ```
 
 Every `node` run also records node info and tips. `--scan` records the first
 block with each wanted feature: here a class publication and a deployment of
 that class from the network's own setup (blocks 1 and 2), and public logs from
-event-cannon traffic. `routes.json` lists
-one or more routes per UI module, with values taken from the recorded blocks:
-
-```json
-[
-  {
-    "name": "block-by-height",
-    "route": "/l2/blocks/:heightOrHash",
-    "path": "/l2/blocks/11",
-    "uiModule": "block"
-  }
-]
-```
+event-cannon traffic. `src/recorder/local-network-routes.json` lists one or
+more routes per UI module. Its tx hash, class id and instance address come
+from the recorded blocks and change on every network start: replace them with
+the new blocks' values before re-recording.
 
 The API and Kafka targets accept loopback addresses only. `fixtures.test.ts`
 lists every file other suites rely on; update it when a re-record renames one.

@@ -7,32 +7,59 @@ const DOC_IPV4 = "192.0.2.1";
 const DOC_IPV6 = "2001:db8::1";
 
 const ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", REDACTED_HOST]);
-const SECRET_KEY = /(^|[-_])(api[-_]?key|secret|password|private[-_]?key|mnemonic)([-_]|$)/i;
 const URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi;
 const ENR_PATTERN = /enr:-[A-Za-z0-9_-]+/g;
 const SHARED_KEY_SEGMENT = "temporary-api-key";
 const SAFE_KEY = /^[A-Za-z0-9_$]{1,64}$/;
-// A cloud host name spells its private address ("ip-10-0-0-5"); a home path names a machine's user.
-const HOST_IDENTITY = [/\bip-\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\b/, /\/(home|mnt|Users)\//];
+// A cloud host name spells its private address ("ip-10-0-0-5"), a private-zone name an internal host;
+// a home path names a machine's user.
+const HOST_IDENTITY = [
+  /\bip-\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\b/,
+  /\b[a-z0-9-]+\.(internal|local|localdomain|lan|corp|home)\b/i,
+  /\/(home|mnt|Users)\//,
+];
+const SECRET_LAST_WORD = new Set(["secret", "password", "passphrase", "mnemonic"]);
+const SECRET_LAST_PAIR = new Set(["api key", "private key", "access token", "auth token", "refresh token"]);
+const QUERY_PARAM = /[?&]([A-Za-z0-9_-]+)=/g;
+
+// By its last word, so `clientSecret` and `api_key` are secrets and `secretHash` is not.
+export const isSecretName = (name: string): boolean => {
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const last = words[words.length - 1] ?? "";
+  return (
+    SECRET_LAST_WORD.has(last) ||
+    SECRET_LAST_PAIR.has(words.slice(-2).join(" ")) ||
+    last === "apikey"
+  );
+};
 
 const isAllowedIp = (ip: string): boolean => {
-  if (isIP(ip) === 6) {
+  const version = isIP(ip);
+  if (version === 6) {
     const lower = ip.toLowerCase();
     return lower === "::1" || lower.startsWith("2001:db8:");
   }
   return (
+    version === 4 &&
+    (
     ip.startsWith("127.") ||
     ip === "0.0.0.0" ||
     ip.startsWith("192.0.2.") ||
     ip.startsWith("198.51.100.") ||
-    ip.startsWith("203.0.113.")
+    ip.startsWith("203.0.113."))
   );
 };
 
 // Hex and "::" appear in ordinary text ("dep::aztec" yields "::a"), so an IPv6
-// needs two non-empty groups; an IPv4 with a port is split again on ":".
+// needs two non-empty groups; an IPv4 with a port is split again on ":", and
+// one ending a sentence loses its period.
 const ipTokens = (s: string): string[] =>
-  s.split(/[^0-9a-fA-F:.]+/).flatMap((t) => {
+  s.split(/[^0-9a-fA-F:.]+/).flatMap((raw) => {
+    const t = raw.replace(/^\.+|\.+$/g, "");
     if (isIP(t) === 4) {
       return [t];
     }
@@ -99,7 +126,7 @@ export const sanitize = (value: unknown): unknown => {
   if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([k]) => !SECRET_KEY.test(k))
+        .filter(([k]) => !isSecretName(k))
         .map(([k, v]) => [sanitizeString(k), sanitize(v)]),
     );
   }
@@ -123,6 +150,9 @@ const stringLeaks = (value: string, path: string, identity: readonly string[]): 
     } else if (url !== new URL(url).origin) {
       reasons.push("URL with a path or query");
     }
+  }
+  if ([...value.matchAll(QUERY_PARAM)].some(([, name]) => isSecretName(name ?? ""))) {
+    reasons.push("secret-named query parameter");
   }
   if (ipTokens(value).some((ip) => !isAllowedIp(ip))) {
     reasons.push("IP address");
@@ -154,10 +184,10 @@ export const findLeaks = (
   if (value !== null && typeof value === "object") {
     return Object.entries(value).flatMap(([k, v], i) => {
       // Keys come from the recorded data too: one that is flagged or not a plain name is shown by position only.
-      const flagged = SECRET_KEY.test(k) || stringLeaks(k, "", identity).length > 0;
+      const flagged = isSecretName(k) || stringLeaks(k, "", identity).length > 0;
       const child = SAFE_KEY.test(k) && !flagged ? `${path}.${k}` : `${path}.<key ${i}>`;
       return [
-        ...(SECRET_KEY.test(k) ? [{ path: child, reason: "secret-named key" }] : []),
+        ...(isSecretName(k) ? [{ path: child, reason: "secret-named key" }] : []),
         ...stringLeaks(k, `${child} (key)`, identity),
         ...findLeaks(v, child, identity),
       ];

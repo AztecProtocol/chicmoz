@@ -15,7 +15,7 @@ import {
 } from "./node.js";
 
 const USAGE = `record-fixtures <target> --source local-network|testnet [options]
-  node   --url <aztec rpc> [--info] [--heights 1,2] [--scan 1..40 --want empty,public-logs,class-publish,instance-deploy]
+  node   --url <aztec rpc> [--heights 1,2] [--scan 1..40 --want empty,public-logs,class-publish,instance-deploy]
          [--checkpoint <n> [--find-multi-block]]
   l1     --rpc <l1 rpc> --aztec-version <v> --name <fixture> --contract <rollup|feeJuicePortal|...> --address <0x..>
          --event <Name> [--arg key=value] --from <block> --to <block> [--direction forward|backward] [--chunk 1000] [--max-requests 30]
@@ -31,7 +31,6 @@ const { positionals, values: v } = parseArgs({
   options: {
     source: { type: "string" },
     url: { type: "string" },
-    info: { type: "boolean" },
     heights: { type: "string" },
     scan: { type: "string" },
     want: { type: "string" },
@@ -68,6 +67,14 @@ const need = (name: keyof typeof v): string => {
   return value;
 };
 
+const posInt = (name: keyof typeof v, fallback?: string): number => {
+  const raw = v[name] ?? fallback;
+  if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw)) {
+    throw new Error(`--${name} takes a positive integer\n${USAGE}`);
+  }
+  return Number(raw);
+};
+
 const checkedUrl = (raw: string): string => {
   const url = new URL(raw);
   if (url.username || url.password) {
@@ -85,27 +92,40 @@ const main = async () => {
   const limiter = createLimiter(log);
 
   if (target === "node") {
+    // Every option is checked before the first request.
+    if (v.heights && !/^[1-9]\d*(,[1-9]\d*)*$/.test(v.heights)) {
+      throw new Error(`--heights takes positive integers joined by ","\n${USAGE}`);
+    }
+    const [from, to] = v.scan
+      ? (/^([1-9]\d*)\.\.([1-9]\d*)$/.exec(v.scan) ?? []).slice(1).map(Number)
+      : [];
+    if (v.scan && (from === undefined || to === undefined || from > to)) {
+      throw new Error(`--scan takes <from>..<to> with from <= to\n${USAGE}`);
+    }
+    const want = v.scan ? (need("want").split(",") as BlockFeature[]) : [];
+    if (!want.every((f) => BLOCK_FEATURES.includes(f))) {
+      throw new Error(`--want takes ${BLOCK_FEATURES.join(", ")}`);
+    }
+    const checkpoint = v.checkpoint ? posInt("checkpoint") : undefined;
     const r = { url: checkedUrl(need("url")), source, limiter, log };
     const version = await recordNodeInfo(r);
     if (v.heights) {
       await recordBlocks(r, version, v.heights.split(",").map(Number));
     }
-    if (v.scan) {
-      const [from, to] = v.scan.split("..").map(Number);
-      const want = need("want").split(",") as BlockFeature[];
-      if (!want.every((f) => BLOCK_FEATURES.includes(f))) {
-        throw new Error(`--want takes ${BLOCK_FEATURES.join(", ")}`);
-      }
-      const missing = await scanBlocks(r, version, from ?? 1, to ?? 1, want);
+    if (from !== undefined && to !== undefined) {
+      const missing = await scanBlocks(r, version, from, to, want);
       log(missing.length ? `not found: ${missing.join(", ")}` : "found every wanted feature");
     }
-    if (v.checkpoint) {
-      const n = await recordCheckpoint(r, version, Number(v.checkpoint), v["find-multi-block"] ?? false);
+    if (checkpoint !== undefined) {
+      const n = await recordCheckpoint(r, version, checkpoint, v["find-multi-block"] ?? false);
       log(`recorded checkpoint ${n}`);
     }
     return;
   }
   if (target === "l1") {
+    if (v.direction !== undefined && v.direction !== "forward" && v.direction !== "backward") {
+      throw new Error(`--direction is forward or backward\n${USAGE}`);
+    }
     const args = Object.fromEntries(
       (v.arg ?? []).map((a) => {
         const [k, val] = a.split("=");
@@ -121,11 +141,11 @@ const main = async () => {
       address: need("address") as `0x${string}`,
       eventName: need("event"),
       args: Object.keys(args).length > 0 ? args : undefined,
-      from: BigInt(need("from")),
-      to: BigInt(need("to")),
+      from: BigInt(posInt("from")),
+      to: BigInt(posInt("to")),
       direction: v.direction === "forward" ? "forward" : "backward",
-      chunk: BigInt(v.chunk ?? "1000"),
-      maxRequests: Number(v["max-requests"] ?? "30"),
+      chunk: BigInt(posInt("chunk", "1000")),
+      maxRequests: posInt("max-requests", "30"),
       limiter,
       log,
     });
@@ -139,8 +159,8 @@ const main = async () => {
       namespace: need("namespace"),
       network: need("network"),
       eventTypes: need("events").split(","),
-      maxPerEvent: Number(v.max ?? "1"),
-      timeoutMs: Number(v["timeout-ms"] ?? "60000"),
+      maxPerEvent: posInt("max", "1"),
+      timeoutMs: posInt("timeout-ms", "60000"),
       log,
     });
     log(`frames: ${JSON.stringify(counts)}`);

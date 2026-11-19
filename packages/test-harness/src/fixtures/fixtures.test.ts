@@ -2,11 +2,14 @@ import { BSON } from "bson";
 import { readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { frameLeaks } from "./frame.js";
 import {
   FIXTURE_KINDS,
+  FIXTURE_NAME,
   FIXTURE_SOURCES,
   fromTagged,
   toTagged,
+  type Fixture,
   type FixtureKind,
   type FixtureSource,
 } from "./format.js";
@@ -53,12 +56,16 @@ const REQUIRED: Record<FixtureSource, Partial<Record<FixtureKind, string[]>>> = 
     ],
   },
 };
-// What the parseBlock test needs the blocks to contain, or its count checks compare zeros.
-// No recorded block carries an L2-to-L1 message: neither source sends one on demand.
-const BLOCK_FEATURES_NEEDED = ["empty", "public-logs", "class-publish", "instance-deploy"] as const;
+// What the parseBlock test needs the blocks to contain, read from the node's values rather than the
+// feature labels. No recorded block carries an L2-to-L1 message: neither source sends one on demand.
+type Expected = Fixture<"l2-block">["data"]["expected"];
+const BLOCK_CONTENT_NEEDED: Record<string, (e: Expected) => boolean> = {
+  "an empty block": (e) => e.counts.txEffects === 0,
+  "a class publication": (e) => e.contractClassIds.length > 0,
+  "an instance deployment": (e) => e.contractInstanceAddresses.length > 0,
+};
 const BLOCK_COUNTS_NEEDED = ["noteHashes", "nullifiers", "publicDataWrites", "publicLogs", "privateLogs", "contractClassLogs"] as const;
 
-// Every file under fixtures/ except the README, as [source, kind, name] when it sits where a fixture belongs.
 const corpus = () =>
   readdirSync(FIXTURES_DIR, { recursive: true, encoding: "utf8" })
     .filter((f) => f !== "README.md" && statSync(join(FIXTURES_DIR, f)).isFile())
@@ -66,6 +73,7 @@ const corpus = () =>
       const [source, kind, file, ...rest] = f.split(sep);
       const placed =
         rest.length === 0 &&
+        FIXTURE_NAME.test(file?.slice(0, -".json".length) ?? "") &&
         FIXTURE_SOURCES.includes(source as FixtureSource) &&
         FIXTURE_KINDS.includes(kind as FixtureKind) &&
         file?.endsWith(".json");
@@ -85,12 +93,10 @@ describe("committed fixtures", () => {
   // an ENR (it encodes one), a private host, a local path or a key, also not inside a frame's bytes.
   it("hold no address, ENR, private URL, local path or key", () => {
     const leaks = corpus().flatMap((f) => {
-      const decoded =
-        f.kind === "frame"
-          ? [BSON.deserialize(frameBytes(loadFixture(f.source, "frame", f.name)))]
-          : [];
-      return [readFixtureFile(join(FIXTURES_DIR, f.path)), ...decoded].flatMap((v) =>
-        findLeaks(toTagged(v)).map((l) => `${f.path} ${l.path}: ${l.reason}`),
+      const frame =
+        f.kind === "frame" ? frameLeaks(frameBytes(loadFixture(f.source, "frame", f.name)), "$bson") : [];
+      return [...findLeaks(readFixtureFile(join(FIXTURES_DIR, f.path))), ...frame].map(
+        (l) => `${f.path} ${l.path}: ${l.reason}`,
       );
     });
     expect(leaks).toEqual([]);
@@ -108,8 +114,8 @@ describe("committed fixtures", () => {
     const blocks = FIXTURE_SOURCES.flatMap((source) =>
       listFixtures(source, "l2-block").map((name) => loadFixture(source, "l2-block", name)),
     );
-    const features = new Set(blocks.flatMap((b) => b.features));
-    expect(BLOCK_FEATURES_NEEDED.filter((f) => !features.has(f))).toEqual([]);
+    const missing = Object.entries(BLOCK_CONTENT_NEEDED).filter(([, has]) => !blocks.some((b) => has(b.data.expected)));
+    expect(missing.map(([what]) => what)).toEqual([]);
     const empty = BLOCK_COUNTS_NEEDED.filter((k) => blocks.every((b) => b.data.expected.counts[k] === 0));
     expect(empty).toEqual([]);
   });
@@ -121,10 +127,12 @@ describe("sanitize", () => {
       enr: "enr:-My4QGdIJJ5HL2i7XtQSm3BCypYBZzRh0o7uAO1nW0Bg",
       rpcUrl: "https://node.internal.corp:8080/v1/temporary-api-key/x",
       withCredentials: "http://user:pw@127.0.0.1:8080",
-      cause: "connect ECONNREFUSED 10.1.2.3:8080 and 2a01:4f8::7",
+      cause: "connect ECONNREFUSED 10.1.2.3:8080 and 2a01:4f8::7, then 10.4.4.4.",
       apiKey: "abc",
+      clientSecret: "abc",
       local: "http://127.0.0.1:8080/l2/blocks?from=1",
       localPath: "http://127.0.0.1:8080/l2/blocks",
+      lookalike: "http://127.example.net/x",
       secretHash: "0x01",
       noirPath: "use dep::aztec::macros",
       block: { number: 5, hash: "0x2a", timestamp: 1795107396n, at: new Date(0) },
@@ -134,12 +142,15 @@ describe("sanitize", () => {
       "$.enr",
       "$.rpcUrl",
       "$.rpcUrl",
+      "$.rpcUrl",
       "$.withCredentials",
       "$.cause",
       "$.<key 4>",
+      "$.<key 5>",
       "$.local",
       "$.localPath",
-      "$.<key 10> (key)",
+      "$.lookalike",
+      "$.<key 12> (key)",
     ]);
     const clean = sanitize(raw);
     expect(findLeaks(toTagged(clean))).toEqual([]);
@@ -147,17 +158,35 @@ describe("sanitize", () => {
       enr: "enr:-redacted",
       rpcUrl: "http://rpc.example",
       withCredentials: "http://rpc.example",
-      cause: "connect ECONNREFUSED 192.0.2.1:8080 and 2001:db8::1",
+      cause: "connect ECONNREFUSED 192.0.2.1:8080 and 2001:db8::1, then 192.0.2.1.",
       local: "http://127.0.0.1:8080",
       localPath: "http://127.0.0.1:8080",
+      lookalike: "http://rpc.example",
       secretHash: "0x01",
       noirPath: "use dep::aztec::macros",
       block: { number: 5, hash: "0x2a", timestamp: 1795107396n, at: new Date(0) },
       "192.0.2.1": "a key is data too",
     });
+    // Rejected, not rewritten: the recorder refuses to write these.
     const identity = ["worker-7", "worker7"];
-    const local = { host: "ip-10-0-1-2.eu-west-2.compute.internal", path: "/home/me/x", mine: "worker-7", worker7: 1 };
-    expect(findLeaks(local, "$", identity).map((l) => l.path)).toEqual(["$.host", "$.path", "$.mine", "$.<key 3> (key)"]);
+    const local = {
+      host: "ip-10-0-1-2.eu-west-2.compute.internal",
+      node: "worker.internal",
+      path: "/home/me/x",
+      mine: "worker-7",
+      worker7: 1,
+      route: "/l2/info?apiKey=x",
+    };
+    expect(findLeaks(local, "$", identity).map((l) => l.path)).toEqual([
+      "$.host",
+      "$.node",
+      "$.path",
+      "$.mine",
+      "$.<key 4> (key)",
+      "$.route",
+    ]);
+    const binary = BSON.serialize({ data: { b: new BSON.Binary(new TextEncoder().encode("http://10.0.0.1")) } });
+    expect(frameLeaks(binary, "$").map((l) => l.reason)).toEqual(["binary value in a frame"]);
   });
 
   it("tags round-trip bigint, bytes and dates, and malformed tags throw", () => {
@@ -165,6 +194,8 @@ describe("sanitize", () => {
     expect(fromTagged(JSON.parse(JSON.stringify(toTagged(value))))).toEqual(value);
     expect(() => fromTagged({ $hex: "abc" })).toThrow();
     expect(() => fromTagged({ $date: "yesterday" })).toThrow();
+    expect(() => fromTagged({ $date: "2026-02-31T00:00:00.000Z" })).toThrow();
+    expect(() => loadFixture("testnet", "l2-block", "../l2-tips/l2-tips")).toThrow();
     expect(() => fromTagged({ $bigint: "1", extra: 1 })).toThrow();
   });
 });

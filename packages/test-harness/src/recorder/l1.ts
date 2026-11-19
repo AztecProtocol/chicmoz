@@ -12,6 +12,7 @@ import {
   custom,
   decodeEventLog,
   type Abi,
+  type AbiEvent,
   type EIP1193RequestFn,
 } from "viem";
 import { type FixtureSource } from "../fixtures/format.js";
@@ -71,6 +72,20 @@ export const recordL1Log = async (s: L1Search): Promise<boolean> => {
   if (!abi) {
     throw new Error(`unknown contract ${s.contract}; one of ${Object.keys(ABIS).join(", ")}`);
   }
+  const event = abi.find(
+    (item): item is AbiEvent => item.type === "event" && item.name === s.eventName,
+  );
+  if (!event) {
+    throw new Error(`${s.contract} has no event ${s.eventName}`);
+  }
+  const filter = Object.entries(s.args ?? {});
+  const unknown = filter.filter(([k]) => !event.inputs.some((i) => i.indexed && i.name === k));
+  if (unknown.length > 0) {
+    throw new Error(`${s.eventName} has no indexed input ${unknown.map(([k]) => k).join(", ")}`);
+  }
+  if (s.from > s.to) {
+    throw new Error("--from is above --to");
+  }
   const client = createPublicClient({ transport: limitedTransport(s.rpc, s.limiter) });
   let requests = 0;
   for (
@@ -91,27 +106,27 @@ export const recordL1Log = async (s: L1Search): Promise<boolean> => {
       fromBlock,
       toBlock,
     });
-    const log = s.direction === "forward" ? logs[0] : logs[logs.length - 1];
-    if (!log) {
+    // viem spreads the provider's log over its decoded result, so a provider field
+    // named `args` or `eventName` would win, and it drops a zero-valued filter:
+    // decode again from topics and data alone, and filter again.
+    const matches = logs.flatMap((log) => {
+      const args: unknown = decodeEventLog({
+        abi: [event],
+        data: log.data,
+        topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
+        strict: true,
+      }).args;
+      if (!isNamedArgs(args)) {
+        throw new Error(`${s.eventName} has unnamed inputs; the listener reads args by name`);
+      }
+      const hit = filter.every(([k, want]) => String(args[k]).toLowerCase() === String(want).toLowerCase());
+      return hit ? [{ log, args }] : [];
+    });
+    const match = s.direction === "forward" ? matches[0] : matches[matches.length - 1];
+    if (!match) {
       continue;
     }
-    // viem spreads the provider's log over its decoded result, so a provider field named
-    // `args` or `eventName` would win; decode again from topics and data alone.
-    const decoded = decodeEventLog({
-      abi,
-      data: log.data,
-      topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
-      strict: true,
-    });
-    // Mistyped for a non-literal ABI; widened so the comparison does not narrow `s.eventName`.
-    const decodedName: unknown = decoded.eventName;
-    if (decodedName !== s.eventName) {
-      throw new Error(`log at L1 block ${log.blockNumber} decodes as ${String(decodedName)}`);
-    }
-    const args: unknown = decoded.args;
-    if (!isNamedArgs(args)) {
-      throw new Error(`${s.eventName} has unnamed inputs; the listener reads args by name`);
-    }
+    const { log, args } = match;
     const block = await client.getBlock({ blockNumber: log.blockNumber });
     const tx = await client.getTransaction({ hash: log.transactionHash });
     s.log(

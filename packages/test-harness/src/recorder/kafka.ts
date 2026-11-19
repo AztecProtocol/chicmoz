@@ -1,9 +1,21 @@
-import { Kafka } from "kafkajs";
+import { Kafka, type ISocketFactory } from "kafkajs";
+import { connect } from "node:net";
 import { type FixtureSource } from "../fixtures/format.js";
 import { writeFixture } from "./write.js";
 
 // RPC-node topics carry operator URLs and error stacks, so the tap never reads them.
 export const TAPPABLE_EVENTS = ["PENDING_TXS_EVENT", "L2_TIPS_EVENT", "CHAIN_INFO_EVENT"];
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
+
+// Broker metadata names every later destination (partition leaders, the group
+// coordinator), so each socket is checked, not only the bootstrap address.
+const loopbackOnly: ISocketFactory = ({ host, port, onConnect }) => {
+  if (!LOOPBACK.has(host)) {
+    throw new Error("the tap connects only to brokers on loopback (the recording stack)");
+  }
+  return connect({ host: host === "localhost" ? "127.0.0.1" : host, port }, onConnect);
+};
 
 export type KafkaTap = {
   source: FixtureSource;
@@ -27,13 +39,10 @@ export const tapFrames = async (t: KafkaTap): Promise<Record<string, number>> =>
   if (refused.length > 0) {
     throw new Error(`the tap records only ${TAPPABLE_EVENTS.join(", ")}`);
   }
-  const host = t.connection.split(":")[0] ?? "";
-  if (host !== "127.0.0.1" && host !== "localhost") {
-    throw new Error("the tap reads only a broker on loopback (the recording stack)");
-  }
   const kafka = new Kafka({
     clientId: "fixture-tap",
     brokers: [t.connection],
+    socketFactory: loopbackOnly,
     sasl: {
       mechanism: "plain",
       username: process.env.KAFKA_SASL_USERNAME ?? "controller_user",

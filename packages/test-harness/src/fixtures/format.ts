@@ -7,11 +7,15 @@ export const FIXTURE_SOURCES = ["local-network", "testnet"] as const;
 export type FixtureSource = (typeof FIXTURE_SOURCES)[number];
 
 const hexString = z.string().regex(/^0x[0-9a-f]*$/i);
+const byteHex = z.string().regex(/^(?:[0-9a-f]{2})+$/);
+
+/** File name of a fixture without `.json`: also a path segment, so no dots or slashes. */
+export const FIXTURE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const l2BlockData = z
   .object({
     /** `L2Block.toBuffer()` as hex, exactly what aztec-listener publishes in `NEW_BLOCK_EVENT.block`. */
-    hex: z.string().regex(/^[0-9a-f]+$/),
+    hex: byteHex,
     /** Values read from the node's JSON response, not decoded from `hex`. */
     expected: z
       .object({
@@ -79,7 +83,7 @@ const PROTOCOL_CONTRACTS = ["classRegistry", "feeJuice", "instanceRegistry", "mu
 const addressMap = (keys: readonly string[]) =>
   z.object(Object.fromEntries(keys.map((k) => [k, hexString.optional()]))).strict();
 
-// Raw JSON-RPC results, projected onto known fields so a new field cannot slip into a public file unreviewed.
+// Raw JSON-RPC results, strict: a field the schema does not name fails, so none reaches a public file unreviewed.
 const nodeInfoData = z
   .object({
     result: z
@@ -126,7 +130,7 @@ const frameData = z
     /** A key of `L2_MESSAGES` in `@chicmoz-pkg/message-registry`. */
     eventType: z.string().regex(/^[A-Z0-9_]+$/),
     /** The Kafka message value as published: `BSON.serialize({ data })`, hex. */
-    bson: z.string().regex(/^[0-9a-f]+$/),
+    bson: byteHex,
   })
   .strict();
 
@@ -158,6 +162,16 @@ const l1LogData = z
   .strict()
   .refine((d) => d.log.eventName === d.eventName, "log.eventName differs from eventName");
 
+/** Any JSON value; required, where `z.unknown()` would also accept a missing key. */
+export const jsonValue = z.union([
+  z.record(z.string(), z.unknown()),
+  z.array(z.unknown()),
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
 const apiBodyData = z
   .object({
     route: z.string().startsWith("/"),
@@ -165,7 +179,7 @@ const apiBodyData = z
     status: z.number().int(),
     /** File in `services/explorer-ui-v2/src/api/` whose schemas parse this body. */
     uiModule: z.string(),
-    body: z.unknown(),
+    body: jsonValue,
   })
   .strict();
 
@@ -282,5 +296,10 @@ export const fromTagged = (value: unknown): unknown => {
   if (tag === "$hex") {
     return Buffer.from(raw, "hex");
   }
-  return new Date(raw);
+  const date = new Date(raw);
+  // The pattern admits impossible dates ("2026-02-31"), which Date would roll over.
+  if (Number.isNaN(date.getTime()) || date.toISOString() !== raw) {
+    throw new Error(`malformed tagged value under key ${tag}`);
+  }
+  return date;
 };

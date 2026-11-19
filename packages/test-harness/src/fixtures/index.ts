@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   FIXTURE_DATA_SCHEMAS,
+  FIXTURE_NAME,
   fixtureEnvelopeSchema,
   fromTagged,
   type Fixture,
@@ -61,6 +62,9 @@ export const loadFixture = <K extends FixtureKind>(
   kind: K,
   name: string,
 ): Fixture<K> => {
+  if (!FIXTURE_NAME.test(name)) {
+    throw new Error(`fixture names are lowercase words joined by "-"; got one that is not`);
+  }
   const path = join(kindDir(source, kind), `${name}.json`);
   const envelope = fixtureEnvelopeSchema.parse(readFixtureFile(path));
   if (envelope.kind !== kind || envelope.source !== source) {

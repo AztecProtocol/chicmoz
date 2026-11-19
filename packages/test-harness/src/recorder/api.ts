@@ -1,4 +1,4 @@
-import { type FixtureSource } from "../fixtures/format.js";
+import { jsonValue, type FixtureSource } from "../fixtures/format.js";
 import { boundedJson } from "./http.js";
 import { createLimiter } from "./limiter.js";
 import { writeFixture } from "./write.js";
@@ -14,7 +14,6 @@ export type ApiRecording = {
   log: (line: string) => void;
 };
 
-/** GETs each route once and records the body as served. */
 export const recordApiBodies = async (a: ApiRecording): Promise<void> => {
   const base = new URL(a.baseUrl);
   if (base.hostname !== "127.0.0.1" && base.hostname !== "localhost") {
@@ -26,7 +25,8 @@ export const recordApiBodies = async (a: ApiRecording): Promise<void> => {
     if (url.origin !== base.origin) {
       throw new Error(`route ${r.name} leaves the recording API`);
     }
-    const { status, json: body } = await boundedJson(limiter, url.href, { method: "GET" });
+    const { status, json } = await boundedJson(limiter, url.href, { method: "GET" });
+    const body = jsonValue.parse(json);
     a.log(
       `wrote ${writeFixture({
         source: a.source,

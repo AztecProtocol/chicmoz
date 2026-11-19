@@ -1,12 +1,13 @@
-import { BSON } from "bson";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join } from "node:path";
 import { REPO_ROOT } from "../repo.js";
 import { FIXTURES_DIR, MAX_FIXTURE_BYTES } from "../fixtures/index.js";
+import { frameLeaks } from "../fixtures/frame.js";
 import {
   FIXTURE_DATA_SCHEMAS,
   FIXTURE_FORMAT,
+  FIXTURE_NAME,
   fromTagged,
   toTagged,
   type FixtureData,
@@ -31,13 +32,14 @@ export type FixtureToWrite<K extends FixtureKind> = {
   data: FixtureData[K];
 };
 
-/**
- * Sanitizes, validates and writes one fixture. Refuses to write when the
- * sanitized file would still fail the committed leak guard.
- */
+/** Refuses to write when the sanitized file would still fail the committed leak guard. */
 export const writeFixture = <K extends FixtureKind>(
   f: FixtureToWrite<K>,
 ): string => {
+  // The name becomes a path segment and a public file name.
+  if (!FIXTURE_NAME.test(f.name) || findLeaks(f.name, "$name", MACHINE_IDENTITY).length > 0) {
+    throw new Error(`refusing fixture name: lowercase words joined by "-", nothing naming this machine`);
+  }
   const envelope = {
     format: FIXTURE_FORMAT,
     kind: f.kind,
@@ -48,11 +50,10 @@ export const writeFixture = <K extends FixtureKind>(
     features: [...new Set(f.features)].sort(),
     data: toTagged(sanitize(f.data)),
   };
-  // A frame's bytes must stay exact, so a leak inside them rejects the frame rather than being redacted.
   const decodedFrame =
     f.kind === "frame"
-      ? findLeaks(
-          toTagged(BSON.deserialize(new Uint8Array(Buffer.from((f.data as FixtureData["frame"]).bson, "hex")))),
+      ? frameLeaks(
+          new Uint8Array(Buffer.from((f.data as FixtureData["frame"]).bson, "hex")),
           "$.data.bson",
           MACHINE_IDENTITY,
         )

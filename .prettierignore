@@ -1,2 +1,2 @@
-# Recorded data: written by the recorder, byte-stable across re-records
+# Recorded data keeps the recorder's formatting; prettier would sort its keys
 packages/test-harness/fixtures/

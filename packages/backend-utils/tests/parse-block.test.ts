@@ -6,10 +6,9 @@ import {
 import { describe, expect, it } from "vitest";
 import { blockFromBuffer, parseBlock } from "../src/parse-block.js";
 
-// Recorded v6 blocks against what the node itself reported. Hash, archive,
-// height and checkpoint coordinates are the node's own values; the counts come
-// from the SDK's JSON decoding of the same response, a different path from
-// the binary one decoded here.
+// Hash, archive, height and checkpoint coordinates are the node's RPC fields;
+// tx hashes and counts are the SDK's decoding of its JSON answer, not of the
+// bytes decoded here.
 const blocks = FIXTURE_SOURCES.flatMap((source) =>
   listFixtures(source, "l2-block").map((name) => {
     const { data } = loadFixture(source, "l2-block", name);
