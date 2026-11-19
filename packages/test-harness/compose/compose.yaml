@@ -8,7 +8,7 @@ x-labels: &labels
 services:
   postgres:
     profiles: [infra]
-    image: postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+    image: postgres:15.20-alpine@sha256:e18480a22d6e48f4d816a6696769b1ec09ac73a824c5649e49c7d8b684913f3d
     labels: *labels
     environment:
       POSTGRES_USER: admin
@@ -25,7 +25,9 @@ services:
         full_page_writes=off,
       ]
     ports: ["127.0.0.1::5432"]
-    volumes: [pgdata:/var/lib/postgresql]
+    # PGDATA and the image's declared VOLUME for this major version: a mount
+    # anywhere else leaves the data in an anonymous volume.
+    volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       # TCP, not the socket: the image's init phase runs a socket-only server.
       test: [CMD, pg_isready, -h, 127.0.0.1, -U, admin, -d, postgres]

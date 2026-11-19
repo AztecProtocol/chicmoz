@@ -15,6 +15,8 @@ Requirements:
 minikube start --kubernetes-version=v1.25.3 --cpus max --memory max && skaffold run -f k8s/local/skaffold.default.yaml
 ```
 
+Local Postgres runs version 15 and keeps its data on the `data-postgresql-0` volume claim. If it fails to start because that claim holds data from an earlier local setup or another Postgres major version, `kubectl -n chicmoz delete statefulset postgresql && kubectl -n chicmoz delete pvc data-postgresql-0` followed by your `skaffold run -f ...` command starts it empty, erasing every local database.
+
 **terminal 2:**
 
 ⚠️ _will ask for your password in order to port forward_
