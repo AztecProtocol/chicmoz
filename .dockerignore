@@ -11,8 +11,9 @@ k8s/production/
 **/dist/
 **/node_modules/
 
-# Test output
+# Test output and recorded test data
 **/coverage/
+packages/test-harness/fixtures/
 
 # Local dev and IDE files
 .env*

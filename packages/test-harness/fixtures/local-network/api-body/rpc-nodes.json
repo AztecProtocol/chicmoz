@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.491Z",
+  "origin": "GET /l2/rpc-nodes",
+  "features": [],
+  "data": {
+    "route": "/l2/rpc-nodes",
+    "path": "/l2/rpc-nodes",
+    "status": 200,
+    "uiModule": "rpc-node",
+    "body": [
+      {
+        "rpcNodeName": "sandbox",
+        "l2NetworkId": "SANDBOX",
+        "rollupVersion": "1685378643",
+        "nodeVersion": "6.0.0",
+        "l1ChainId": 31337,
+        "createdAt": "2026-11-19T19:14:16.750Z",
+        "lastSeenAt": "2026-11-19T19:18:17.115Z"
+      }
+    ]
+  }
+}

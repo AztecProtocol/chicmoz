@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:16.411Z",
+  "origin": "eth_getLogs rollup.L2ProofVerified at L1 block 12169799",
+  "features": [],
+  "data": {
+    "contract": "rollup",
+    "eventName": "L2ProofVerified",
+    "log": {
+      "address": "0x1f435a7f2da358caf887a470faeee7d5d5f4efba",
+      "blockHash": "0x59aa79c8708f7a9b4774ec9ea9baf282402c61d804dabeb6bc6652cc76d812f1",
+      "blockNumber": {
+        "$bigint": "12169799"
+      },
+      "data": "0x",
+      "logIndex": 30,
+      "removed": false,
+      "topics": [
+        "0x034dd13d657aeb14f8dec7291c4a8ddb3b20d40cf2412714e72f97f19c735609",
+        "0x0000000000000000000000000000000000000000000000000000000000008348",
+        "0x000000000000000000000000a09d54bcfb72099c286c5fbbc044a5d1873e99b2"
+      ],
+      "transactionHash": "0x87a37f458fa5d6da03be66ec51600ef0bf0918f9e3bee0cc06fd2d5b7737e2e8",
+      "transactionIndex": 40,
+      "eventName": "L2ProofVerified",
+      "args": {
+        "checkpointNumber": {
+          "$bigint": "33608"
+        },
+        "proverId": "0xA09d54BcFB72099c286c5FBBC044A5d1873e99b2"
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1795108524"
+    },
+    "transactionFrom": "0x8fe5b4c99c9d1b71c6405a63fd5194018fdc3217"
+  }
+}

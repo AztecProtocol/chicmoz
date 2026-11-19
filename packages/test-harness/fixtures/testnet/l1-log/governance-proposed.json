@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:26.147Z",
+  "origin": "eth_getLogs governance.Proposed at L1 block 11969282",
+  "features": [],
+  "data": {
+    "contract": "governance",
+    "eventName": "Proposed",
+    "log": {
+      "address": "0xcaf7447721447b22cd0076ac7c63877c3afd329f",
+      "blockHash": "0x8e2c427852a488f2f9eede1a5a42804a4bc46f7c3405ea14965012a9e13213d3",
+      "blockNumber": {
+        "$bigint": "11969282"
+      },
+      "data": "0x",
+      "logIndex": 36,
+      "removed": false,
+      "topics": [
+        "0xaa9a4d6243341331785569c732ffe9c81a3e9c2aafa58faab1afe4797668433f",
+        "0x0000000000000000000000000000000000000000000000000000000000000008",
+        "0x0000000000000000000000005e9d4e98a9258951fcbbe644d6cbf122845f93be"
+      ],
+      "transactionHash": "0x9201b09b633dc5db0146a7ce1f9c519c1dea52347e20c3a257d18e6e7e9f45e4",
+      "transactionIndex": 25,
+      "eventName": "Proposed",
+      "args": {
+        "proposalId": {
+          "$bigint": "8"
+        },
+        "proposal": "0x5e9d4e98a9258951fCBbe644d6cBF122845F93be"
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1792668936"
+    },
+    "transactionFrom": "0x3b218d0f26d15b36c715cb06c949210a0d630637"
+  }
+}

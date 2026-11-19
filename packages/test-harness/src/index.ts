@@ -1,4 +1,17 @@
 export { deliver } from "./deliver.js";
+export {
+  FIXTURES_DIR,
+  FIXTURE_KINDS,
+  FIXTURE_SOURCES,
+  frameBytes,
+  listFixtures,
+  loadFixture,
+  type Fixture,
+  type FixtureData,
+  type FixtureFeature,
+  type FixtureKind,
+  type FixtureSource,
+} from "./fixtures/index.js";
 export { harnessGlobalSetup } from "./global-setup.js";
 export {
   MIGRATING_SERVICES,

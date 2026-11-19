@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:36.021Z",
+  "origin": "eth_getLogs rollup.ValidatorQueued at L1 block 12109851",
+  "features": [],
+  "data": {
+    "contract": "rollup",
+    "eventName": "ValidatorQueued",
+    "log": {
+      "address": "0x1f435a7f2da358caf887a470faeee7d5d5f4efba",
+      "blockHash": "0x03b6cd1ddab16fc775c3c5e0ce81b529c0445d6f6f10c0e139faddc890451f15",
+      "blockNumber": {
+        "$bigint": "12109851"
+      },
+      "data": "0x",
+      "logIndex": 307,
+      "removed": false,
+      "topics": [
+        "0x676247b4195b3fe545499177befc02b4b4bebd3805a2283b30defcae63d54661",
+        "0x0000000000000000000000004b7ea307821bba59614f143693445725f7d906a6",
+        "0x0000000000000000000000007bf737252da367d925256382ae01990c0232b872"
+      ],
+      "transactionHash": "0x6e768262410c6c1979d0840d426c8615b6d40f34a0be3338cc88177e0238baca",
+      "transactionIndex": 116,
+      "eventName": "ValidatorQueued",
+      "args": {
+        "attester": "0x4b7EA307821Bba59614F143693445725F7D906A6",
+        "withdrawer": "0x7Bf737252dA367D925256382aE01990C0232b872"
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1794377076"
+    },
+    "transactionFrom": "0x7bf737252da367d925256382ae01990c0232b872"
+  }
+}

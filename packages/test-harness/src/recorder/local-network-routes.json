@@ -1,0 +1,92 @@
+[
+  {
+    "name": "block-by-height",
+    "route": "/l2/blocks/:heightOrHash",
+    "path": "/l2/blocks/11",
+    "uiModule": "block"
+  },
+  {
+    "name": "tx-effect-by-hash",
+    "route": "/l2/tx-effects/:hash",
+    "path": "/l2/tx-effects/0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+    "uiModule": "tx-effect"
+  },
+  {
+    "name": "pending-txs",
+    "route": "/l2/txs",
+    "path": "/l2/txs",
+    "uiModule": "tx"
+  },
+  {
+    "name": "public-call-requests-by-tx",
+    "route": "/l2/public-call-requests/:txHash",
+    "path": "/l2/public-call-requests/0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+    "uiModule": "tx"
+  },
+  {
+    "name": "contract-instance",
+    "route": "/l2/contract-instances/:address",
+    "path": "/l2/contract-instances/0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "uiModule": "contract"
+  },
+  {
+    "name": "contract-class-versions",
+    "route": "/l2/contract-classes/:classId",
+    "path": "/l2/contract-classes/0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+    "uiModule": "contract"
+  },
+  {
+    "name": "chain-info",
+    "route": "/l2/info",
+    "path": "/l2/info",
+    "uiModule": "chain-info"
+  },
+  {
+    "name": "fee-recipients",
+    "route": "/l2/fee-recipients",
+    "path": "/l2/fee-recipients",
+    "uiModule": "fee-recipient"
+  },
+  {
+    "name": "governance-proposals",
+    "route": "/l1/governance/proposals",
+    "path": "/l1/governance/proposals",
+    "uiModule": "governance"
+  },
+  {
+    "name": "l1-contract-events",
+    "route": "/l1/contract-events",
+    "path": "/l1/contract-events",
+    "uiModule": "l1-contract-event"
+  },
+  {
+    "name": "l2-validator-totals",
+    "route": "/l1/l2-validators/totals",
+    "path": "/l1/l2-validators/totals",
+    "uiModule": "l1-l2-validator"
+  },
+  {
+    "name": "rpc-nodes",
+    "route": "/l2/rpc-nodes",
+    "path": "/l2/rpc-nodes",
+    "uiModule": "rpc-node"
+  },
+  {
+    "name": "search-by-height",
+    "route": "/l2/search",
+    "path": "/l2/search?q=11",
+    "uiModule": "search"
+  },
+  {
+    "name": "total-tx-effects",
+    "route": "/l2/stats/total-tx-effects",
+    "path": "/l2/stats/total-tx-effects",
+    "uiModule": "stats"
+  },
+  {
+    "name": "tips",
+    "route": "/l2/tips",
+    "path": "/l2/tips",
+    "uiModule": "tips"
+  }
+]

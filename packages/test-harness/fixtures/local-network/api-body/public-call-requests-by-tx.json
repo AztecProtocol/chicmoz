@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.382Z",
+  "origin": "GET /l2/public-call-requests/:txHash",
+  "features": [],
+  "data": {
+    "route": "/l2/public-call-requests/:txHash",
+    "path": "/l2/public-call-requests/0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+    "status": 200,
+    "uiModule": "tx",
+    "body": [
+      {
+        "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+        "msgSender": "0x1e316519700ea215a63806a1ee6155f0764ccb916f21c32085a3e513c4e4e0a2",
+        "contractAddress": "0x1e316519700ea215a63806a1ee6155f0764ccb916f21c32085a3e513c4e4e0a2",
+        "isStaticCall": false,
+        "calldataHash": "0x0795c98b3ac3a945a9e3e23f002b8a664d25f46e88f609ae1b9604e2e83e7b12",
+        "callType": "revertible",
+        "functionSelector": "0x730b06a5",
+        "contractName": "Token",
+        "functionName": "_finalize_transfer_to_private_unsafe",
+        "timestamp": 1795115707355
+      }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "kind": "l1-log",
+  "source": "testnet",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:15:11.273Z",
+  "origin": "eth_getLogs rollup.CheckpointProposed at L1 block 12169706",
+  "features": [],
+  "data": {
+    "contract": "rollup",
+    "eventName": "CheckpointProposed",
+    "log": {
+      "address": "0x1f435a7f2da358caf887a470faeee7d5d5f4efba",
+      "blockHash": "0xed30ba5df691ef19134e947ff3873f86d9770acfd0378e3c111aaae137f95343",
+      "blockNumber": {
+        "$bigint": "12169706"
+      },
+      "data": "0x00000000000000000000000000000000000000000000000000000000000000602e7f72b2a7528f722ee7699c9eed183bad2d818ae5588e1241eb87e2c5c84f5ff29cd5ee10698fc26658e231a79fb7469fdb8cd608ce78b7e9bcbd1ddedebdb60000000000000000000000000000000000000000000000000000000000000001010fcfb34bb0825e9f4ca19d9586fb46d7979bdcde3ace86c9772a0566b3455b",
+      "logIndex": 27,
+      "removed": false,
+      "topics": [
+        "0x6ff492bf2b4ca1b93a175167d14b3e46085b935cab3f39ca94013000799b93a0",
+        "0x0000000000000000000000000000000000000000000000000000000000008340",
+        "0x0b1c5bf2ffa43817b11727b5604637684de653b422dd402ced4c41890c25dff3"
+      ],
+      "transactionHash": "0xa5cb3dd8f8b8beddf2e631051ed64498469d8cb30882e9336ef2b77136e05f83",
+      "transactionIndex": 51,
+      "eventName": "CheckpointProposed",
+      "args": {
+        "checkpointNumber": {
+          "$bigint": "33600"
+        },
+        "archive": "0x0b1c5bf2ffa43817b11727b5604637684de653b422dd402ced4c41890c25dff3",
+        "versionedBlobHashes": [
+          "0x010fcfb34bb0825e9f4ca19d9586fb46d7979bdcde3ace86c9772a0566b3455b"
+        ],
+        "payloadDigest": "0x2e7f72b2a7528f722ee7699c9eed183bad2d818ae5588e1241eb87e2c5c84f5f",
+        "attestationsHash": "0xf29cd5ee10698fc26658e231a79fb7469fdb8cd608ce78b7e9bcbd1ddedebdb6"
+      }
+    },
+    "blockTimestamp": {
+      "$bigint": "1795107396"
+    },
+    "transactionFrom": "0x4d673623a390a9e8dc9a830086da1d0455f9ab1e"
+  }
+}

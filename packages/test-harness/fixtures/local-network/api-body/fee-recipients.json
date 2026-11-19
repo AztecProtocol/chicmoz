@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.439Z",
+  "origin": "GET /l2/fee-recipients",
+  "features": [],
+  "data": {
+    "route": "/l2/fee-recipients",
+    "path": "/l2/fee-recipients",
+    "status": 200,
+    "uiModule": "fee-recipient",
+    "body": [
+      {
+        "l2Address": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "feesReceived": "7272543764892500000",
+        "nbrOfBlocks": 12,
+        "calculatedForNumberOfBlocks": 1000,
+        "partOfTotalFeesReceived": 1
+      }
+    ]
+  }
+}

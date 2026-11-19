@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "kind": "api-body",
+  "source": "local-network",
+  "aztecVersion": "6.0.0",
+  "recordedAt": "2026-11-19T19:18:35.509Z",
+  "origin": "GET /l2/stats/total-tx-effects",
+  "features": [],
+  "data": {
+    "route": "/l2/stats/total-tx-effects",
+    "path": "/l2/stats/total-tx-effects",
+    "status": 200,
+    "uiModule": "stats",
+    "body": 12
+  }
+}
