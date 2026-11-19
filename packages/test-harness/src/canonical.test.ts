@@ -22,7 +22,7 @@ describe("canonical", () => {
       JSON.stringify(canonical(value, { dbTimeKeys: ["createdAt"] })),
     ).toBe(
       '{"__proto__":1,"a":{"$undefined":true},"b":{"$hex":"ab"},' +
-        '"createdAt":{"$dbtime":true},"d":{"$date":"2026-01-01T00:00:00.000Z"},' +
+        '"createdAt":{"$dbtime":"string"},"d":{"$date":"2026-01-01T00:00:00.000Z"},' +
         '"l":{"$long":"9007199254740993"},' +
         '"n":[{"$number":"Infinity"},{"$number":"NaN"},{"$number":"-0"},null],' +
         '"record":{"__isLong__":true,"_bsontype":"Long","low":1},' +
@@ -44,6 +44,13 @@ describe("canonical", () => {
     expect(() =>
       canonical(Object.assign(new Array<number>(1), { extra: 42 })),
     ).toThrow(/sparse array or extra keys/);
+    expect(() =>
+      canonical(Object.defineProperty([], "hidden", { value: 1 })),
+    ).toThrow(/extra keys/);
+    expect(() =>
+      canonical(Object.defineProperty({}, "hidden", { value: 1 })),
+    ).toThrow(/non-enumerable/);
+    expect(() => canonical({ [Symbol("s")]: 1 })).toThrow(/symbol/);
     for (const t of ["not a time", "0", "2026-02-30T00:00:00Z", 1e100]) {
       expect(() => canonical({ t }, { dbTimeKeys: ["t"] })).toThrow(
         /not a valid time/,

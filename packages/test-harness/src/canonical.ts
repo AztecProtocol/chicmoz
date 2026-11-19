@@ -11,8 +11,8 @@ import { Long } from "bson";
  * an absent key.
  *
  * Anything else that is not plain data (class instances, functions, symbols,
- * other BSON types, sparse arrays, unsigned Longs) throws, so no value reaches
- * a snapshot in a lossy form.
+ * other BSON types, sparse arrays, unsigned Longs, symbol or non-enumerable
+ * keys) throws, so no value reaches a snapshot in a lossy form.
  */
 
 export type Canonical =
@@ -26,8 +26,9 @@ export type Canonical =
 export type CanonicalOptions = {
   /**
    * Keys whose values the database fills (`defaultNow()`, `NOW()`), at any
-   * depth: each must hold a valid time (Date, ISO 8601 string or epoch
-   * milliseconds) and becomes `{"$dbtime": true}`.
+   * depth: each must hold a valid time and becomes `{"$dbtime": <wire type>}`
+   * (`"Date"`, `"string"` for ISO 8601 or `"number"` for epoch milliseconds),
+   * so a time that changes representation still changes the snapshot.
    */
   dbTimeKeys?: readonly string[];
 };
@@ -69,6 +70,9 @@ const isValidTime = (value: unknown): boolean => {
   }
   return typeof value === "number" && !Number.isNaN(new Date(value).getTime());
 };
+
+const wireTypeOfTime = (value: unknown) =>
+  value instanceof Date ? "Date" : typeof value;
 
 const isPlainObject = (value: object): boolean => {
   const proto = Object.getPrototypeOf(value) as unknown;
@@ -118,12 +122,12 @@ const toCanonical = (
     return { $long: value.toString() };
   }
   if (Array.isArray(value)) {
-    // Own keys must be exactly the indices: a hole and an extra key would
-    // cancel out in a count.
-    const keys = Object.keys(value);
+    // Own keys must be exactly the indices and `length`: a hole and an extra
+    // key would cancel out in a count.
+    const keys = Reflect.ownKeys(value);
     if (
-      keys.length !== value.length ||
-      keys.some((key, i) => key !== String(i))
+      keys.length !== value.length + 1 ||
+      keys.some((key, i) => key !== (i < value.length ? String(i) : "length"))
     ) {
       throw new TypeError(
         `canonical: sparse array or extra keys at ${path || "<root>"}`,
@@ -149,7 +153,13 @@ const toCanonical = (
       writable: true,
       configurable: true,
     });
-  for (const key of Object.keys(value).sort()) {
+  const keys = Object.keys(value);
+  if (Reflect.ownKeys(value).length !== keys.length) {
+    throw new TypeError(
+      `canonical: symbol or non-enumerable key at ${path || "<root>"}`,
+    );
+  }
+  for (const key of keys.sort()) {
     if (TAGS.has(key)) {
       throw new TypeError(
         `canonical: key ${key} collides with a tag at ${path || "<root>"}`,
@@ -160,7 +170,7 @@ const toCanonical = (
       if (!isValidTime(item)) {
         throw new TypeError(`canonical: ${path}/${key} is not a valid time`);
       }
-      put(key, { $dbtime: true });
+      put(key, { $dbtime: wireTypeOfTime(item) });
       continue;
     }
     put(key, toCanonical(item, dbTimeKeys, `${path}/${key}`));
