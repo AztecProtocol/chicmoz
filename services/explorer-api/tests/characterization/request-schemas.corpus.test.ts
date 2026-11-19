@@ -276,12 +276,12 @@ describe("request schemas", () => {
       ).toThrow(SyntaxError);
     });
 
-    it("accepts limit=Infinity on an unbounded list route (Infinity and unsafe integers)", () => {
+    it("accepts offset=Infinity on a contract list route (non-finite numbers)", () => {
       expect(
         canonicalParse(routes.getContractInstancesSchema, {
-          query: { limit: "Infinity" },
+          query: { offset: "Infinity" },
         }),
-      ).toEqual({ query: { limit: { $number: "Infinity" } } });
+      ).toEqual({ query: { offset: { $number: "Infinity" } } });
     });
   });
 });
