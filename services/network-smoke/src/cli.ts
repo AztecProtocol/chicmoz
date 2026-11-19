@@ -39,6 +39,12 @@ const down = async (runId: string) => {
         stuck.push(pgid);
       }
     }
+    // Printed now, so a compose failure below cannot hide them.
+    if (stuck.length > 0) {
+      process.stderr.write(
+        `run ${runId}: process groups ${stuck.join(", ")} still running after SIGKILL\n`,
+      );
+    }
     if (record.composeRunId) {
       // Not gated on `listProjects()`: it lists containers, and an
       // interrupted teardown can leave only the network or a volume.
@@ -60,9 +66,7 @@ const down = async (runId: string) => {
     }
   }
   if (stuck.length > 0) {
-    throw new Error(
-      `run ${runId}: process groups ${stuck.join(", ")} still running after SIGKILL`,
-    );
+    throw new Error(`run ${runId} is not down: process groups survived`);
   }
   process.stdout.write(`run ${runId} is down\n`);
 };
