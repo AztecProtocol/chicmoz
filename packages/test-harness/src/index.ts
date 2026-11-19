@@ -30,6 +30,8 @@ export {
 export { REPO_ROOT } from "./repo.js";
 export {
   attach,
+  downProject,
+  listProjects,
   up,
   type Stack,
   type StackEnv,

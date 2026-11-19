@@ -1,0 +1,38 @@
+{
+  "name": "@chicmoz/network-smoke",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "yarn@4.0.1",
+  "type": "module",
+  "scripts": {
+    "prebuild": "rm -rf build; mkdir build",
+    "build": "yarn tsc -p tsconfig.build.json",
+    "lint": "yarn run lint-base --ext .ts .",
+    "lint-base": "yarn run g:lint",
+    "smoke": "node build/cli.js run",
+    "down": "node build/cli.js down"
+  },
+  "dependencies": {
+    "@aztec-foundation/l1-artifacts": "6.0.0",
+    "@aztec-labs/accounts": "6.0.0",
+    "@aztec-labs/aztec.js": "6.0.0",
+    "@aztec-labs/wallets": "6.0.0",
+    "@chicmoz-pkg/types": "workspace:^",
+    "@chicmoz/test-harness": "workspace:^",
+    "viem": "2.20.0",
+    "vitest": "3.2.7",
+    "ws": "8.23.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "20.5.0",
+    "@types/ws": "8.5.12",
+    "@typescript-eslint/eslint-plugin": "6.11.0",
+    "@typescript-eslint/parser": "6.11.0",
+    "eslint": "8.53.0",
+    "eslint-config-prettier": "9.0.0",
+    "eslint-plugin-import": "2.29.0",
+    "typescript": "5.8.3"
+  }
+}

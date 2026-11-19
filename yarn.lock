@@ -2373,6 +2373,31 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@chicmoz/network-smoke@workspace:services/network-smoke":
+  version: 0.0.0-use.local
+  resolution: "@chicmoz/network-smoke@workspace:services/network-smoke"
+  dependencies:
+    "@aztec-foundation/l1-artifacts": "npm:6.0.0"
+    "@aztec-labs/accounts": "npm:6.0.0"
+    "@aztec-labs/aztec.js": "npm:6.0.0"
+    "@aztec-labs/wallets": "npm:6.0.0"
+    "@chicmoz-pkg/types": "workspace:^"
+    "@chicmoz/test-harness": "workspace:^"
+    "@types/node": "npm:20.5.0"
+    "@types/ws": "npm:8.5.12"
+    "@typescript-eslint/eslint-plugin": "npm:6.11.0"
+    "@typescript-eslint/parser": "npm:6.11.0"
+    eslint: "npm:8.53.0"
+    eslint-config-prettier: "npm:9.0.0"
+    eslint-plugin-import: "npm:2.29.0"
+    typescript: "npm:5.8.3"
+    viem: "npm:2.20.0"
+    vitest: "npm:3.2.7"
+    ws: "npm:8.23.0"
+    zod: "npm:^3.23.8"
+  languageName: unknown
+  linkType: soft
+
 "@chicmoz/test-harness@workspace:^, @chicmoz/test-harness@workspace:packages/test-harness":
   version: 0.0.0-use.local
   resolution: "@chicmoz/test-harness@workspace:packages/test-harness"

@@ -21,3 +21,6 @@ ignore/
 
 # Integration harness run output (logs, base-ref migrations)
 .harness/
+
+# Network smoke run output (logs, marks, process groups)
+.network-smoke/
