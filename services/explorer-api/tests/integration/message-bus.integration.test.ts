@@ -26,19 +26,22 @@ const until = async (done: () => boolean, what: string) => {
   }
 };
 
-// explorer-api's own publish and subscribe wrappers on the harness broker.
-// Each case has its own single-partition topic: subscriptions read from the
-// beginning, so a shared topic would replay earlier cases into later ones.
+// One single-partition topic per case keeps send order and stops a later
+// case's `fromBeginning` subscription replaying an earlier case.
 describe("message bus on a real broker", () => {
   let api: ExplorerApiForTest;
   let raw: Producer;
   let admin: Admin;
   let topicFor: (eventType: EventType) => Promise<ChicmozMessageBusTopic>;
   let publish: (eventType: EventType, marker: string) => Promise<void>;
-  let record: (eventType: EventType, fail?: (m: Marked, calls: string[]) => boolean) => Promise<string[]>;
+  let record: (
+    eventType: EventType,
+    fail?: (marker: string, calls: string[]) => boolean,
+  ) => Promise<{ calls: string[]; topic: ChicmozMessageBusTopic }>;
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
+    // The registry reads KAFKA_NAMESPACE at import.
     const { generateL2TopicName } = await import("@chicmoz-pkg/message-registry");
     const { publishMessage, startSubscribe } = await import(
       "../../src/svcs/message-bus/index.js"
@@ -67,32 +70,36 @@ describe("message bus on a real broker", () => {
       publishMessage(eventType, { ...chainInfoEvent, marker } as ChicmozMessageBusPayload);
     record = async (eventType, fail) => {
       const calls: string[] = [];
+      const topic = await topicFor(eventType);
       await startSubscribe({
         groupId: `${api.namespace}-${eventType}`,
-        topic: await topicFor(eventType),
+        topic,
         cb: async (event: unknown) => {
-          const m = event as Marked;
-          calls.push(m.marker);
-          if (fail?.(m, calls)) {
-            throw new Error(`handler failed on ${m.marker}`);
+          // A delivery without a marker is recorded too, so it fails the sequence check instead of throwing here.
+          const marker = (event as Partial<Marked> | undefined)?.marker ?? "<no marker>";
+          calls.push(marker);
+          if (fail?.(marker, calls)) {
+            throw new Error(`handler failed on ${marker}`);
           }
           await Promise.resolve();
         },
       });
-      return calls;
+      return { calls, topic };
     };
   });
 
   afterAll(async () => {
-    await admin?.disconnect();
-    await raw?.disconnect();
-    await api?.close();
+    const results = await Promise.allSettled([admin?.disconnect(), raw?.disconnect(), api?.close()]);
+    const failed = results.flatMap((r) => (r.status === "rejected" ? [r.reason as unknown] : []));
+    if (failed.length > 0) {
+      throw new AggregateError(failed, "teardown failed");
+    }
   });
 
   it("redelivers a message whose handler threw, before the next one", async () => {
-    const calls = await record(
+    const { calls } = await record(
       "CHAIN_INFO_EVENT",
-      (m, seen) => m.marker === "M1" && seen.filter((c) => c === "M1").length === 1,
+      (marker, seen) => marker === "M1" && seen.filter((c) => c === "M1").length === 1,
     );
     await publish("CHAIN_INFO_EVENT", "M1");
     await publish("CHAIN_INFO_EVENT", "M2");
@@ -108,8 +115,8 @@ describe("message bus on a real broker", () => {
       value: Buffer.from(BSON.serialize({ x: 1 })),
     },
   ])("skips $label and delivers the next message", async ({ eventType, value }) => {
-    const calls = await record(eventType);
-    await raw.send({ topic: await topicFor(eventType), messages: [{ value }] });
+    const { calls, topic } = await record(eventType);
+    await raw.send({ topic, messages: [{ value }] });
     await publish(eventType, "M3");
     await until(() => calls.includes("M3"), "M3");
     expect(calls).toEqual(["M3"]);
