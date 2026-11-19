@@ -1,6 +1,7 @@
 import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
 import { Fq, Fr } from "@aztec-labs/aztec.js/fields";
 import { type AztecNode } from "@aztec-labs/aztec.js/node";
+import { TxStatus } from "@aztec-labs/aztec.js/tx";
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 
 export type SentTx = { txHash: string; blockNumber: number };
@@ -27,7 +28,12 @@ export const sendTx = async (node: AztecNode): Promise<SentTx> => {
       Fq.random(),
     );
     const deploy = await account.getDeployMethod();
-    const { receipt } = await deploy.send({ from: payer.address });
+    // The wallet's default, PROPOSED, can return before the checkpoint
+    // reaches L1, and the L1 oracle reads the rollup's logs once.
+    const { receipt } = await deploy.send({
+      from: payer.address,
+      wait: { waitForStatus: TxStatus.CHECKPOINTED },
+    });
     if (receipt.blockNumber === undefined) {
       throw new Error(`tx ${receipt.txHash.toString()} has no block number`);
     }
