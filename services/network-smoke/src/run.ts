@@ -136,7 +136,6 @@ export const run = async (): Promise<number> => {
     removeTmpDir(tmp.wallet);
   });
 
-  /** Resolves false when a process group survived. */
   let teardown: Promise<boolean> | undefined;
   const tearDown = (failed: boolean) =>
     (teardown ??= (async () => {

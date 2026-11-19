@@ -9,7 +9,7 @@ import {
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-/** Every process the runner starts carries `NETWORK_SMOKE_RUN=<run id>`. */
+/** Every detached group the runner starts carries `NETWORK_SMOKE_RUN=<run id>`. */
 export const RUN_MARKER = "NETWORK_SMOKE_RUN";
 const STOP_GRACE_MS = 5_000;
 
@@ -172,7 +172,6 @@ export const createProcessGroups = (runId: string, runDir: string) => {
     if (child.pid === undefined) {
       throw new Error(`${name}: could not start ${command}`);
     }
-    // A detached child leads its own group: pgid = pid.
     const entry: Started = {
       name,
       pgid: child.pid,
@@ -193,7 +192,6 @@ export const createProcessGroups = (runId: string, runDir: string) => {
     return entry;
   };
 
-  /** Resolves to the names of groups that did not stop. */
   const stopAll = async () => {
     const tiers = [...new Set(started.map((s) => s.tier))].sort(
       (a, b) => b - a,
