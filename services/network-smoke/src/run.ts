@@ -121,7 +121,12 @@ export const run = async (): Promise<number> => {
             "--timeout",
             "0",
           ],
-          { cwd: REPO_ROOT, stdio: "ignore", timeout: 60_000 },
+          {
+            cwd: REPO_ROOT,
+            stdio: "ignore",
+            timeout: 60_000,
+            killSignal: "SIGKILL",
+          },
         );
       } catch {
         // `yarn harness ls` still lists it.
@@ -199,12 +204,11 @@ export const run = async (): Promise<number> => {
     const aztecNodeUrl = `http://127.0.0.1:${ports.aztec}`;
     const explorerApiUrl = `http://127.0.0.1:${ports.explorerApi}`;
 
-    // The first failure aborts the other branch instead of waiting for it.
-    let firstFailure: { reason: unknown } | undefined;
+    // The first failure aborts the other branch and goes straight to
+    // teardown, which still drains every tracked setup operation.
     const failFast = <T>(work: Promise<T>) =>
       track(
         work.catch((reason: unknown) => {
-          firstFailure ??= { reason };
           abort.abort();
           throw reason;
         }),
@@ -217,7 +221,7 @@ export const run = async (): Promise<number> => {
         saveRecord();
         mark(`infra up (${started.runId})`);
         abort.signal.throwIfAborted();
-        await prepareDatabases(started);
+        await prepareDatabases(started, abort.signal);
         mark("migrated");
         return started;
       })(),
@@ -246,14 +250,11 @@ export const run = async (): Promise<number> => {
         mark("aztec node ready");
       })(),
     );
-    await Promise.allSettled([infra, chain]);
-    if (firstFailure) {
-      throw firstFailure.reason;
-    }
+    const [infraStack] = await Promise.all([infra, chain]);
     abort.signal.throwIfAborted();
 
     startServices(groups, {
-      stack: await infra,
+      stack: infraStack,
       ports,
       runId,
       anvilUrl,

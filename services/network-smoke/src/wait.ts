@@ -83,8 +83,8 @@ export const waitUntil = async (
 };
 
 /**
- * `Promise.all` that waits for every promise to settle before rejecting with
- * the first failure, so no sibling is still running when the caller cleans up.
+ * Rejects only once every promise has settled, so no sibling is still running
+ * when the caller cleans up after a failure.
  */
 export const settleAll = async (work: Promise<unknown>[]): Promise<void> => {
   const failed = (await Promise.allSettled(work)).find(

@@ -54,13 +54,14 @@ export const missingBuilds = (): string[] =>
     ])
     .filter((path) => !existsSync(path));
 
-export const prepareDatabases = (stack: Stack) =>
+export const prepareDatabases = (stack: Stack, signal: AbortSignal) =>
   settleAll(
     Object.entries(SERVICES).flatMap(([name, svc]) =>
       "database" in svc
         ? [
             (async () => {
               await createDatabase(stack, svc.database);
+              signal.throwIfAborted();
               await runMigrateEntrypoint(
                 stack,
                 name as MigratingService,

@@ -71,8 +71,12 @@ const signalGroup = (pgid: number, runId: string, signal: NodeJS.Signals) => {
   try {
     process.kill(-pgid, signal);
   } catch (e) {
+    // ESRCH: the group emptied after the scan. Anything else is reported,
+    // and the remaining groups and cleanup still run.
     if ((e as NodeJS.ErrnoException).code !== "ESRCH") {
-      throw e;
+      process.stderr.write(
+        `network-smoke: ${signal} to group ${pgid}: ${(e as Error).message}\n`,
+      );
     }
   }
   return true;

@@ -47,7 +47,8 @@ const checkLock = (lock: string) => {
     .filter(
       ([, entry]) =>
         entry.link !== undefined ||
-        !SHA512.test(entry.integrity ?? "") ||
+        typeof entry.integrity !== "string" ||
+        !SHA512.test(entry.integrity) ||
         !entry.resolved?.startsWith(REGISTRY),
     )
     .map(([path]) => path);
@@ -88,8 +89,8 @@ const installAztec = async (
       { cwd: tmp, maxBuffer: 64 * 1024 * 1024, timeout: 600_000 },
     );
     writeFileSync(log, stdout + stderr);
-    // Never publish a tree without the entry point under this lock's name:
-    // every later run would reuse it.
+    // A tree without the entry point under this lock's name would block
+    // every later install of the same lock.
     if (!existsSync(join(tmp, ENTRY))) {
       throw new Error(`npm ci finished without ${ENTRY}; see ${log}`);
     }
@@ -136,6 +137,7 @@ const pinnedFoundry = async (binDir?: string) => {
   for (const path of Object.values(binaries)) {
     const { stdout } = await execFileAsync(path, ["--version"], {
       timeout: 30_000,
+      killSignal: "SIGKILL",
     });
     if (/ Version: (\S+)/.exec(stdout)?.[1] !== version) {
       throw new Error(

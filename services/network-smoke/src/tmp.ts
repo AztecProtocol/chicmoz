@@ -1,10 +1,4 @@
-import {
-  lstatSync,
-  mkdirSync,
-  readlinkSync,
-  rmSync,
-  symlinkSync,
-} from "node:fs";
+import { mkdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 export type TmpDir = { link: string; target: string };
@@ -30,13 +24,18 @@ export const createTmpDir = ({ link, target }: TmpDir) => {
   return link;
 };
 
-/** Unlinks `link` only while it is this run's symlink to `target`. */
 export const removeTmpDir = ({ link, target }: TmpDir) => {
-  if (
-    lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink() &&
-    readlinkSync(link) === target
-  ) {
-    rmSync(link);
+  try {
+    if (readlinkSync(link) === target) {
+      rmSync(link, { force: true });
+    }
+  } catch (e) {
+    // ENOENT: already removed. EINVAL: not a symlink, so not ours.
+    if (
+      !["ENOENT", "EINVAL"].includes((e as NodeJS.ErrnoException).code ?? "")
+    ) {
+      throw e;
+    }
   }
   rmSync(target, { recursive: true, force: true });
 };

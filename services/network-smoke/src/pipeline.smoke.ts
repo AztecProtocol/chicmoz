@@ -27,7 +27,7 @@ const get = async (path: string): Promise<unknown> => {
   return res.json();
 };
 const latestHeight = async () =>
-  z.coerce
+  z
     .number()
     .int()
     .parse(await get("/l2/latest-height"));

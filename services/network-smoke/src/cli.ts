@@ -21,10 +21,11 @@ const down = async (runId: string) => {
     throw new Error(`no run ${runId} in ${runDir}`);
   }
   const record = JSON.parse(readFileSync(recordFile, "utf8")) as RunRecord;
-  if (
-    record.ownerStart !== undefined &&
-    startTimeOf(record.ownerPid) === record.ownerStart
-  ) {
+  const ownerAlive =
+    record.ownerStart === undefined
+      ? existsSync(`/proc/${record.ownerPid}`)
+      : startTimeOf(record.ownerPid) === record.ownerStart;
+  if (ownerAlive) {
     throw new Error(
       `run ${runId} is still owned by pid ${record.ownerPid}; stop that instead`,
     );
