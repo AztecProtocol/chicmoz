@@ -104,5 +104,8 @@
     "scripts/**/*",
     "tests/**/*",
     "vitest.config.ts"
-  ]
+  ],
+  // Characterization tests import @chicmoz/test-harness, which build:packages
+  // does not build; they type-check through their own tsconfig.json.
+  "exclude": ["tests/characterization"]
 }

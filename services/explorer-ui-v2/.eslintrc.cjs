@@ -6,7 +6,12 @@ const config = {
   parserOptions: {
     ecmaVersion: "latest",
     sourceType: "module",
-    project: ["./tsconfig.json", "./tsconfig.node.json", "./tsconfig.app.json"],
+    project: [
+      "./tsconfig.json",
+      "./tsconfig.node.json",
+      "./tsconfig.app.json",
+      "./tests/characterization/tsconfig.json",
+    ],
     tsconfigRootDir: __dirname,
   },
   extends: [
@@ -22,7 +27,11 @@ const config = {
   ],
   settings: {
     "import/resolver": {
-      typescript: {}, // this loads <rootdir>/tsconfig.json to eslint
+      // The characterization tsconfig maps @chicmoz/test-harness to its
+      // source, which resolves whether or not the harness is built.
+      typescript: {
+        project: ["./tsconfig.json", "./tests/characterization/tsconfig.json"],
+      },
     },
   },
   ignorePatterns: ["dist", ".eslintrc.cjs"],

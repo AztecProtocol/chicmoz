@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`L1 contract addresses read back from the database > parses what onChainInfo stored for local-network/node-info 1`] = `
+{
+  "coinIssuerAddress": "0x610178da211fef7d417bc0e6fed39f05609ad788",
+  "feeJuiceAddress": "0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6",
+  "feeJuicePortalAddress": "0x3e180b566a1ef3ad836ee42c9519be95b13e7473",
+  "governanceAddress": "0x9a676e781a523b5d0c0e43731313a708cb607508",
+  "governanceProposerAddress": "0x0dcd1bf9a1b36ce34237eeafef220932846bcd82",
+  "inboxAddress": "0x46682ca783d96a4a65390211934d5714cdb788e4",
+  "outboxAddress": "0x0a41804810f008e5ee565aa4b95a6a7c50a09082",
+  "registryAddress": "0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0",
+  "rewardDistributorAddress": "0x1f708c24a0d3a740cd47cc0444e9480899f3da7d",
+  "rollupAddress": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+  "stakingAssetAddress": "0xa513e6e4b8f2a923d98304ec87f64353c4d5c853",
+}
+`;
+
+exports[`L1 contract addresses read back from the database > parses what onChainInfo stored for testnet/node-info 1`] = `
+{
+  "coinIssuerAddress": "0xe05d0a62045b4237556c1ec423e59eea9a24eaee",
+  "feeJuiceAddress": "0x762c132040fda6183066fa3b14d985ee55aa3c18",
+  "feeJuicePortalAddress": "0xe59acba462a0324b1d619a7a1b219419f156f505",
+  "governanceAddress": "0xcaf7447721447b22cd0076ac7c63877c3afd329f",
+  "governanceProposerAddress": "0x01c7d4ca153748d2377968fef22894cb162e9480",
+  "inboxAddress": "0x7cdc32dd7d008870a95f1837ffd7229ef676ef8a",
+  "outboxAddress": "0xa5a0f7a7bdaf280964a1922a68c83462e5f6e15b",
+  "registryAddress": "0xa0bfb1b494fb49041e5c6e8c2c1be09cd171c6ba",
+  "rewardDistributorAddress": "0x83b2a93ef343cab7be9d8bba7317f314975e5cb0",
+  "rollupAddress": "0x1f435a7f2da358caf887a470faeee7d5d5f4efba",
+  "stakingAssetAddress": "0x5595cb9ed193cac2c0bc5393313bc6115817954b",
+}
+`;

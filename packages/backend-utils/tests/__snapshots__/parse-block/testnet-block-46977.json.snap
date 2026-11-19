@@ -1,0 +1,98 @@
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46978,
+    "root": "0x0b1c5bf2ffa43817b11727b5604637684de653b422dd402ced4c41890c25dff3"
+  },
+  "body": {
+    "txEffects": [
+      {
+        "contractClassLogs": [],
+        "l2ToL1Msgs": [],
+        "noteHashes": [],
+        "nullifiers": [
+          "0x168ed7a3c7716ec709a1da5c5a1506bc1ddfa74ab11b52ea70befdd1dba8092b",
+          "0x2a3b65a0754ec1a45a14140a14095ad72aab9ee5df53a27f8f43ab597a4b553e"
+        ],
+        "privateLogs": [],
+        "publicDataWrites": [
+          {
+            "leafSlot": "0x036c3a4ec5cf5a4802542c6a3e2ac8d34b741aed9296543b3f11846d7b23bd15",
+            "value": "0x0000000000000000000000000000000000000000000000000000000066ee2d59"
+          },
+          {
+            "leafSlot": "0x25e62e40046624b6d421d453d4a3061e2b79145a03e169aa54cbb99e9cc102a8",
+            "value": "0x000000000000000000000000000000000000000000000000000000006c3577e0"
+          },
+          {
+            "leafSlot": "0x29836df61767192c2ca7294587531359a7db4490178d2a11f691cb04d7e16c05",
+            "value": "0x1e83ca216358326ae9010cf2de4086fe02b7bf1c1ee5e413d780a9bd85f411d6"
+          },
+          {
+            "leafSlot": "0x24bf711539e99c9719292acab5bcc115f6669ae54c2d324e801fb2bd5ce35d90",
+            "value": "0x0000000000000000000000000000000000000000000000000000000000b9b1e2"
+          },
+          {
+            "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+            "value": "0x000000000000000000000000000000000000000000000150e84d6fd102d053c0"
+          }
+        ],
+        "publicLogs": [],
+        "revertCode": {
+          "code": 0
+        },
+        "transactionFee": "2388197882111600000",
+        "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66"
+      }
+    ]
+  },
+  "hash": "0x28a1bf7ba718d6c767a1af9c5dd0ba37b6a3f391ce0bde15eb2c998aafdf2a7c",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46977,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000"
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46977,
+      "root": "0x26b9de2c94b750df68857c25f8383df57cbe01d8e95fe061d88b7c7b705bb567"
+    },
+    "spongeBlobHash": "0x08e6c6d5dd4b769db368d27b1893984bb9a8d6dfb5a02c08f7a01c21e80490ec",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03"
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525824,
+          "root": "0x1674e0e4adbd99aef847f6857fcc357c0e705d8e31ba89ccf5ec432e6b6deb59"
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525952,
+          "root": "0x276be6904d066d567ff420e671f3d08d7566f818734d6d63dec910df698f2195"
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82227,
+          "root": "0x126470b795ab11c90aca9a3f1624f0eda8438731f2c92356c0373ec8f8d44ff9"
+        }
+      }
+    },
+    "totalFees": {
+      "$bigint": "2388197882111600000"
+    },
+    "totalManaUsed": {
+      "$bigint": "1910558"
+    }
+  },
+  "height": {
+    "$bigint": "46977"
+  }
+}

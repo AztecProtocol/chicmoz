@@ -5,9 +5,6 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
-  ARTIFACT_MAX_DEPTH,
-  ARTIFACT_MAX_KEY_LENGTH,
-  ARTIFACT_MAX_NODES,
   ARTIFACT_REFUSED_MESSAGE,
   checkArtifactShape,
   loadArtifactJson,
@@ -53,18 +50,11 @@ describe("artifact limits", () => {
     expect(refused).toEqual([]);
   });
 
+  // The approved ceilings are written out, so a raised limit fails here.
   test.each([
-    [
-      "node count",
-      withNodes(ARTIFACT_MAX_NODES),
-      withNodes(ARTIFACT_MAX_NODES + 1),
-    ],
-    ["depth", withDepth(ARTIFACT_MAX_DEPTH), withDepth(ARTIFACT_MAX_DEPTH + 1)],
-    [
-      "key length",
-      withKeyLength(ARTIFACT_MAX_KEY_LENGTH),
-      withKeyLength(ARTIFACT_MAX_KEY_LENGTH + 1),
-    ],
+    ["node count", withNodes(120_000), withNodes(120_001)],
+    ["depth", withDepth(64), withDepth(65)],
+    ["key length", withKeyLength(128), withKeyLength(129)],
   ])(
     "accepts JSON at the %s limit and refuses it one over",
     (_, atLimit, overLimit) => {

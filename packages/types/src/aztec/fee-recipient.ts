@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aztecAddressSchema } from "../index.js";
+import { aztecAddressSchema } from "../general.js";
 
 export const chicmozFeeRecipientSchema = z.object({
   l2Address: aztecAddressSchema,

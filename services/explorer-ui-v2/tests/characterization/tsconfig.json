@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": {
+    "composite": false,
+    "tsBuildInfoFile": null,
+    "paths": {
+      "~/*": ["./src/*"],
+      "@chicmoz/test-harness": ["../../packages/test-harness/src/index.ts"]
+    }
+  },
+  "include": ["./**/*", "../../src/**/*.ts", "../../src/**/*.tsx"]
+}

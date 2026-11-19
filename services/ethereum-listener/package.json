@@ -25,15 +25,18 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@chicmoz/test-harness": "workspace:^",
     "@types/node": "20.5.0",
     "@types/pg": "8.11.8",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
+    "bson": "6.2.0",
     "drizzle-kit": "0.24.2",
     "eslint": "8.53.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-import": "2.29.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vitest": "3.2.7"
   },
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
@@ -44,7 +47,9 @@
     "generate": "yarn build && L2_NETWORK_ID=SANDBOX drizzle-kit generate",
     "migrate": "yarn node build/scripts/migrate.js",
     "lint": "yarn run lint-base --ext .ts .",
-    "lint-base": "yarn run g:lint"
+    "lint-base": "yarn run g:lint",
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test-once": "vitest run --config tests/vitest.config.ts"
   },
   "type": "module"
 }

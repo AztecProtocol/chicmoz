@@ -37,7 +37,17 @@ export default defineConfig(({ command, mode }) => {
       TanStackRouterVite(),
     ],
     resolve: {
-      alias: [{ find: "~", replacement: path.resolve(__dirname, "src") }],
+      alias: [
+        { find: "~", replacement: path.resolve(__dirname, "src") },
+        // Tests run the harness from source; nothing under src imports it.
+        {
+          find: "@chicmoz/test-harness",
+          replacement: path.resolve(
+            __dirname,
+            "../../packages/test-harness/src/index.ts",
+          ),
+        },
+      ],
     },
   };
 });

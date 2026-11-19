@@ -1,3 +1,11 @@
+export {
+  canonical,
+  canonicalJson,
+  canonicalParse,
+  type Canonical,
+  type CanonicalOptions,
+  type SafeParser,
+} from "./canonical.js";
 export { deliver } from "./deliver.js";
 export {
   FIXTURES_DIR,
