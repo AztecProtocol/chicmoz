@@ -154,7 +154,8 @@ export const onL2RpcNodeError = (
     ChicmozL2RpcNodeError,
     "rpcUrl" | "count" | "createdAt" | "lastSeenAt"
   >,
-  rpcUrl?: string,
+  // explorer-api cannot store an error without its node's URL.
+  rpcUrl: string,
 ) => {
   let event;
   try {
