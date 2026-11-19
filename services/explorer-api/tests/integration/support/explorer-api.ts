@@ -76,12 +76,15 @@ export const startExplorerApiForTest =
       );
     }
 
+    const { BODY_LIMIT, PARAMETER_LIMIT } = await import(
+      "../../../src/environment.js"
+    );
     const { setup } = await import(
       "../../../src/svcs/http-server/express-config.js"
     );
     const app = setup(express(), {
-      BODY_LIMIT: "64kb",
-      PARAMETER_LIMIT: 100,
+      BODY_LIMIT,
+      PARAMETER_LIMIT,
       NODE_ENV: "test",
     });
 

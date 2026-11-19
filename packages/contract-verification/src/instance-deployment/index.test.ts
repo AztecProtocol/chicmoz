@@ -277,6 +277,63 @@ describe("v5 instance deployment verification", () => {
     },
   );
 
+  // A stored artifact whose only candidates are copies of Auth's public
+  // `set_authorized`, one per parameter type. The search compares addresses
+  // with the payload's class id, so the stored functions may differ from
+  // the deployed ones, and no copy encodes the argument, so none is hashed.
+  const withCandidates = (parameterTypes: AbiType[]) => {
+    const stored = copy(authArtifactJson);
+    const template = stored.functions.find(
+      (fn) => fn.name === "set_authorized",
+    );
+    if (!template) {
+      throw new Error("Auth has no set_authorized function");
+    }
+    stored.functions = stored.functions.filter(
+      (fn) => fn.name === "public_dispatch",
+    );
+    parameterTypes.forEach((type, i) => {
+      const fn = structuredClone(template);
+      fn.name = `set_authorized_copy_${i}`;
+      fn.abi.parameters[0].type = type;
+      stored.functions.push(fn);
+    });
+    return stored;
+  };
+  const fieldArray = (length: number): AbiType => ({
+    kind: "array",
+    length,
+    type: { kind: "field" },
+  });
+
+  // The approved ceilings are written out, so a raised default fails here.
+  test.each<[string, AbiType[], AbiType[], object]>([
+    [
+      "256 candidates",
+      Array<AbiType>(256).fill(fieldArray(0)),
+      Array<AbiType>(257).fill(fieldArray(0)),
+      { limit: "candidates", candidatesExamined: 256, encodedFields: 0 },
+    ],
+    [
+      "65,536 encoded fields",
+      Array<AbiType>(16).fill(fieldArray(4_096)),
+      [...Array<AbiType>(16).fill(fieldArray(4_096)), fieldArray(1)],
+      { limit: "encodedFields", candidatesExamined: 17, encodedFields: 65_536 },
+    ],
+  ])(
+    "searches up to %s by default and stops one over",
+    async (_, atLimit, overLimit, stoppedAt) => {
+      const deployment = await deploy(authArtifactJson, [admin]);
+
+      await expect(
+        verify(deployment, withCandidates(atLimit), [other]),
+      ).resolves.toEqual({ isVerified: false });
+      await expect(
+        verify(deployment, withCandidates(overLimit), [other]),
+      ).resolves.toEqual({ isVerified: false, stoppedAt });
+    },
+  );
+
   test("rejects the current class id when it differs from the original class id", async () => {
     const deployment = await deploy(publicChecksArtifactJson, []);
 
