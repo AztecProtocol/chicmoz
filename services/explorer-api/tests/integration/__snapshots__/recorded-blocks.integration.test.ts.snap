@@ -1,0 +1,2488 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l1/l2-validators/totals answers from its cache entry 1`] = `
+{
+  "cached": {
+    "maxStake": "200000000000000000000000",
+    "nonValidating": 0,
+    "stakeByStatus": {
+      "VALIDATING": "200000000000000000000000",
+    },
+    "statusCounts": {
+      "VALIDATING": 1,
+    },
+    "total": 1,
+    "totalStake": "200000000000000000000000",
+    "validating": 1,
+    "validatingStake": "200000000000000000000000",
+  },
+  "response": {
+    "maxStake": "200000000000000000000000",
+    "nonValidating": 0,
+    "stakeByStatus": {
+      "VALIDATING": "200000000000000000000000",
+    },
+    "statusCounts": {
+      "VALIDATING": 1,
+    },
+    "total": 1,
+    "totalStake": "200000000000000000000000",
+    "validating": 1,
+    "validatingStake": "200000000000000000000000",
+  },
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes answers from its cache entry 1`] = `
+{
+  "cached": [
+    {
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "l1ChainId": 31337,
+      "l2NetworkId": "SANDBOX",
+      "lastSeenAt": "2026-01-02T00:00:00.000Z",
+      "nodeVersion": "6.0.0",
+      "rollupVersion": "1685378643",
+      "rpcNodeName": "rpc-example",
+      "rpcUrl": "https://rpc.example.org",
+    },
+  ],
+  "response": [
+    {
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "l1ChainId": 31337,
+      "l2NetworkId": "SANDBOX",
+      "lastSeenAt": "2026-01-02T00:00:00.000Z",
+      "nodeVersion": "6.0.0",
+      "rollupVersion": "1685378643",
+      "rpcNodeName": "rpc-example",
+    },
+  ],
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes/:rpcNodeName answers from its cache entry 1`] = `
+{
+  "cached": {
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "errors": [
+      {
+        "cause": "xxx.xxx.xxx.xxx",
+        "count": 1,
+        "createdAt": {
+          "$dbtime": true,
+        },
+        "data": {
+          "args": [
+            46972,
+            {
+              "includeTransactions": true,
+            },
+          ],
+          "error": {},
+          "fnName": "getBlock",
+        },
+        "lastSeenAt": {
+          "$dbtime": true,
+        },
+        "message": "xxx.xxx.xxx.xxx",
+        "name": "Error",
+        "rpcNodeName": "rpc-example",
+        "stack": "xxx.xxx.xxx.xxx",
+      },
+    ],
+    "l1ChainId": 31337,
+    "l2NetworkId": "SANDBOX",
+    "lastSeenAt": "2026-01-02T00:00:00.000Z",
+    "nodeVersion": "6.0.0",
+    "rollupVersion": "1685378643",
+    "rpcNodeName": "rpc-example",
+    "rpcUrl": "https://rpc.example.org",
+  },
+  "response": {
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "errors": [
+      {
+        "cause": "xxx.xxx.xxx.xxx",
+        "count": 1,
+        "createdAt": {
+          "$dbtime": true,
+        },
+        "data": {
+          "args": [
+            46972,
+            {
+              "includeTransactions": true,
+            },
+          ],
+          "error": {},
+          "fnName": "getBlock",
+        },
+        "lastSeenAt": {
+          "$dbtime": true,
+        },
+        "message": "xxx.xxx.xxx.xxx",
+        "name": "Error",
+        "rpcNodeName": "rpc-example",
+        "stack": "xxx.xxx.xxx.xxx",
+      },
+    ],
+    "l1ChainId": 31337,
+    "l2NetworkId": "SANDBOX",
+    "lastSeenAt": "2026-01-02T00:00:00.000Z",
+    "nodeVersion": "6.0.0",
+    "rollupVersion": "1685378643",
+    "rpcNodeName": "rpc-example",
+  },
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > POST verifies the recorded deployment from the string its cache entry holds > cached string 1`] = `
+{
+  "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+  "artifactContractName": "AuthRegistry",
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "artifactJson": {
+    "bytes": 720372,
+    "sha256": "437a1b5b5a368ec4b9650c153720234872ecd3175e8faeb8d17bd0326955e638",
+    "shape": "string",
+  },
+  "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "currentContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "initializationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "isOrphaned": false,
+  "originalContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "publicKeys": {
+    "masterIncomingViewingPublicKey": "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+    "masterNullifierPublicKey": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a260000000000000000000000000000000000000000000000000000000000000000",
+    "masterOutgoingViewingPublicKey": "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b0000000000000000000000000000000000000000000000000000000000000000",
+    "masterTaggingPublicKey": "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef00000000000000000000000000000000000000000000000000000000000000000",
+  },
+  "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "selectorMap": {
+    "0x2716b166": "consume((Field),Field)",
+    "0x418ef5da": "sync_state((Field))",
+    "0x46fb44da": "is_reject_all((Field))",
+    "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+    "0x61966b7c": "_set_authorized((Field),Field,bool)",
+    "0x75f967ce": "utility_is_consumable((Field),Field)",
+    "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+    "0x8955f5fc": "set_reject_all(bool)",
+    "0xb839de91": "set_authorized(Field,bool)",
+    "0xd5441b0d": "public_dispatch(Field)",
+    "0xf8d45e9b": "is_consumable((Field),Field)",
+  },
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "verifiedDeploymentArguments": {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "constructorArgs": [],
+    "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "id": "<database uuid>",
+    "publicKeysString": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a2600c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb1510e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef014a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d103560f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  },
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 1`] = `
+{
+  "artifactContractName": "AuthRegistry",
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "selectorMap": {
+    "0x2716b166": "consume((Field),Field)",
+    "0x418ef5da": "sync_state((Field))",
+    "0x46fb44da": "is_reject_all((Field))",
+    "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+    "0x61966b7c": "_set_authorized((Field),Field,bool)",
+    "0x75f967ce": "utility_is_consumable((Field),Field)",
+    "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+    "0x8955f5fc": "set_reject_all(bool)",
+    "0xb839de91": "set_authorized(Field,bool)",
+    "0xd5441b0d": "public_dispatch(Field)",
+    "0xf8d45e9b": "is_consumable((Field),Field)",
+  },
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 with includeArtifactJson 1`] = `
+{
+  "artifactContractName": "AuthRegistry",
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "artifactJson": {
+    "bytes": 720372,
+    "sha256": "437a1b5b5a368ec4b9650c153720234872ecd3175e8faeb8d17bd0326955e638",
+    "shape": "string",
+  },
+  "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "selectorMap": {
+    "0x2716b166": "consume((Field),Field)",
+    "0x418ef5da": "sync_state((Field))",
+    "0x46fb44da": "is_reject_all((Field))",
+    "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+    "0x61966b7c": "_set_authorized((Field),Field,bool)",
+    "0x75f967ce": "utility_is_consumable((Field),Field)",
+    "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+    "0x8955f5fc": "set_reject_all(bool)",
+    "0xb839de91": "set_authorized(Field,bool)",
+    "0xd5441b0d": "public_dispatch(Field)",
+    "0xf8d45e9b": "is_consumable((Field),Field)",
+  },
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > instance 1`] = `
+{
+  "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+  "artifactContractName": "AuthRegistry",
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "aztecScanNotes": {
+    "category": "infra",
+    "comment": "Protocol-adjacent registry",
+    "name": "AuthRegistry",
+    "origin": "local network setup",
+    "relatedL1ContractAddresses": [
+      {
+        "address": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+        "note": "rollup",
+      },
+    ],
+    "updatedAt": {
+      "$dbtime": true,
+    },
+    "uploadedAt": {
+      "$dbtime": true,
+    },
+  },
+  "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "currentContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "deployerMetadata": {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "appUrl": "https://app.example.org",
+    "contractIdentifier": "AuthRegistry",
+    "creatorContact": "contact@example.org",
+    "creatorName": "Aztec",
+    "details": "Authorization registry deployed by the local network",
+    "repoUrl": "https://example.org/repo",
+    "uploadedAt": {
+      "$dbtime": true,
+    },
+  },
+  "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "initializationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "isOrphaned": false,
+  "originalContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "publicKeys": {
+    "masterIncomingViewingPublicKey": "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+    "masterNullifierPublicKey": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a260000000000000000000000000000000000000000000000000000000000000000",
+    "masterOutgoingViewingPublicKey": "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b0000000000000000000000000000000000000000000000000000000000000000",
+    "masterTaggingPublicKey": "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef00000000000000000000000000000000000000000000000000000000000000000",
+  },
+  "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "selectorMap": {
+    "0x2716b166": "consume((Field),Field)",
+    "0x418ef5da": "sync_state((Field))",
+    "0x46fb44da": "is_reject_all((Field))",
+    "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+    "0x61966b7c": "_set_authorized((Field),Field,bool)",
+    "0x75f967ce": "utility_is_consumable((Field),Field)",
+    "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+    "0x8955f5fc": "set_reject_all(bool)",
+    "0xb839de91": "set_authorized(Field,bool)",
+    "0xd5441b0d": "public_dispatch(Field)",
+    "0xf8d45e9b": "is_consumable((Field),Field)",
+  },
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "verifiedDeploymentArguments": {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "constructorArgs": [],
+    "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "id": "<database uuid>",
+    "publicKeysString": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a2600c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb1510e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef014a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d103560f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  },
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > constructed aztec-scan notes and deployer metadata read back from the POST and the notes route > POST response 1`] = `
+{
+  "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+  "artifactContractName": "AuthRegistry",
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "artifactJson": {
+    "bytes": 720372,
+    "sha256": "437a1b5b5a368ec4b9650c153720234872ecd3175e8faeb8d17bd0326955e638",
+    "shape": "string",
+  },
+  "aztecScanNotes": {
+    "category": "infra",
+    "comment": "Protocol-adjacent registry",
+    "name": "AuthRegistry",
+    "origin": "local network setup",
+    "relatedL1ContractAddresses": [
+      {
+        "address": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+        "note": "rollup",
+      },
+    ],
+    "updatedAt": {
+      "$dbtime": true,
+    },
+    "uploadedAt": {
+      "$dbtime": true,
+    },
+  },
+  "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "currentContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "deployerMetadata": {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "appUrl": "https://app.example.org",
+    "contractIdentifier": "AuthRegistry",
+    "creatorContact": "contact@example.org",
+    "creatorName": "Aztec",
+    "details": "Authorization registry deployed by the local network",
+    "repoUrl": "https://example.org/repo",
+    "uploadedAt": {
+      "$dbtime": true,
+    },
+  },
+  "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "initializationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "isOrphaned": false,
+  "originalContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "publicKeys": {
+    "masterIncomingViewingPublicKey": "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+    "masterNullifierPublicKey": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a260000000000000000000000000000000000000000000000000000000000000000",
+    "masterOutgoingViewingPublicKey": "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b0000000000000000000000000000000000000000000000000000000000000000",
+    "masterTaggingPublicKey": "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef00000000000000000000000000000000000000000000000000000000000000000",
+  },
+  "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "selectorMap": {
+    "0x2716b166": "consume((Field),Field)",
+    "0x418ef5da": "sync_state((Field))",
+    "0x46fb44da": "is_reject_all((Field))",
+    "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+    "0x61966b7c": "_set_authorized((Field),Field,bool)",
+    "0x75f967ce": "utility_is_consumable((Field),Field)",
+    "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+    "0x8955f5fc": "set_reject_all(bool)",
+    "0xb839de91": "set_authorized(Field,bool)",
+    "0xd5441b0d": "public_dispatch(Field)",
+    "0xf8d45e9b": "is_consumable((Field),Field)",
+  },
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "verifiedDeploymentArguments": {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "constructorArgs": [],
+    "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "id": "<database uuid>",
+    "publicKeysString": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a2600c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb1510e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef014a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d103560f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  },
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > constructed aztec-scan notes and deployer metadata read back from the POST and the notes route > notes route 1`] = `
+[
+  {
+    "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+    "artifactContractName": "AuthRegistry",
+    "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+    "aztecScanNotes": {
+      "category": "infra",
+      "comment": "Protocol-adjacent registry",
+      "name": "AuthRegistry",
+      "origin": "local network setup",
+      "relatedL1ContractAddresses": [
+        {
+          "address": "0xa85233c63b9ee964add6f2cffe00fd84eb32338f",
+          "note": "rollup",
+        },
+      ],
+      "updatedAt": {
+        "$dbtime": true,
+      },
+      "uploadedAt": {
+        "$dbtime": true,
+      },
+    },
+    "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+    "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+    "currentContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+    "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "deployerMetadata": {
+      "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+      "appUrl": "https://app.example.org",
+      "contractIdentifier": "AuthRegistry",
+      "creatorContact": "contact@example.org",
+      "creatorName": "Aztec",
+      "details": "Authorization registry deployed by the local network",
+      "repoUrl": "https://example.org/repo",
+      "uploadedAt": {
+        "$dbtime": true,
+      },
+    },
+    "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "initializationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "isOrphaned": false,
+    "originalContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+    "packedBytecode": {
+      "bytes": 11040,
+      "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+      "shape": "object{data,type}",
+    },
+    "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+    "publicKeys": {
+      "masterIncomingViewingPublicKey": "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+      "masterNullifierPublicKey": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a260000000000000000000000000000000000000000000000000000000000000000",
+      "masterOutgoingViewingPublicKey": "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b0000000000000000000000000000000000000000000000000000000000000000",
+      "masterTaggingPublicKey": "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef00000000000000000000000000000000000000000000000000000000000000000",
+    },
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "selectorMap": {
+      "0x2716b166": "consume((Field),Field)",
+      "0x418ef5da": "sync_state((Field))",
+      "0x46fb44da": "is_reject_all((Field))",
+      "0x5342402f": "offchain_receive(([(([Field;15],u32),(Field),(bool,Field),u64);16],u32))",
+      "0x61966b7c": "_set_authorized((Field),Field,bool)",
+      "0x75f967ce": "utility_is_consumable((Field),Field)",
+      "0x79a3d418": "set_authorized_private((Field),Field,bool)",
+      "0x8955f5fc": "set_reject_all(bool)",
+      "0xb839de91": "set_authorized(Field,bool)",
+      "0xd5441b0d": "public_dispatch(Field)",
+      "0xf8d45e9b": "is_consumable((Field),Field)",
+    },
+    "sourceCodeUrl": null,
+    "standardContractType": null,
+    "standardContractVersion": null,
+    "verifiedDeploymentArguments": {
+      "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+      "constructorArgs": [],
+      "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "id": "<database uuid>",
+      "publicKeysString": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a2600c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb1510e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef014a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d103560f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+      "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    },
+    "version": 1,
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-1: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 2,
+    "root": "0x23be46ec13c0ab2a4d8512f6bc29df079cf43533f21f7f3a4296418387da10dc",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7",
+      },
+    ],
+  },
+  "hash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 1,
+      "chainId": 31337,
+      "coinbase": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1145010100000",
+      },
+      "slotNumber": 1,
+      "timestamp": 1795115720000,
+      "version": 1685378643,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 1,
+      "root": "0x19a3e4395c0d56b4e9e717797018b92cbc9499a7737ba241eedb56723d58228c",
+    },
+    "spongeBlobHash": "0x1acdc06864ebd083851f738aff0d3d7fee924c5a583651c74d2c8d53eb23df63",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 0,
+        "root": "0x0fef6d80d31109ddb56d6b3f607cbc9c0af0bff3ea0d43e8f278983c64c11f7a",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 64,
+          "root": "0x2590f2aab19dd791700b4a43d3f52bb88ef2409a3731da8e848663559202e4c6",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 192,
+          "root": "0x170f751f3dd4f63c49cbe7ecda557fb54faabd6832de1a9302d502c7f2ecc985",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 128,
+          "root": "0x25f2f43a9ae6fae1424a220f7fa80620d37fd97c7ff821668dd3f0fa0a748552",
+        },
+      },
+    },
+    "totalFees": "624030504500000000",
+    "totalManaUsed": "545000",
+  },
+  "height": "1",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-1: block, its tx effects and each tx effect by hash > tx effect 0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7 1`] = `
+{
+  "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "blockHeight": "1",
+  "contractClassLogs": {
+    "bytes": 208708,
+    "sha256": "1d37495492d1bc6efcdcc90e97cd092583d3af3816a1dea44d907509aea79ab5",
+    "shape": "array(1)",
+  },
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x121971da633ca9cddfd8c2ddd507690eeaaedb57c82ea21f74a968a972c58c7e",
+    "0x28ff501e22ff858d2a78de85f29a3c3f5411449472025bc01863ee6b4638a2e6",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+      "value": "0x00000000000000000000000000000000000000000000021e1137c94aac850b00",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795115720000,
+  "transactionFee": "624030504500000000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-1: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+    "blockHeight": "1",
+    "contractClassLogs": {
+      "bytes": 208708,
+      "sha256": "1d37495492d1bc6efcdcc90e97cd092583d3af3816a1dea44d907509aea79ab5",
+      "shape": "array(1)",
+    },
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x121971da633ca9cddfd8c2ddd507690eeaaedb57c82ea21f74a968a972c58c7e",
+      "0x28ff501e22ff858d2a78de85f29a3c3f5411449472025bc01863ee6b4638a2e6",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+        "value": "0x00000000000000000000000000000000000000000000021e1137c94aac850b00",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795115720000,
+    "transactionFee": "624030504500000000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-2: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 3,
+    "root": "0x28c9ee187d53d8a6e83d033e3d2025c7e9d6cc27820084ecca28ed7126d6a21c",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67",
+      },
+    ],
+  },
+  "hash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 2,
+      "chainId": 31337,
+      "coinbase": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1145010100000",
+      },
+      "slotNumber": 2,
+      "timestamp": 1795115792000,
+      "version": 1685378643,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 2,
+      "root": "0x23be46ec13c0ab2a4d8512f6bc29df079cf43533f21f7f3a4296418387da10dc",
+    },
+    "spongeBlobHash": "0x0a696296f482137bc9c192305593268d4ec8d4dac846dcf4f00da575b9449a62",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 0,
+        "root": "0x0fef6d80d31109ddb56d6b3f607cbc9c0af0bff3ea0d43e8f278983c64c11f7a",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 128,
+          "root": "0x2590f2aab19dd791700b4a43d3f52bb88ef2409a3731da8e848663559202e4c6",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 256,
+          "root": "0x2dbbc50f87027a44587a4f09900d2280de416173b31b45277d31a327a0ef64e5",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 128,
+          "root": "0x1cb7c9c162b7a7c820054ac6b043113e51f3706135dc63919f623638eee7a28c",
+        },
+      },
+    },
+    "totalFees": "543307292450000000",
+    "totalManaUsed": "474500",
+  },
+  "height": "2",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-2: block, its tx effects and each tx effect by hash > tx effect 0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67 1`] = `
+{
+  "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "blockHeight": "2",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x17d51b899c57898c38ed21a2689e332d3048654959e10cf0e70b040137731ae6",
+    "0x133b2a20d1f3d55d52616de7536852682ff2ada195563bd5bbfeeb4dac4417db",
+  ],
+  "privateLogs": [
+    {
+      "emittedLength": 15,
+      "fields": [
+        "0x1a7e1badb79abdd38c684b3c8306ffe7ecb33c69e3380d9855730aaaa83a21a8",
+        "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+        "0x0000000000000000000000000000000000000000000000000000000000000002",
+        "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a26",
+        "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c",
+        "0x1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+        "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b",
+        "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef0",
+        "0x14a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d10356",
+        "0x0f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+      ],
+    },
+  ],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+      "value": "0x00000000000000000000000000000000000000000000021e09ad923012287e80",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795115792000,
+  "transactionFee": "543307292450000000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-2: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+    "blockHeight": "2",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x17d51b899c57898c38ed21a2689e332d3048654959e10cf0e70b040137731ae6",
+      "0x133b2a20d1f3d55d52616de7536852682ff2ada195563bd5bbfeeb4dac4417db",
+    ],
+    "privateLogs": [
+      {
+        "emittedLength": 15,
+        "fields": [
+          "0x1a7e1badb79abdd38c684b3c8306ffe7ecb33c69e3380d9855730aaaa83a21a8",
+          "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+          "0x0000000000000000000000000000000000000000000000000000000000000002",
+          "0x0000000000000000000000000000000000000000000000000000000000000001",
+          "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a26",
+          "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c",
+          "0x1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+          "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b",
+          "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef0",
+          "0x14a5d4bde495b8c3a9ba4aed0d4870526e46fdff22d341a2f689ac5a50d10356",
+          "0x0f124f07811eebfaaa6d31316a2cc5bf255fa118f720e8ff1f2fc0d4aa46d496",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+        ],
+      },
+    ],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+        "value": "0x00000000000000000000000000000000000000000000021e09ad923012287e80",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795115792000,
+    "transactionFee": "543307292450000000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-11: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 12,
+    "root": "0x1f964e514d72682f4d5788bdb3bff783694050ef38b84d164b470319fbf9ab41",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+      },
+    ],
+  },
+  "hash": "0x0e41726e74926815b4e7c1815e2114a77a9434c3637fd488a81e0bd95c0d1977",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 11,
+      "chainId": 31337,
+      "coinbase": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "121712500000",
+      },
+      "slotNumber": 11,
+      "timestamp": 1795116440000,
+      "version": 1685378643,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 11,
+      "root": "0x0045d0c6d21f2244f154749d990bf209baec9884458568df075973ce137b8c07",
+    },
+    "spongeBlobHash": "0x223136bf2502124fbfc6883593b222cc8f61b9efd0f053357eee4c305a5ff3c2",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 0,
+        "root": "0x0fef6d80d31109ddb56d6b3f607cbc9c0af0bff3ea0d43e8f278983c64c11f7a",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 704,
+          "root": "0x2fb6da94457f5936acd1c2257843db350b320d42a3304ebe9649bd088d75223a",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 832,
+          "root": "0x1ba66e1fa2c13138be12d7d0067cc678db762600fc403475d7fffff55833db36",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 151,
+          "root": "0x1e9806c3e8edd0a1cae6bdb2abb970ec6d0f800403ebdf216e6d1c58b6e4615f",
+        },
+      },
+    },
+    "totalFees": "83831918625000000",
+    "totalManaUsed": "688770",
+  },
+  "height": "11",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-11: block, its tx effects and each tx effect by hash > tx effect 0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e 1`] = `
+{
+  "blockHash": "0x0e41726e74926815b4e7c1815e2114a77a9434c3637fd488a81e0bd95c0d1977",
+  "blockHeight": "11",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [
+    "0x0b014a62b230fe345bf58ba53b3c84e91fba93a338c3fc0780d7edbcc9a74428",
+  ],
+  "nullifiers": [
+    "0x13cb69eae538424354ee4868837875ebb851855e08fdb5160f1cae35538879e0",
+    "0x1e2e3c3cecbbb5219d14417f588f768a51556b5cd83b95ec397eeffa5c2d1da3",
+  ],
+  "privateLogs": [
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x22599e02fa93be0cb43d785698a8845c8e5d1ac06b1ee29ebd6267f2adefef5f",
+        "0x29f591baa34ec5e2f335f183d2ce4a01c305aec1bf38a88bc9cd0726458cd165",
+        "0x0656bb65fe18f64111c3f8079a6bd03f065d5ab61234338235ab997b481a276c",
+        "0x256a22c555fcefbf6ec008c4338502f425b8385e3f19ca1d78a49771119135e7",
+        "0x0fed7e5d48cf677ee1df3f2e92c3bb2454b09b170c50cca3e49d126f59e13378",
+        "0x18a2e22179e59916d39b8da8833a9a0e84ea7dd1e9cba40fad1ece618681bdb9",
+        "0x2231a40c2d86942f75ee19cee6c5cd734f56a47bc70bc0f5193e54037d00c37d",
+        "0x1ec9e691c8be62cb1c59520d304ffba9840a6ccf1bde98098d7d9aaca7e09a2c",
+        "0x076415f3129f827467c8d26f3bdbd0301d306fc0b3d0576b01f59b5cd446da5d",
+        "0x08bb4e9ac7ad117bcf52cc269ba3bc7e1d8882d4fd51f978acdd24517972df10",
+        "0x2a05bec2cccf2c47b7c4107b4bb73d3a46e03137f19bc1d5a8947ef4bfff3073",
+        "0x2d59bc21252f298995026b0a5b8b4b36fc460f46002a0dc089e37d69e1e30b61",
+        "0x103fb9342330a7388a7a45af57248723878d88c821e5d466e97c77d014a25e11",
+        "0x2cd7d850ba5b22cfba1d6b779b722a0cc9f646335723e16ac3b14a94d9ea0076",
+        "0x0bd11d8895200ecea48307840d6a7f209cacb0a75b68d4a3fb77fdf1c83fc806",
+        "0x094f931d8b41fb2ef7563cb4b320e09a253828fa3670c3c9daef6557f3779dcf",
+      ],
+    },
+  ],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x1671099d25f048f10684a688de0c8761e76fe00b6fa6f44c200292e3a3f1e851",
+      "value": "0x00000000000000000000000000000000000000000000000000000000000003e8",
+    },
+    {
+      "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+      "value": "0x00000000000000000000000000000000000000000000021db6fa67a177c88c40",
+    },
+  ],
+  "publicLogs": [
+    {
+      "contractAddress": "0x1e316519700ea215a63806a1ee6155f0764ccb916f21c32085a3e513c4e4e0a2",
+      "fields": [
+        "0x294e0effc9d70476e1779448497c87fcb47929969fa86bc12b095264dfd601d5",
+        "0x0000000000000000000000000000000000000000000000000000000000000003",
+        "0x0000000000000000000000000000000000000000000000000000000000000064",
+      ],
+    },
+  ],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795116440000,
+  "transactionFee": "83831918625000000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > block-11: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x0e41726e74926815b4e7c1815e2114a77a9434c3637fd488a81e0bd95c0d1977",
+    "blockHeight": "11",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [
+      "0x0b014a62b230fe345bf58ba53b3c84e91fba93a338c3fc0780d7edbcc9a74428",
+    ],
+    "nullifiers": [
+      "0x13cb69eae538424354ee4868837875ebb851855e08fdb5160f1cae35538879e0",
+      "0x1e2e3c3cecbbb5219d14417f588f768a51556b5cd83b95ec397eeffa5c2d1da3",
+    ],
+    "privateLogs": [
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x22599e02fa93be0cb43d785698a8845c8e5d1ac06b1ee29ebd6267f2adefef5f",
+          "0x29f591baa34ec5e2f335f183d2ce4a01c305aec1bf38a88bc9cd0726458cd165",
+          "0x0656bb65fe18f64111c3f8079a6bd03f065d5ab61234338235ab997b481a276c",
+          "0x256a22c555fcefbf6ec008c4338502f425b8385e3f19ca1d78a49771119135e7",
+          "0x0fed7e5d48cf677ee1df3f2e92c3bb2454b09b170c50cca3e49d126f59e13378",
+          "0x18a2e22179e59916d39b8da8833a9a0e84ea7dd1e9cba40fad1ece618681bdb9",
+          "0x2231a40c2d86942f75ee19cee6c5cd734f56a47bc70bc0f5193e54037d00c37d",
+          "0x1ec9e691c8be62cb1c59520d304ffba9840a6ccf1bde98098d7d9aaca7e09a2c",
+          "0x076415f3129f827467c8d26f3bdbd0301d306fc0b3d0576b01f59b5cd446da5d",
+          "0x08bb4e9ac7ad117bcf52cc269ba3bc7e1d8882d4fd51f978acdd24517972df10",
+          "0x2a05bec2cccf2c47b7c4107b4bb73d3a46e03137f19bc1d5a8947ef4bfff3073",
+          "0x2d59bc21252f298995026b0a5b8b4b36fc460f46002a0dc089e37d69e1e30b61",
+          "0x103fb9342330a7388a7a45af57248723878d88c821e5d466e97c77d014a25e11",
+          "0x2cd7d850ba5b22cfba1d6b779b722a0cc9f646335723e16ac3b14a94d9ea0076",
+          "0x0bd11d8895200ecea48307840d6a7f209cacb0a75b68d4a3fb77fdf1c83fc806",
+          "0x094f931d8b41fb2ef7563cb4b320e09a253828fa3670c3c9daef6557f3779dcf",
+        ],
+      },
+    ],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x1671099d25f048f10684a688de0c8761e76fe00b6fa6f44c200292e3a3f1e851",
+        "value": "0x00000000000000000000000000000000000000000000000000000000000003e8",
+      },
+      {
+        "leafSlot": "0x1442ecc2db1ccc3bc81b21a6b32da55e81a9bc545a76e3b064a01284fd321476",
+        "value": "0x00000000000000000000000000000000000000000000021db6fa67a177c88c40",
+      },
+    ],
+    "publicLogs": [
+      {
+        "contractAddress": "0x1e316519700ea215a63806a1ee6155f0764ccb916f21c32085a3e513c4e4e0a2",
+        "fields": [
+          "0x294e0effc9d70476e1779448497c87fcb47929969fa86bc12b095264dfd601d5",
+          "0x0000000000000000000000000000000000000000000000000000000000000003",
+          "0x0000000000000000000000000000000000000000000000000000000000000064",
+        ],
+      },
+    ],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795116440000,
+    "transactionFee": "83831918625000000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 reads back as the block handler stored it, with and without includeArtifactJson > class 1`] = `
+{
+  "artifactContractName": null,
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "selectorMap": null,
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 reads back as the block handler stored it, with and without includeArtifactJson > class with includeArtifactJson 1`] = `
+{
+  "artifactContractName": null,
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "artifactJson": null,
+  "blockHash": "0x03934e79fbc953bb0eada7ead3d403826ff8c6f2ca2c63edac7f0605f5cff26b",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "selectorMap": null,
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > local-network blocks > instance 0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83 reads back as the block handler stored it 1`] = `
+{
+  "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
+  "artifactContractName": null,
+  "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
+  "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
+  "contractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "currentContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "deployer": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "initializationHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "isOrphaned": false,
+  "originalContractClassId": "0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71",
+  "packedBytecode": {
+    "bytes": 11040,
+    "sha256": "6d0ab1432f0aef13f093e67af174c7ba2b72c0db7c4e6637df3460044e4fda83",
+    "shape": "object{data,type}",
+  },
+  "privateFunctionsRoot": "0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340",
+  "publicKeys": {
+    "masterIncomingViewingPublicKey": "0x00c044b05b6ca83b9c2dbae79cc1135155956a64e136819136e9947fe5e5866c1c1f0ca244c7cd46b682552bff8ae77dea40b966a71de076ec3b7678f2bdb151",
+    "masterNullifierPublicKey": "0x14fbaeaeddaa69be81d404c684e78e9f1a786d225faf8de2ce97c92f67d89a260000000000000000000000000000000000000000000000000000000000000000",
+    "masterOutgoingViewingPublicKey": "0x0e60ed663a4da5636e2e25a1f1f0c5b27c011c8eaed22bbe61e2a0fd875dd24b0000000000000000000000000000000000000000000000000000000000000000",
+    "masterTaggingPublicKey": "0x082c6d164b0ba073c9dd911100248c8ecd80b03f82f38531856a3c16dadcbef00000000000000000000000000000000000000000000000000000000000000000",
+  },
+  "salt": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "selectorMap": null,
+  "sourceCodeUrl": null,
+  "standardContractType": null,
+  "standardContractVersion": null,
+  "version": 1,
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46972: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46973,
+    "root": "0x05e739985fb3ceab53077544e4766b9f44523a1cc7c486d6eaa0367dae68eba3",
+  },
+  "body": {
+    "txEffects": [],
+  },
+  "hash": "0x00d9de82fee4db069935e4b9645178ba7f98332e7a8d023306bf5fb5c99ea19e",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46972,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46972,
+      "root": "0x2ac4a2c12f29c181f29bf2a75c5055bdf5cdbc7c417c072dc6a9d04dca6e0fb1",
+    },
+    "spongeBlobHash": "0x0cec3869ef39767921ef624176df62b9d868b7941ef41b9116e7445eeab33b62",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525440,
+          "root": "0x09f00b806f93c57caca2351b45fc6ec4e4e3a4841c9a4b6984f07c975b5a27fb",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525568,
+          "root": "0x2924332643037b4a00f2b58d50166c01c7152a483abddaec1a849491d2b7773e",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82208,
+          "root": "0x215946da1aaf4d2dcd00dd9bd39a3be818796174dbc284dd3fb50cf6b9a7a544",
+        },
+      },
+    },
+    "totalFees": "0",
+    "totalManaUsed": "0",
+  },
+  "height": "46972",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46972: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `[]`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46973: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46974,
+    "root": "0x0d043fe571e74d20a7256f7101bd3da048f07917d539ef8d7332992102518c05",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864",
+      },
+    ],
+  },
+  "hash": "0x264d86490d6c41ab4cdc4a2c87ab85053d73fbcaa85afa64941e4d3957a26edf",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46973,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46973,
+      "root": "0x05e739985fb3ceab53077544e4766b9f44523a1cc7c486d6eaa0367dae68eba3",
+    },
+    "spongeBlobHash": "0x221f0ec041bf899e3a0236d0bd5baa0007cf3a1bde7d5370426526ea2be54358",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525504,
+          "root": "0x09f00b806f93c57caca2351b45fc6ec4e4e3a4841c9a4b6984f07c975b5a27fb",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525632,
+          "root": "0x18b5e608a8d92f32394522194bde9f91e2ac095dac74276732cd2f68bcbc9934",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82214,
+          "root": "0x2a1148ca9ad91ed42246402f5cdaa89a0d0ae1dc12049c23dc30ea5e2a806d03",
+        },
+      },
+    },
+    "totalFees": "4504420720707200000",
+    "totalManaUsed": "3603536",
+  },
+  "height": "46973",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46973: block, its tx effects and each tx effect by hash > tx effect 0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864 1`] = `
+{
+  "blockHash": "0x264d86490d6c41ab4cdc4a2c87ab85053d73fbcaa85afa64941e4d3957a26edf",
+  "blockHeight": "46973",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x283e825473049bb45575131d57b4c512cb0c458c99046b87be6f9a7cd20d298a",
+    "0x07bdb580a1e451c3eba85d552a5e84ba9d220d04981fc43f0df9c28a88eae901",
+    "0x165dd3d2658b4be9c8d450358b8f4c7650d0419238d1867ba51205e9cf44b538",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x2a33b88538444601c94a3972d389a900cd76f9725f0b11767e5f62796574f8ea",
+      "value": "0x0000000000000000000000000000000000000000000000005404a8fa683f82ca",
+    },
+    {
+      "leafSlot": "0x17bfaa5bdd93303d200d2093e7f10015832673580553fa6852409039465290f3",
+      "value": "0x000000000000000000000000000000000000000000000000079c9b75705e8e4b",
+    },
+    {
+      "leafSlot": "0x169269f59753280dc6513fc8099c7818cde116b6d1b7ba82be77968a79c4206a",
+      "value": "0x0000000000000000000000000000000000000000000000009fccd7c341938f1e",
+    },
+    {
+      "leafSlot": "0x251b61e549bc282283330151d9bcdde73280f22ecb0a426e5d203644d815f520",
+      "value": "0x000000000000000000000000000000000000000000000000edf98422d604ebab",
+    },
+    {
+      "leafSlot": "0x241992c52730226ea702ba1a2bfd9e6cec6fa8cbacecf4cb19f7a2c83fd9c1fe",
+      "value": "0x000000000000000000000000000000000000000000000000000000006aff29e4",
+    },
+    {
+      "leafSlot": "0x0c77c8aad79e4741e57193b7788e3de7e97db3a9c7ff9719714e8c23fd62cdd5",
+      "value": "0x2f3a3f116d86c6a34b96c794a424f1035d40bd826cafbc313b68f4f63ec33fce",
+    },
+    {
+      "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+      "value": "0x000000000000000000000000000000000000000000000151adf2837d9e160480",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "4504420720707200000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46973: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x264d86490d6c41ab4cdc4a2c87ab85053d73fbcaa85afa64941e4d3957a26edf",
+    "blockHeight": "46973",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x283e825473049bb45575131d57b4c512cb0c458c99046b87be6f9a7cd20d298a",
+      "0x07bdb580a1e451c3eba85d552a5e84ba9d220d04981fc43f0df9c28a88eae901",
+      "0x165dd3d2658b4be9c8d450358b8f4c7650d0419238d1867ba51205e9cf44b538",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x2a33b88538444601c94a3972d389a900cd76f9725f0b11767e5f62796574f8ea",
+        "value": "0x0000000000000000000000000000000000000000000000005404a8fa683f82ca",
+      },
+      {
+        "leafSlot": "0x17bfaa5bdd93303d200d2093e7f10015832673580553fa6852409039465290f3",
+        "value": "0x000000000000000000000000000000000000000000000000079c9b75705e8e4b",
+      },
+      {
+        "leafSlot": "0x169269f59753280dc6513fc8099c7818cde116b6d1b7ba82be77968a79c4206a",
+        "value": "0x0000000000000000000000000000000000000000000000009fccd7c341938f1e",
+      },
+      {
+        "leafSlot": "0x251b61e549bc282283330151d9bcdde73280f22ecb0a426e5d203644d815f520",
+        "value": "0x000000000000000000000000000000000000000000000000edf98422d604ebab",
+      },
+      {
+        "leafSlot": "0x241992c52730226ea702ba1a2bfd9e6cec6fa8cbacecf4cb19f7a2c83fd9c1fe",
+        "value": "0x000000000000000000000000000000000000000000000000000000006aff29e4",
+      },
+      {
+        "leafSlot": "0x0c77c8aad79e4741e57193b7788e3de7e97db3a9c7ff9719714e8c23fd62cdd5",
+        "value": "0x2f3a3f116d86c6a34b96c794a424f1035d40bd826cafbc313b68f4f63ec33fce",
+      },
+      {
+        "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+        "value": "0x000000000000000000000000000000000000000000000151adf2837d9e160480",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "4504420720707200000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46974: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46975,
+    "root": "0x2fa14841a3b01a401e1da430e3bb21dd810b7545a89b90965201bec5430c73e4",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6",
+      },
+    ],
+  },
+  "hash": "0x22ff60a4cef9715ca7d5ff023cab72d30c327e03f4d673f786d4484f917e9d0c",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46974,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46974,
+      "root": "0x0d043fe571e74d20a7256f7101bd3da048f07917d539ef8d7332992102518c05",
+    },
+    "spongeBlobHash": "0x0e846bafe18c63a072cd3107533b7982747c5ddd957d320a0fa7b74de0ea97a2",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525568,
+          "root": "0x1c7741e2ee5159d0b5b17ef750a7f739bd702e5c1abc49900108c4e3c5e896b9",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525696,
+          "root": "0x0605855ad511b12f06f0cc54c2645b81ff7bc6382c899b0f496c8939bce5f22a",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82214,
+          "root": "0x21d57bd6bac9f9ef307dd695b4ea1948ef679cd59165ba1db8ef3988ba8153ba",
+        },
+      },
+    },
+    "totalFees": "956783903085400000",
+    "totalManaUsed": "765427",
+  },
+  "height": "46974",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46974: block, its tx effects and each tx effect by hash > tx effect 0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6 1`] = `
+{
+  "blockHash": "0x22ff60a4cef9715ca7d5ff023cab72d30c327e03f4d673f786d4484f917e9d0c",
+  "blockHeight": "46974",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [
+    "0x1845808e055ca9d1923e437edf9a5cc0e8d2d1539e9a1f77252251a120f1bd7c",
+  ],
+  "nullifiers": [
+    "0x1666c1fcd5dee23fd43f5165a441d877fe86697d0099f2d3ecda93ee33b58a60",
+    "0x08404fd7d90458d8215be64bb6d1db27d0178e500fa39e08793fafbc9d3683fc",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x2966e97f54e70620a3659a21a6025059a297f3beb6a203d2b7122dfb291512be",
+      "value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    },
+    {
+      "leafSlot": "0x0061663df16060cb4df81cd508837e4227742e77355a704535ddb7da97719947",
+      "value": "0x0000000000000000000000000000000000000000000000000000000113d567c8",
+    },
+    {
+      "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+      "value": "0x000000000000000000000000000000000000000000000151a0ab55999fde74c0",
+    },
+  ],
+  "publicLogs": [
+    {
+      "contractAddress": "0x14fa2f1d5a503abc88be65155107a6c96f00be1edd3bb1387897f81b2c14f7f1",
+      "fields": [
+        "0x03c260ba78e96c1751b3e68f7a7c26fed12add6ad9f5033a3b55201116a60c59",
+        "0x0000000000000000000000000000000000000000000000000000000000000003",
+        "0x00000000000000000000000000000000000000000000000000000000015e3070",
+      ],
+    },
+  ],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "956783903085400000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46974: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x22ff60a4cef9715ca7d5ff023cab72d30c327e03f4d673f786d4484f917e9d0c",
+    "blockHeight": "46974",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [
+      "0x1845808e055ca9d1923e437edf9a5cc0e8d2d1539e9a1f77252251a120f1bd7c",
+    ],
+    "nullifiers": [
+      "0x1666c1fcd5dee23fd43f5165a441d877fe86697d0099f2d3ecda93ee33b58a60",
+      "0x08404fd7d90458d8215be64bb6d1db27d0178e500fa39e08793fafbc9d3683fc",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x2966e97f54e70620a3659a21a6025059a297f3beb6a203d2b7122dfb291512be",
+        "value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      },
+      {
+        "leafSlot": "0x0061663df16060cb4df81cd508837e4227742e77355a704535ddb7da97719947",
+        "value": "0x0000000000000000000000000000000000000000000000000000000113d567c8",
+      },
+      {
+        "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+        "value": "0x000000000000000000000000000000000000000000000151a0ab55999fde74c0",
+      },
+    ],
+    "publicLogs": [
+      {
+        "contractAddress": "0x14fa2f1d5a503abc88be65155107a6c96f00be1edd3bb1387897f81b2c14f7f1",
+        "fields": [
+          "0x03c260ba78e96c1751b3e68f7a7c26fed12add6ad9f5033a3b55201116a60c59",
+          "0x0000000000000000000000000000000000000000000000000000000000000003",
+          "0x00000000000000000000000000000000000000000000000000000000015e3070",
+        ],
+      },
+    ],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "956783903085400000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46975: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46976,
+    "root": "0x294fa325e2165cce58a0d448e4e41233b0e34ee16c959f886818893b18995cb1",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08",
+      },
+      {
+        "txHash": "0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9",
+      },
+    ],
+  },
+  "hash": "0x053a197356b007b92d4147ac025d94462f282ca4a5053eacbb5005d78c0556cf",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46975,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46975,
+      "root": "0x2fa14841a3b01a401e1da430e3bb21dd810b7545a89b90965201bec5430c73e4",
+    },
+    "spongeBlobHash": "0x0fd907a1c5f1ff892624e073fb94c3d7174b6ca1ffa0d011f438d3d27f205d3c",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525696,
+          "root": "0x1674e0e4adbd99aef847f6857fcc357c0e705d8e31ba89ccf5ec432e6b6deb59",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525824,
+          "root": "0x1d91655aed719e73711dcc96b6b4f2b73dc9c00f1f919620d5287703adb1bd4e",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82219,
+          "root": "0x09f8ebe171439e7ea4c98ada83d5e33f2e9e403189385ecbe8438254042f432a",
+        },
+      },
+    },
+    "totalFees": "6284236005477600000",
+    "totalManaUsed": "5027388",
+  },
+  "height": "46975",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46975: block, its tx effects and each tx effect by hash > tx effect 0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9 1`] = `
+{
+  "blockHash": "0x053a197356b007b92d4147ac025d94462f282ca4a5053eacbb5005d78c0556cf",
+  "blockHeight": "46975",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [
+    "0x009b1f94e97c3a6200b3ff1542de9a5d6e33ee4d077af4ac47cf3a529669e16b",
+    "0x07d7e6cc14d34c0d74ab0b06df7ffa1f99cdf58036ece10f1e7adb113b54165b",
+    "0x076c2eae85046a4988e0505b82593de2de5e89d7bb620514b47e9fff58724d8c",
+    "0x2bed4fcf5cb37930c70bd0c3e4b990fbe9a3dc62c454ac4b8fe57774e5cacf87",
+    "0x07d714f5e2eadbb6f71dfbef78f2f5763c758b2c246c2d97d93891b320ea12c4",
+    "0x099542353449cf96da3fd5a0577e2412e5b11d1a251055c5448431e680232aba",
+    "0x1fefb6b222ad7b251bec31928d6b0c7dc99a8f73cb51898ed39c46b9e77a848b",
+  ],
+  "nullifiers": [
+    "0x0cbf3644b3c4b9f377df942560763e93e94243d427a3a90cae56be6ff9974911",
+    "0x213f08410fc886a7b19f42679009ab9c3cba582e80486776669c9148bd743047",
+    "0x2bc96a3819e05968cd9ae0912a89a46668440842b96b075c99a60b7dfc62f67f",
+    "0x21854597ee569c611279531137bbdc7df3eda3926251410ef4a098e516490372",
+    "0x065c3d42f3b4888e4e58b71050a4d6ed9d3244e7a902710b54c9abf60120b9f8",
+    "0x2eae5486703f67e48d7a36a41288a8fd670a2aa34f8739607575fda43291f3fe",
+    "0x02b5035120cdff20d66da546ee35935a3e0494e55c71797e8e71c04c85c0b420",
+    "0x24f12b98eb800d34a075ef87268e246cf6007c91c13a846b55dc28c938d82eb9",
+    "0x09463e7b5330a425d869ffd9b7b974a285b45e2cb6bb539fdee13839bd0d7394",
+    "0x01f2916f3e5b5fcd78d1f585880e3c8ee09c62486814847353f888481e6c688e",
+    "0x2775feecbf1cdd95924d129d0c81bc91e0327ca299abe94e8b8f8f466177225c",
+  ],
+  "privateLogs": [
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x12c10b06ca8dd3a852ad6843156ec671f6ec4bb0c8cf6fb58082bca7b427b2a3",
+        "0x0950484d814b7b3ad221fd80e9faa0358f11fcba1444dd395c0e654169cbed6d",
+        "0x008bf9b33e05eb884a73ea1c9da96a77faae249a04e0bd039634b3357d762e7c",
+        "0x2ae03b028a1f8cd0f9aefad0919661399ca1d380ed9d629fa960fb8d6288b8fe",
+        "0x2fcaee8ccefeb05bd259c385dab840f567c658e434548e8e0f1576e792da14f5",
+        "0x13fe57f7c335e9451f424c1fd23e1b5e47bdbb29b1a56f306336a34c2d5cfd19",
+        "0x0e2805dcd0d462c344d4949bcb904675cded03e425af1ea092e8e3f63177f8b8",
+        "0x2fdb1601dc2d4221a240a660c1d19a4266b3065939d897dfca2e60772c502daf",
+        "0x048b88734041049de613f2bf2dca3aa379e7190085c0bf69dc1168337290d8fc",
+        "0x20cb53c3322dbd216e6a04b853b5f942fa495cd7ed97464a6a45e98389185edf",
+        "0x2e8d14a49ebca6c864d4a682d8445b2894701446f55c92a77738b2d9a0a114cb",
+        "0x0e36e94449242660e31ad1e9f9e9f6c76e10ac23a7a00e873da6d9dc30e54250",
+        "0x3026073d65f7f75280ca709d8759fb9e0a2d111583464d5159e631af9ceaa9dc",
+        "0x0e666bacd7f646dcec6c60a04a815c7b3d63e5615f4f14bb4461b34838c97e6b",
+        "0x1c75493a3ab186e0fdf53084acf9385674847c25c538715b9f4a79b8543b3db0",
+        "0x137f460c62a317f939a8e72cab8e1527ef82ef2cc71edc172a9755d7a6ef181b",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x17cf1aa7febf419832d6b309953df8def25a93c4e35dbd89bed1b0ac18d40b53",
+        "0x0eba7c597211ac4f7d0e3eeae34bbb26014796f37eb7bc80160391dbf57978e4",
+        "0x1694e88a111dfd7e0a7af8189b34ad085ff2785124d7ac6114a15fe7bec25a5d",
+        "0x0ccd4b83ac8b7f3df24b043448b44c35c3c9c0eee1dab3f2303b6d67497e402d",
+        "0x22187bd47df1f0880a5d1020898948fd94938f46e89f85f6f05ab48632c0cbc0",
+        "0x02552e5311753ea3a0546522ab72a1db6a3012b50d0c965fc27ab9f943f6bb90",
+        "0x088dc6c3c7403280efbe328cedabcb7fc5e9321db9c798069cee58e3ce545778",
+        "0x1df8c3261e9bdc9417d7885351a93a2a949058b8944cfd00972292be80773e9e",
+        "0x25f2af9ff396229e777d4b01994dcc23e9e4a04ef37bd1b1365bfde6a8ee6930",
+        "0x10ffb86582374bd3e3aa71b4f233fab0220c01dbba2f47d868d7eaff95b87547",
+        "0x296af4445c576a5a1879a88d544a9eda4ca8da9f5528e8aa28dcc23c2722a537",
+        "0x107f6b3c6c5f364815b53a6089484064e5232d07abdaf874819702e6c60a91fe",
+        "0x2387fdbbbf8552f5546ee74d053d4528bc979f24257b8b4824a07a9e12a46ed3",
+        "0x164994af320d1ad5cb5cd0ae914f1692d4d165b53d8e19f85c2cf7e5321bd9c9",
+        "0x0b0b1c73a8ad6d307c8fdd2460730404938ce412c430e38ee193870c3cb843ef",
+        "0x16812081be30d3fe51badf5be5c4ca8d81c109efece09b10c6c20e55c13b9a20",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x00a33354a0294ef8a2ac4c43b365e902c91a0a1f9dfaace9958c3af1d08a4b02",
+        "0x2eb0b9aac29c36f771fb23272bde3cec4e8a09a9c7e012f2641f77abf1f6edd6",
+        "0x1db3dee5f678b3551f78c8c87db820787fa2e8fca41d865115d6a4ec059bddf5",
+        "0x157df25bbf2d774d44544c159de2ad6395aeaf218b80d11d3b0bb0e3c0cc5e8a",
+        "0x134b7084219247695dd1b6cf58ad0a4346407de00de794352e5141785b0a0f50",
+        "0x24991a1c742bdd99a18b5ba241887a7240ed59c58eb0d46ebbd9f79465dfac32",
+        "0x0bea09ff4f6960e4cc3408e68f828f0e0765dc2d1ac16338cfb366d47bcf2ddf",
+        "0x1bc0f2946143d72733a0a5963aa4f9d17fbdf741fd36682b24647446068d0e2c",
+        "0x2fb3c05dccc6e98336c158360df7b86109b8f5e0a8bcdc29a636a43e487eb7d5",
+        "0x20277e057f5afb03c4e19010ba0cfcf4caa66262d3505aa61922c42c6ac6bcf8",
+        "0x2b15d4b5ae0c97f288e0eef31076d7d1f0675d21250e2e1ed7ce5f8791888c7e",
+        "0x2fba1ea9e7bebe5ab1eed7c725bcce3584713cc7b9ad0ce35e8e8444165a42c0",
+        "0x0546227004c39b69adf3f098dddc2832ca26a3bfc0cb69021b4bf976e9e6b198",
+        "0x1c3730f048f15ac055d0e494741d4103fb472bbc71683da6c1c23c8eab054973",
+        "0x300cfa3ca8a69e7731c5c83e4f99e7a520ca80550f2b506d2cea1d22b7d49028",
+        "0x0b5973dccac3aa17ef124de7cd90d7a268ecdcdbc901bc6037c7659f588b23af",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x25dd36d9759bbc0ca2ac6b33b43c54778c8a258a46f0fd52f63a9089e7939d66",
+        "0x2bac401695cd02b1bcd67ce7fdfa4fa620220e182b2b31c689eebb3a2b4e5959",
+        "0x2c9c7ede232157538785b0d88335bd141dd8da46e2fa648d0438c40245ae4594",
+        "0x03cd30b92dc13a4c856b23a13f09604a5b6f5140ab298cdd5cf954d29a8981e4",
+        "0x18698d345f37bae9e583fec6492a2aef1fe6dadddb97ac4dec2c5cefbb5efc85",
+        "0x0f4e2f1691488b3135d53e69738ab1b7f4cbb9c51d0af51c6891aa26810296c0",
+        "0x0a0c5028aa267a87d62795583e4a77a3a1200533e33472ccaebbc9b5f537fab9",
+        "0x0533541d13346219e08e8d401c1723b2a046caf6bdd85c64586b5425d9c49b28",
+        "0x084de7679a946f80c1acca07e1fcb83f19c31407b3296a38c87f360ec5359009",
+        "0x026605b9e533d9e6471797e4b397301838b5e2dc4bf296ed0893c0c1746ccc56",
+        "0x062ac53a4770abf8e6a55663d09803dc968927aeef32cb021a032101b6b62b2e",
+        "0x1b4d5f947f452abf1bb62c8b5d83e3d8fa7efeb80e5d19161f0287262b93d7d8",
+        "0x018a6a7bb1a504de0a0d67577bd5e14d39a893016944b4a8a10a2d9c4b774e28",
+        "0x1d5aa2b93fca87b30168db3d2edd5865158bda5e4fb9203d94438a3448d081f3",
+        "0x09709574ff16cf5fb97fc348df6177e1b80d068a91c2c8e6dcba62ac1d0963db",
+        "0x0d43fa2ed7787b00119f9629764b56ed4fd4f5625ccffa85aa0b6d848186dda8",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x0ae9af0768a846740b31c6a58a91ce4f291287f158719f9e645a24beeb4dc54d",
+        "0x021321e45618868b132a0582477ef9169bcba4957a500342346891e886c22457",
+        "0x1d0fb1ffe11deaa1a00b73b4e3a73cf09b39bd4af863d93211eb839143030c4a",
+        "0x24d332e9db978350595d516f4afe173257bc38d278f6b4bc7e8a4e3358a840c1",
+        "0x016998d1b880996f959e50c069c3b7db60dc5d709843aaadd6d55a0ee254ce7f",
+        "0x1b282a072cc5b4eabce02751c194f4274d9f3e0a85aff126e56774508549f45c",
+        "0x0066586656f8e64c2bbee15c20ef2c478abe868b7cf9f1ef2d24f54fafbf8498",
+        "0x2f1cfe670149b43ed69b15d9e1a9459ff513fa07945b99d468d30f9f9ff737ed",
+        "0x12009476d7760c50ca33918bf0df8ffa77a12f964e7221e4fb8eed54b1ad7322",
+        "0x068de6bbfc2b95615d247bc5207016f1eca8a26e4bce3f74173522530ecff714",
+        "0x2abf28c06d8ed21d7ce45b0b3d81599eecb88c266a7737cfd5d092f8dc3a9b32",
+        "0x2a84c51a296f78eee5971e5a79a103b884f4eaaa11b15554c86ad41cf30674ff",
+        "0x298a614ff1c7d88c16b721d99c72b299ce645e3f160127f10fc39582212742ee",
+        "0x0745d0acda94ebadc6c7bed6f2464d60cc154ae5f0735cc5da6f4ce4d3e20547",
+        "0x2d21f1f04af4ea6343cca9219195548fd9e07d6058c61f59a6812bce5f35eb78",
+        "0x229b308873fe977976b369deec38a6cbcaf0821e73696156b5f0c15668f5e5fb",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x117e7d3f147763cc603ece03a148673fd9ad57fad804b10b1d7af67015c8d116",
+        "0x1b37e750d0fe1e7e79f7a848f49eb673bdcffc060c8bd6309b97944fb423754b",
+        "0x172b1d5702fb7c298093f7c486269be6b7cc50ee4df98675419f55a1658dae2e",
+        "0x14da369d86f98d991934bf61212c8935974834a6d1013ab285c39ad208de00b6",
+        "0x2b760e9b157a0a196b89437c61dc277deb6f3cbfd50ac88ee28989ca1f6bb80c",
+        "0x1b9c4c82799cf94f84f4415bf2e1ea827eed1f6a4e2c65dc0f2d69d8dc79b5f8",
+        "0x209ed8a91000d91b012405a56395201c4bd94fc5cba31f1963714601416e5fc1",
+        "0x25eb3ce193ffb1d34e2a56ced70335d2bb5df05841d9ae753c0dbeb7946eb6d8",
+        "0x2138f69d6a97f62bd064dce5691be5dc6860ae41ebdae222684d19ebd20e33b0",
+        "0x12e1d0c539fe33643254d191a2c505a136f6ef771a95e7d4fbad46dee7f84f2c",
+        "0x2db590c2a83cc6c532f0a1bf88fef0310b598fe73ced83613eed04984462c7d7",
+        "0x1d44e551eb8588d902e472c77e4d764e27cc2fb3eaacd5efffc835d65a7edf3d",
+        "0x2e4ad3ea3d508526c32623af198ce7173c9214d1bc26d1a806f5d9be0b87b9b5",
+        "0x26269279de05c5e375dcb3ff4509e3178ca3d0aa6ff2fde5a001208e653cdbd5",
+        "0x2837e8f67ac4dded4e17c5decee71b833dd351425d5700368d105c98def9ec99",
+        "0x0b55a5de881aef101c9274c5afd44f663af3846cdf5e4c420232c458760cfab6",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x112422e0fd799aec2c98977c1e5e1709c7b41bf7b38d380efa001359cda05d47",
+        "0x2f502382631847343d51325f7211852e90445c02360de2f950eac08f07be14ed",
+        "0x1f640144740f31900a2c06993dd63a4b4d922e90f6b80463372bf5f2548cc88e",
+        "0x1f9b9a661e1ae9a6a5ea75853ee14bb502ac728174a49c0fca526c18ce75a537",
+        "0x1ff3153aa88989be1de5bb9fdaaa4d41b9e71cd444ea48309e60530854fb4896",
+        "0x1569fa3ba251711166dfff1a53cb88715ae8c644346f1d6fbe61044f8a2ae33d",
+        "0x17361a42bfe4e15b508cada50786bbc398ca5d0f640bd99c3c41d4979c9e8e6e",
+        "0x2d0ae64d4b79c2fbd5f984b47329b28dc0b07dafd6eaa57c21d89847460075f0",
+        "0x0f98c1e7a4220759ef08428a04ec34305435a459f454bdf72966ca0004f56c49",
+        "0x0c9df44f4ee530191376f03eb0b1d02d1fa64b506145fbcfa59fb142446cb24d",
+        "0x1e8cbf98793b9df80e8caeb023b23a5735ae75630f1573739bbc3ebb0decd5c7",
+        "0x2b9fcc9ad969fe266a0348c2ee3b6a5e0f993b740bf3013c71074970f7323f6a",
+        "0x23cba84e634fe11488c135375cf7fbaeafdcc584cfc6b65a1092d08f20c32f76",
+        "0x28b458579825802c4e135dbb1b7b2e2f1b9bd968ead4ccd4429048236ed2d3b0",
+        "0x1fe364c51b15fd036a00d1218a4f94132bdc5f3e80e020db48fddf61ee7aec2a",
+        "0x0433fce8869e42a9db020c6bb14b9deeb7af5953ae6d682d58cfa5dba1657137",
+      ],
+    },
+    {
+      "emittedLength": 16,
+      "fields": [
+        "0x164b66351fb6e6cb68fe5cc2f57ddef38a8bb712a5f5896f7cb9db229cc38942",
+        "0x1ce82264edb75d18f845a51e0606d32e9c0d680f57700c47dc500c2916260abd",
+        "0x2cecc5ff1a8f656c9871095e7536abe7e45863120c868a4c7a478cd1b94aa132",
+        "0x0e83cc3a810946974ec1f3ca2d7fb9ab2e58074f4287fbef0242000e8e5e2f59",
+        "0x0ddea3d08597147f6afa892139a7418c2d921a1f56894736d5acb1910b18e377",
+        "0x1f249a8cbb02c069431ef6d4253de7e5df034f679aa37e96a849968f7a307eef",
+        "0x1ba5ca0051c9151066247767d58ad9ed28e3f630e9f94bfbcebed227d4184c89",
+        "0x1ff2edd4a72a58465d084234376ca506925a96a657cc6360a098ecf9fd773bba",
+        "0x1eb5732974d2cea2c30d29cecef009f758479ec0c7b647855e7a55168b67af95",
+        "0x01705fe98fe45756d2c7b9490b7d7fa26b63796f011f50f40969cf41853a505e",
+        "0x27ffbe66b0f481ba7b0d345f14f642fda0c4756eededd79dea0a1fa57ddcd99c",
+        "0x19ab69fc0a27cdb723e19af6099ad6d753b8f123bfa0e1ed21bac2a1780bece5",
+        "0x2a207a3108b2425a3d1d85103421663d20cf7c1f274bd9e3eb80f91feec9c2d3",
+        "0x2f00606dcb485b80d8becabf1c5d8bb99dc961f631a2f28b3d19a057b9339aca",
+        "0x01c283b55fcc900b9032ba42d6e6a9d684f798f5019f3923fcfe0770d715c517",
+        "0x1479fc55445c8b23c439b73c5de6046a3597bd0286cdf37db3217ce07421bf8b",
+      ],
+    },
+  ],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x2ca92cd72d6cb196d62da6e6ec2e6cf755b12ace7b704cce9f3ed4abc079e5bc",
+      "value": "0x0000000000000000000000000000000000000000000014ca375aae4195987600",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "875500140080000000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46975: block, its tx effects and each tx effect by hash > tx effect 0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08 1`] = `
+{
+  "blockHash": "0x053a197356b007b92d4147ac025d94462f282ca4a5053eacbb5005d78c0556cf",
+  "blockHeight": "46975",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x25065d5ae7ca51ddbb91282e9282f57b88d277a963b962d098fb20731f662390",
+    "0x1bfab8a9eb9dbce3981f2c5414d52a0ca29b1295ab2e5af59c3cd8a93a6ad939",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x119cb9e329e3b6e0e11a7502cf1f559063b75caa98a948b9a51aa594aa03206b",
+      "value": "0x000000000000000000000000000000000000000000000000b8c3143350970997",
+    },
+    {
+      "leafSlot": "0x11753a7defd57a4fae98e0d12de1825d5f6e838abf2813b70f84f7c33f0a6d6b",
+      "value": "0x0000000000000000000000000000000000000000000000000227d7ef5dbb1ee4",
+    },
+    {
+      "leafSlot": "0x1a861956fcdbf6e18a2df5636db23cbdb6a2b60d4dec7636e50aa57d48654633",
+      "value": "0x000000000000000000000000000000000000000000000000e990fece32f4433d",
+    },
+    {
+      "leafSlot": "0x23dab5b28b58b3b1c8f52e896a362f7c8ff9d967b873d6bb2634bd1d34fc9466",
+      "value": "0x0000000000000000000000000000000000000000000000009d000ab3ee77cbca",
+    },
+    {
+      "leafSlot": "0x19fcf1e6c5164ece6b41911e007506c7ec13861efa59e79bfae20456294ed7cd",
+      "value": "0x1e56faba40716c3ec907117407395a9e770b8e919e1c9957c559a4c1d2e371b4",
+    },
+    {
+      "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+      "value": "0x000000000000000000000000000000000000000000000151559ba4fcbaee15c0",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "5408735865397600000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46975: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x053a197356b007b92d4147ac025d94462f282ca4a5053eacbb5005d78c0556cf",
+    "blockHeight": "46975",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [
+      "0x009b1f94e97c3a6200b3ff1542de9a5d6e33ee4d077af4ac47cf3a529669e16b",
+      "0x07d7e6cc14d34c0d74ab0b06df7ffa1f99cdf58036ece10f1e7adb113b54165b",
+      "0x076c2eae85046a4988e0505b82593de2de5e89d7bb620514b47e9fff58724d8c",
+      "0x2bed4fcf5cb37930c70bd0c3e4b990fbe9a3dc62c454ac4b8fe57774e5cacf87",
+      "0x07d714f5e2eadbb6f71dfbef78f2f5763c758b2c246c2d97d93891b320ea12c4",
+      "0x099542353449cf96da3fd5a0577e2412e5b11d1a251055c5448431e680232aba",
+      "0x1fefb6b222ad7b251bec31928d6b0c7dc99a8f73cb51898ed39c46b9e77a848b",
+    ],
+    "nullifiers": [
+      "0x0cbf3644b3c4b9f377df942560763e93e94243d427a3a90cae56be6ff9974911",
+      "0x213f08410fc886a7b19f42679009ab9c3cba582e80486776669c9148bd743047",
+      "0x2bc96a3819e05968cd9ae0912a89a46668440842b96b075c99a60b7dfc62f67f",
+      "0x21854597ee569c611279531137bbdc7df3eda3926251410ef4a098e516490372",
+      "0x065c3d42f3b4888e4e58b71050a4d6ed9d3244e7a902710b54c9abf60120b9f8",
+      "0x2eae5486703f67e48d7a36a41288a8fd670a2aa34f8739607575fda43291f3fe",
+      "0x02b5035120cdff20d66da546ee35935a3e0494e55c71797e8e71c04c85c0b420",
+      "0x24f12b98eb800d34a075ef87268e246cf6007c91c13a846b55dc28c938d82eb9",
+      "0x09463e7b5330a425d869ffd9b7b974a285b45e2cb6bb539fdee13839bd0d7394",
+      "0x01f2916f3e5b5fcd78d1f585880e3c8ee09c62486814847353f888481e6c688e",
+      "0x2775feecbf1cdd95924d129d0c81bc91e0327ca299abe94e8b8f8f466177225c",
+    ],
+    "privateLogs": [
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x12c10b06ca8dd3a852ad6843156ec671f6ec4bb0c8cf6fb58082bca7b427b2a3",
+          "0x0950484d814b7b3ad221fd80e9faa0358f11fcba1444dd395c0e654169cbed6d",
+          "0x008bf9b33e05eb884a73ea1c9da96a77faae249a04e0bd039634b3357d762e7c",
+          "0x2ae03b028a1f8cd0f9aefad0919661399ca1d380ed9d629fa960fb8d6288b8fe",
+          "0x2fcaee8ccefeb05bd259c385dab840f567c658e434548e8e0f1576e792da14f5",
+          "0x13fe57f7c335e9451f424c1fd23e1b5e47bdbb29b1a56f306336a34c2d5cfd19",
+          "0x0e2805dcd0d462c344d4949bcb904675cded03e425af1ea092e8e3f63177f8b8",
+          "0x2fdb1601dc2d4221a240a660c1d19a4266b3065939d897dfca2e60772c502daf",
+          "0x048b88734041049de613f2bf2dca3aa379e7190085c0bf69dc1168337290d8fc",
+          "0x20cb53c3322dbd216e6a04b853b5f942fa495cd7ed97464a6a45e98389185edf",
+          "0x2e8d14a49ebca6c864d4a682d8445b2894701446f55c92a77738b2d9a0a114cb",
+          "0x0e36e94449242660e31ad1e9f9e9f6c76e10ac23a7a00e873da6d9dc30e54250",
+          "0x3026073d65f7f75280ca709d8759fb9e0a2d111583464d5159e631af9ceaa9dc",
+          "0x0e666bacd7f646dcec6c60a04a815c7b3d63e5615f4f14bb4461b34838c97e6b",
+          "0x1c75493a3ab186e0fdf53084acf9385674847c25c538715b9f4a79b8543b3db0",
+          "0x137f460c62a317f939a8e72cab8e1527ef82ef2cc71edc172a9755d7a6ef181b",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x17cf1aa7febf419832d6b309953df8def25a93c4e35dbd89bed1b0ac18d40b53",
+          "0x0eba7c597211ac4f7d0e3eeae34bbb26014796f37eb7bc80160391dbf57978e4",
+          "0x1694e88a111dfd7e0a7af8189b34ad085ff2785124d7ac6114a15fe7bec25a5d",
+          "0x0ccd4b83ac8b7f3df24b043448b44c35c3c9c0eee1dab3f2303b6d67497e402d",
+          "0x22187bd47df1f0880a5d1020898948fd94938f46e89f85f6f05ab48632c0cbc0",
+          "0x02552e5311753ea3a0546522ab72a1db6a3012b50d0c965fc27ab9f943f6bb90",
+          "0x088dc6c3c7403280efbe328cedabcb7fc5e9321db9c798069cee58e3ce545778",
+          "0x1df8c3261e9bdc9417d7885351a93a2a949058b8944cfd00972292be80773e9e",
+          "0x25f2af9ff396229e777d4b01994dcc23e9e4a04ef37bd1b1365bfde6a8ee6930",
+          "0x10ffb86582374bd3e3aa71b4f233fab0220c01dbba2f47d868d7eaff95b87547",
+          "0x296af4445c576a5a1879a88d544a9eda4ca8da9f5528e8aa28dcc23c2722a537",
+          "0x107f6b3c6c5f364815b53a6089484064e5232d07abdaf874819702e6c60a91fe",
+          "0x2387fdbbbf8552f5546ee74d053d4528bc979f24257b8b4824a07a9e12a46ed3",
+          "0x164994af320d1ad5cb5cd0ae914f1692d4d165b53d8e19f85c2cf7e5321bd9c9",
+          "0x0b0b1c73a8ad6d307c8fdd2460730404938ce412c430e38ee193870c3cb843ef",
+          "0x16812081be30d3fe51badf5be5c4ca8d81c109efece09b10c6c20e55c13b9a20",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x00a33354a0294ef8a2ac4c43b365e902c91a0a1f9dfaace9958c3af1d08a4b02",
+          "0x2eb0b9aac29c36f771fb23272bde3cec4e8a09a9c7e012f2641f77abf1f6edd6",
+          "0x1db3dee5f678b3551f78c8c87db820787fa2e8fca41d865115d6a4ec059bddf5",
+          "0x157df25bbf2d774d44544c159de2ad6395aeaf218b80d11d3b0bb0e3c0cc5e8a",
+          "0x134b7084219247695dd1b6cf58ad0a4346407de00de794352e5141785b0a0f50",
+          "0x24991a1c742bdd99a18b5ba241887a7240ed59c58eb0d46ebbd9f79465dfac32",
+          "0x0bea09ff4f6960e4cc3408e68f828f0e0765dc2d1ac16338cfb366d47bcf2ddf",
+          "0x1bc0f2946143d72733a0a5963aa4f9d17fbdf741fd36682b24647446068d0e2c",
+          "0x2fb3c05dccc6e98336c158360df7b86109b8f5e0a8bcdc29a636a43e487eb7d5",
+          "0x20277e057f5afb03c4e19010ba0cfcf4caa66262d3505aa61922c42c6ac6bcf8",
+          "0x2b15d4b5ae0c97f288e0eef31076d7d1f0675d21250e2e1ed7ce5f8791888c7e",
+          "0x2fba1ea9e7bebe5ab1eed7c725bcce3584713cc7b9ad0ce35e8e8444165a42c0",
+          "0x0546227004c39b69adf3f098dddc2832ca26a3bfc0cb69021b4bf976e9e6b198",
+          "0x1c3730f048f15ac055d0e494741d4103fb472bbc71683da6c1c23c8eab054973",
+          "0x300cfa3ca8a69e7731c5c83e4f99e7a520ca80550f2b506d2cea1d22b7d49028",
+          "0x0b5973dccac3aa17ef124de7cd90d7a268ecdcdbc901bc6037c7659f588b23af",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x25dd36d9759bbc0ca2ac6b33b43c54778c8a258a46f0fd52f63a9089e7939d66",
+          "0x2bac401695cd02b1bcd67ce7fdfa4fa620220e182b2b31c689eebb3a2b4e5959",
+          "0x2c9c7ede232157538785b0d88335bd141dd8da46e2fa648d0438c40245ae4594",
+          "0x03cd30b92dc13a4c856b23a13f09604a5b6f5140ab298cdd5cf954d29a8981e4",
+          "0x18698d345f37bae9e583fec6492a2aef1fe6dadddb97ac4dec2c5cefbb5efc85",
+          "0x0f4e2f1691488b3135d53e69738ab1b7f4cbb9c51d0af51c6891aa26810296c0",
+          "0x0a0c5028aa267a87d62795583e4a77a3a1200533e33472ccaebbc9b5f537fab9",
+          "0x0533541d13346219e08e8d401c1723b2a046caf6bdd85c64586b5425d9c49b28",
+          "0x084de7679a946f80c1acca07e1fcb83f19c31407b3296a38c87f360ec5359009",
+          "0x026605b9e533d9e6471797e4b397301838b5e2dc4bf296ed0893c0c1746ccc56",
+          "0x062ac53a4770abf8e6a55663d09803dc968927aeef32cb021a032101b6b62b2e",
+          "0x1b4d5f947f452abf1bb62c8b5d83e3d8fa7efeb80e5d19161f0287262b93d7d8",
+          "0x018a6a7bb1a504de0a0d67577bd5e14d39a893016944b4a8a10a2d9c4b774e28",
+          "0x1d5aa2b93fca87b30168db3d2edd5865158bda5e4fb9203d94438a3448d081f3",
+          "0x09709574ff16cf5fb97fc348df6177e1b80d068a91c2c8e6dcba62ac1d0963db",
+          "0x0d43fa2ed7787b00119f9629764b56ed4fd4f5625ccffa85aa0b6d848186dda8",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x0ae9af0768a846740b31c6a58a91ce4f291287f158719f9e645a24beeb4dc54d",
+          "0x021321e45618868b132a0582477ef9169bcba4957a500342346891e886c22457",
+          "0x1d0fb1ffe11deaa1a00b73b4e3a73cf09b39bd4af863d93211eb839143030c4a",
+          "0x24d332e9db978350595d516f4afe173257bc38d278f6b4bc7e8a4e3358a840c1",
+          "0x016998d1b880996f959e50c069c3b7db60dc5d709843aaadd6d55a0ee254ce7f",
+          "0x1b282a072cc5b4eabce02751c194f4274d9f3e0a85aff126e56774508549f45c",
+          "0x0066586656f8e64c2bbee15c20ef2c478abe868b7cf9f1ef2d24f54fafbf8498",
+          "0x2f1cfe670149b43ed69b15d9e1a9459ff513fa07945b99d468d30f9f9ff737ed",
+          "0x12009476d7760c50ca33918bf0df8ffa77a12f964e7221e4fb8eed54b1ad7322",
+          "0x068de6bbfc2b95615d247bc5207016f1eca8a26e4bce3f74173522530ecff714",
+          "0x2abf28c06d8ed21d7ce45b0b3d81599eecb88c266a7737cfd5d092f8dc3a9b32",
+          "0x2a84c51a296f78eee5971e5a79a103b884f4eaaa11b15554c86ad41cf30674ff",
+          "0x298a614ff1c7d88c16b721d99c72b299ce645e3f160127f10fc39582212742ee",
+          "0x0745d0acda94ebadc6c7bed6f2464d60cc154ae5f0735cc5da6f4ce4d3e20547",
+          "0x2d21f1f04af4ea6343cca9219195548fd9e07d6058c61f59a6812bce5f35eb78",
+          "0x229b308873fe977976b369deec38a6cbcaf0821e73696156b5f0c15668f5e5fb",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x117e7d3f147763cc603ece03a148673fd9ad57fad804b10b1d7af67015c8d116",
+          "0x1b37e750d0fe1e7e79f7a848f49eb673bdcffc060c8bd6309b97944fb423754b",
+          "0x172b1d5702fb7c298093f7c486269be6b7cc50ee4df98675419f55a1658dae2e",
+          "0x14da369d86f98d991934bf61212c8935974834a6d1013ab285c39ad208de00b6",
+          "0x2b760e9b157a0a196b89437c61dc277deb6f3cbfd50ac88ee28989ca1f6bb80c",
+          "0x1b9c4c82799cf94f84f4415bf2e1ea827eed1f6a4e2c65dc0f2d69d8dc79b5f8",
+          "0x209ed8a91000d91b012405a56395201c4bd94fc5cba31f1963714601416e5fc1",
+          "0x25eb3ce193ffb1d34e2a56ced70335d2bb5df05841d9ae753c0dbeb7946eb6d8",
+          "0x2138f69d6a97f62bd064dce5691be5dc6860ae41ebdae222684d19ebd20e33b0",
+          "0x12e1d0c539fe33643254d191a2c505a136f6ef771a95e7d4fbad46dee7f84f2c",
+          "0x2db590c2a83cc6c532f0a1bf88fef0310b598fe73ced83613eed04984462c7d7",
+          "0x1d44e551eb8588d902e472c77e4d764e27cc2fb3eaacd5efffc835d65a7edf3d",
+          "0x2e4ad3ea3d508526c32623af198ce7173c9214d1bc26d1a806f5d9be0b87b9b5",
+          "0x26269279de05c5e375dcb3ff4509e3178ca3d0aa6ff2fde5a001208e653cdbd5",
+          "0x2837e8f67ac4dded4e17c5decee71b833dd351425d5700368d105c98def9ec99",
+          "0x0b55a5de881aef101c9274c5afd44f663af3846cdf5e4c420232c458760cfab6",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x112422e0fd799aec2c98977c1e5e1709c7b41bf7b38d380efa001359cda05d47",
+          "0x2f502382631847343d51325f7211852e90445c02360de2f950eac08f07be14ed",
+          "0x1f640144740f31900a2c06993dd63a4b4d922e90f6b80463372bf5f2548cc88e",
+          "0x1f9b9a661e1ae9a6a5ea75853ee14bb502ac728174a49c0fca526c18ce75a537",
+          "0x1ff3153aa88989be1de5bb9fdaaa4d41b9e71cd444ea48309e60530854fb4896",
+          "0x1569fa3ba251711166dfff1a53cb88715ae8c644346f1d6fbe61044f8a2ae33d",
+          "0x17361a42bfe4e15b508cada50786bbc398ca5d0f640bd99c3c41d4979c9e8e6e",
+          "0x2d0ae64d4b79c2fbd5f984b47329b28dc0b07dafd6eaa57c21d89847460075f0",
+          "0x0f98c1e7a4220759ef08428a04ec34305435a459f454bdf72966ca0004f56c49",
+          "0x0c9df44f4ee530191376f03eb0b1d02d1fa64b506145fbcfa59fb142446cb24d",
+          "0x1e8cbf98793b9df80e8caeb023b23a5735ae75630f1573739bbc3ebb0decd5c7",
+          "0x2b9fcc9ad969fe266a0348c2ee3b6a5e0f993b740bf3013c71074970f7323f6a",
+          "0x23cba84e634fe11488c135375cf7fbaeafdcc584cfc6b65a1092d08f20c32f76",
+          "0x28b458579825802c4e135dbb1b7b2e2f1b9bd968ead4ccd4429048236ed2d3b0",
+          "0x1fe364c51b15fd036a00d1218a4f94132bdc5f3e80e020db48fddf61ee7aec2a",
+          "0x0433fce8869e42a9db020c6bb14b9deeb7af5953ae6d682d58cfa5dba1657137",
+        ],
+      },
+      {
+        "emittedLength": 16,
+        "fields": [
+          "0x164b66351fb6e6cb68fe5cc2f57ddef38a8bb712a5f5896f7cb9db229cc38942",
+          "0x1ce82264edb75d18f845a51e0606d32e9c0d680f57700c47dc500c2916260abd",
+          "0x2cecc5ff1a8f656c9871095e7536abe7e45863120c868a4c7a478cd1b94aa132",
+          "0x0e83cc3a810946974ec1f3ca2d7fb9ab2e58074f4287fbef0242000e8e5e2f59",
+          "0x0ddea3d08597147f6afa892139a7418c2d921a1f56894736d5acb1910b18e377",
+          "0x1f249a8cbb02c069431ef6d4253de7e5df034f679aa37e96a849968f7a307eef",
+          "0x1ba5ca0051c9151066247767d58ad9ed28e3f630e9f94bfbcebed227d4184c89",
+          "0x1ff2edd4a72a58465d084234376ca506925a96a657cc6360a098ecf9fd773bba",
+          "0x1eb5732974d2cea2c30d29cecef009f758479ec0c7b647855e7a55168b67af95",
+          "0x01705fe98fe45756d2c7b9490b7d7fa26b63796f011f50f40969cf41853a505e",
+          "0x27ffbe66b0f481ba7b0d345f14f642fda0c4756eededd79dea0a1fa57ddcd99c",
+          "0x19ab69fc0a27cdb723e19af6099ad6d753b8f123bfa0e1ed21bac2a1780bece5",
+          "0x2a207a3108b2425a3d1d85103421663d20cf7c1f274bd9e3eb80f91feec9c2d3",
+          "0x2f00606dcb485b80d8becabf1c5d8bb99dc961f631a2f28b3d19a057b9339aca",
+          "0x01c283b55fcc900b9032ba42d6e6a9d684f798f5019f3923fcfe0770d715c517",
+          "0x1479fc55445c8b23c439b73c5de6046a3597bd0286cdf37db3217ce07421bf8b",
+        ],
+      },
+    ],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x2ca92cd72d6cb196d62da6e6ec2e6cf755b12ace7b704cce9f3ed4abc079e5bc",
+        "value": "0x0000000000000000000000000000000000000000000014ca375aae4195987600",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "875500140080000000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9",
+  },
+  {
+    "blockHash": "0x053a197356b007b92d4147ac025d94462f282ca4a5053eacbb5005d78c0556cf",
+    "blockHeight": "46975",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x25065d5ae7ca51ddbb91282e9282f57b88d277a963b962d098fb20731f662390",
+      "0x1bfab8a9eb9dbce3981f2c5414d52a0ca29b1295ab2e5af59c3cd8a93a6ad939",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x119cb9e329e3b6e0e11a7502cf1f559063b75caa98a948b9a51aa594aa03206b",
+        "value": "0x000000000000000000000000000000000000000000000000b8c3143350970997",
+      },
+      {
+        "leafSlot": "0x11753a7defd57a4fae98e0d12de1825d5f6e838abf2813b70f84f7c33f0a6d6b",
+        "value": "0x0000000000000000000000000000000000000000000000000227d7ef5dbb1ee4",
+      },
+      {
+        "leafSlot": "0x1a861956fcdbf6e18a2df5636db23cbdb6a2b60d4dec7636e50aa57d48654633",
+        "value": "0x000000000000000000000000000000000000000000000000e990fece32f4433d",
+      },
+      {
+        "leafSlot": "0x23dab5b28b58b3b1c8f52e896a362f7c8ff9d967b873d6bb2634bd1d34fc9466",
+        "value": "0x0000000000000000000000000000000000000000000000009d000ab3ee77cbca",
+      },
+      {
+        "leafSlot": "0x19fcf1e6c5164ece6b41911e007506c7ec13861efa59e79bfae20456294ed7cd",
+        "value": "0x1e56faba40716c3ec907117407395a9e770b8e919e1c9957c559a4c1d2e371b4",
+      },
+      {
+        "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+        "value": "0x000000000000000000000000000000000000000000000151559ba4fcbaee15c0",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "5408735865397600000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46976: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46977,
+    "root": "0x26b9de2c94b750df68857c25f8383df57cbe01d8e95fe061d88b7c7b705bb567",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d",
+      },
+    ],
+  },
+  "hash": "0x085e5c11d89dc515312bc5d00474f85d3f59fe7b5089d127c73af9bbea05d6b0",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46976,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46976,
+      "root": "0x294fa325e2165cce58a0d448e4e41233b0e34ee16c959f886818893b18995cb1",
+    },
+    "spongeBlobHash": "0x1c8a62236300fa94a44703867f56cbac6d22e40a26ee5690da7ef917e1a985d4",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525760,
+          "root": "0x1674e0e4adbd99aef847f6857fcc357c0e705d8e31ba89ccf5ec432e6b6deb59",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525888,
+          "root": "0x076de4daa3bcdd1f6600711cc8fa3fee08b863dcfce8d85468dfcc6a837a12c3",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82224,
+          "root": "0x05dcb041596d768d7ba22453d598afbee3ce594feefa96d52e33cf6c6ec630fb",
+        },
+      },
+    },
+    "totalFees": "5488093378094800000",
+    "totalManaUsed": "4390474",
+  },
+  "height": "46976",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46976: block, its tx effects and each tx effect by hash > tx effect 0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d 1`] = `
+{
+  "blockHash": "0x085e5c11d89dc515312bc5d00474f85d3f59fe7b5089d127c73af9bbea05d6b0",
+  "blockHeight": "46976",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x245e5d38e978bc7d9c3007b4f14abef28662f0260be59f7439027ff2b68d3028",
+    "0x05bda6ea7d84c3ccfdb17a74c0c6da035307f4f6d96154aa6ecac137f1f6d916",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x0525958f962a99bc984e8ff40961d9f31568234bd64bf35947973cf0ddff0ca7",
+      "value": "0x0000000000000000000000000000000000000000000000008368fe56973cbd9a",
+    },
+    {
+      "leafSlot": "0x16d61df92069870fc49c6b5a35f5a66345185e93ab476eec6605fd324a306653",
+      "value": "0x0000000000000000000000000000000000000000000000003cff0c06aa4e0d32",
+    },
+    {
+      "leafSlot": "0x26fb95ae6fbf28e548be4e7c35697b648300bb6498d6828f22e03c6719927b64",
+      "value": "0x000000000000000000000000000000000000000000000000a85c850b7341ab0e",
+    },
+    {
+      "leafSlot": "0x12e2094dabd2648a3ad00b67d6c70865a2d39c162d433db62b56fd0efe80727d",
+      "value": "0x0000000000000000000000000000000000000000000000004549ef9321e26b94",
+    },
+    {
+      "leafSlot": "0x2302ba640a8c35f7245ccef9d313bcf08ab873ccd291c082b3a4f2e17ab80cbb",
+      "value": "0x18681e45a2a20cc7050551dfea30286dea181260efaea3cb38cce70ac6790f3d",
+    },
+    {
+      "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+      "value": "0x00000000000000000000000000000000000000000000015109720523136a7940",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "5488093378094800000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46976: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x085e5c11d89dc515312bc5d00474f85d3f59fe7b5089d127c73af9bbea05d6b0",
+    "blockHeight": "46976",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x245e5d38e978bc7d9c3007b4f14abef28662f0260be59f7439027ff2b68d3028",
+      "0x05bda6ea7d84c3ccfdb17a74c0c6da035307f4f6d96154aa6ecac137f1f6d916",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x0525958f962a99bc984e8ff40961d9f31568234bd64bf35947973cf0ddff0ca7",
+        "value": "0x0000000000000000000000000000000000000000000000008368fe56973cbd9a",
+      },
+      {
+        "leafSlot": "0x16d61df92069870fc49c6b5a35f5a66345185e93ab476eec6605fd324a306653",
+        "value": "0x0000000000000000000000000000000000000000000000003cff0c06aa4e0d32",
+      },
+      {
+        "leafSlot": "0x26fb95ae6fbf28e548be4e7c35697b648300bb6498d6828f22e03c6719927b64",
+        "value": "0x000000000000000000000000000000000000000000000000a85c850b7341ab0e",
+      },
+      {
+        "leafSlot": "0x12e2094dabd2648a3ad00b67d6c70865a2d39c162d433db62b56fd0efe80727d",
+        "value": "0x0000000000000000000000000000000000000000000000004549ef9321e26b94",
+      },
+      {
+        "leafSlot": "0x2302ba640a8c35f7245ccef9d313bcf08ab873ccd291c082b3a4f2e17ab80cbb",
+        "value": "0x18681e45a2a20cc7050551dfea30286dea181260efaea3cb38cce70ac6790f3d",
+      },
+      {
+        "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+        "value": "0x00000000000000000000000000000000000000000000015109720523136a7940",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "5488093378094800000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46977: block, its tx effects and each tx effect by hash > block 1`] = `
+{
+  "archive": {
+    "nextAvailableLeafIndex": 46978,
+    "root": "0x0b1c5bf2ffa43817b11727b5604637684de653b422dd402ced4c41890c25dff3",
+  },
+  "body": {
+    "txEffects": [
+      {
+        "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66",
+      },
+    ],
+  },
+  "hash": "0x28a1bf7ba718d6c767a1af9c5dd0ba37b6a3f391ce0bde15eb2c998aafdf2a7c",
+  "header": {
+    "globalVariables": {
+      "blockNumber": 46977,
+      "chainId": 11155111,
+      "coinbase": "0x36502a83735ed62671b55858809703898cde4f95",
+      "feeRecipient": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "gasFees": {
+        "feePerDaGas": "0",
+        "feePerL2Gas": "1250000200000",
+      },
+      "slotNumber": 33877,
+      "timestamp": 1795107396000,
+      "version": 679261766,
+    },
+    "lastArchive": {
+      "nextAvailableLeafIndex": 46977,
+      "root": "0x26b9de2c94b750df68857c25f8383df57cbe01d8e95fe061d88b7c7b705bb567",
+    },
+    "spongeBlobHash": "0x08e6c6d5dd4b769db368d27b1893984bb9a8d6dfb5a02c08f7a01c21e80490ec",
+    "state": {
+      "l1ToL2MessageTree": {
+        "nextAvailableLeafIndex": 3578,
+        "root": "0x13587a25890895089e4c4809d1aa90a7e7771368dfa3eb9d1ed317ddb3700f03",
+      },
+      "partial": {
+        "noteHashTree": {
+          "nextAvailableLeafIndex": 1525824,
+          "root": "0x1674e0e4adbd99aef847f6857fcc357c0e705d8e31ba89ccf5ec432e6b6deb59",
+        },
+        "nullifierTree": {
+          "nextAvailableLeafIndex": 1525952,
+          "root": "0x276be6904d066d567ff420e671f3d08d7566f818734d6d63dec910df698f2195",
+        },
+        "publicDataTree": {
+          "nextAvailableLeafIndex": 82227,
+          "root": "0x126470b795ab11c90aca9a3f1624f0eda8438731f2c92356c0373ec8f8d44ff9",
+        },
+      },
+    },
+    "totalFees": "2388197882111600000",
+    "totalManaUsed": "1910558",
+  },
+  "height": "46977",
+  "nativeStatus": "unknown",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46977: block, its tx effects and each tx effect by hash > tx effect 0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66 1`] = `
+{
+  "blockHash": "0x28a1bf7ba718d6c767a1af9c5dd0ba37b6a3f391ce0bde15eb2c998aafdf2a7c",
+  "blockHeight": "46977",
+  "contractClassLogs": [],
+  "isOrphaned": false,
+  "l2ToL1Msgs": [],
+  "noteHashes": [],
+  "nullifiers": [
+    "0x168ed7a3c7716ec709a1da5c5a1506bc1ddfa74ab11b52ea70befdd1dba8092b",
+    "0x2a3b65a0754ec1a45a14140a14095ad72aab9ee5df53a27f8f43ab597a4b553e",
+  ],
+  "privateLogs": [],
+  "publicCallRequests": [],
+  "publicDataWrites": [
+    {
+      "leafSlot": "0x036c3a4ec5cf5a4802542c6a3e2ac8d34b741aed9296543b3f11846d7b23bd15",
+      "value": "0x0000000000000000000000000000000000000000000000000000000066ee2d59",
+    },
+    {
+      "leafSlot": "0x25e62e40046624b6d421d453d4a3061e2b79145a03e169aa54cbb99e9cc102a8",
+      "value": "0x000000000000000000000000000000000000000000000000000000006c3577e0",
+    },
+    {
+      "leafSlot": "0x29836df61767192c2ca7294587531359a7db4490178d2a11f691cb04d7e16c05",
+      "value": "0x1e83ca216358326ae9010cf2de4086fe02b7bf1c1ee5e413d780a9bd85f411d6",
+    },
+    {
+      "leafSlot": "0x24bf711539e99c9719292acab5bcc115f6669ae54c2d324e801fb2bd5ce35d90",
+      "value": "0x0000000000000000000000000000000000000000000000000000000000b9b1e2",
+    },
+    {
+      "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+      "value": "0x000000000000000000000000000000000000000000000150e84d6fd102d053c0",
+    },
+  ],
+  "publicLogs": [],
+  "revertCode": {
+    "code": 0,
+  },
+  "timestamp": 1795107396000,
+  "transactionFee": "2388197882111600000",
+  "txBirthTimestamp": {
+    "$dbtime": true,
+  },
+  "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > testnet blocks > block-46977: block, its tx effects and each tx effect by hash > tx effects of the block 1`] = `
+[
+  {
+    "blockHash": "0x28a1bf7ba718d6c767a1af9c5dd0ba37b6a3f391ce0bde15eb2c998aafdf2a7c",
+    "blockHeight": "46977",
+    "contractClassLogs": [],
+    "isOrphaned": false,
+    "l2ToL1Msgs": [],
+    "noteHashes": [],
+    "nullifiers": [
+      "0x168ed7a3c7716ec709a1da5c5a1506bc1ddfa74ab11b52ea70befdd1dba8092b",
+      "0x2a3b65a0754ec1a45a14140a14095ad72aab9ee5df53a27f8f43ab597a4b553e",
+    ],
+    "privateLogs": [],
+    "publicCallRequests": [],
+    "publicDataWrites": [
+      {
+        "leafSlot": "0x036c3a4ec5cf5a4802542c6a3e2ac8d34b741aed9296543b3f11846d7b23bd15",
+        "value": "0x0000000000000000000000000000000000000000000000000000000066ee2d59",
+      },
+      {
+        "leafSlot": "0x25e62e40046624b6d421d453d4a3061e2b79145a03e169aa54cbb99e9cc102a8",
+        "value": "0x000000000000000000000000000000000000000000000000000000006c3577e0",
+      },
+      {
+        "leafSlot": "0x29836df61767192c2ca7294587531359a7db4490178d2a11f691cb04d7e16c05",
+        "value": "0x1e83ca216358326ae9010cf2de4086fe02b7bf1c1ee5e413d780a9bd85f411d6",
+      },
+      {
+        "leafSlot": "0x24bf711539e99c9719292acab5bcc115f6669ae54c2d324e801fb2bd5ce35d90",
+        "value": "0x0000000000000000000000000000000000000000000000000000000000b9b1e2",
+      },
+      {
+        "leafSlot": "0x153626a7e078df4824a542a41d9e766ed82e455510499c37b9cc7741e8212e76",
+        "value": "0x000000000000000000000000000000000000000000000150e84d6fd102d053c0",
+      },
+    ],
+    "publicLogs": [],
+    "revertCode": {
+      "code": 0,
+    },
+    "timestamp": 1795107396000,
+    "transactionFee": "2388197882111600000",
+    "txBirthTimestamp": {
+      "$dbtime": true,
+    },
+    "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66",
+  },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > txs > a constructed dropped tx reads back as the dropped-tx handler stored it > 0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a 1`] = `
+{
+  "createdAsPendingAt": 1795115670208,
+  "dropReason": "expired",
+  "droppedAt": 1767312000000,
+  "txHash": "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
+}
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > txs > the recorded pending txs read back as the pending-tx handler stored them > 0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a 1`] = `
+{
+  "birthTimestamp": 1795115670208,
+  "expirationTimestamp": 1795198736,
+  "feePayer": "0x0e900d357d0a7b9de3c0293c6b1a58dccfc1862f31c745ba5d3a5a5aaf4ac1fd",
+  "feePaymentMethod": "fee_juice",
+  "gasLimitDa": 916,
+  "gasLimitL2": 549670,
+  "gasUsedDa": 832,
+  "gasUsedL2": 499700,
+  "l2ToL1MsgCount": 0,
+  "maxFeePerDaGas": "0",
+  "maxFeePerL2Gas": "1480569393941",
+  "maxPriorityFeePerDaGas": "0",
+  "maxPriorityFeePerL2Gas": "0",
+  "noteHashCount": 1,
+  "nullifierCount": 3,
+  "privateLogCount": 1,
+  "teardownGasLimitDa": 0,
+  "teardownGasLimitL2": 0,
+  "txHash": "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
+}
+`;
