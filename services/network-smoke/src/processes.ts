@@ -71,8 +71,7 @@ const signalGroup = (pgid: number, runId: string, signal: NodeJS.Signals) => {
   try {
     process.kill(-pgid, signal);
   } catch (e) {
-    // ESRCH: the group emptied after the scan. Anything else is reported,
-    // and the remaining groups and cleanup still run.
+    // ESRCH: the group emptied after the scan.
     if ((e as NodeJS.ErrnoException).code !== "ESRCH") {
       process.stderr.write(
         `network-smoke: ${signal} to group ${pgid}: ${(e as Error).message}\n`,
@@ -82,19 +81,30 @@ const signalGroup = (pgid: number, runId: string, signal: NodeJS.Signals) => {
   return true;
 };
 
-/** TERM, a grace period, then KILL, for one group of this run. */
-export const stopGroup = async (pgid: number, runId: string) => {
-  if (!signalGroup(pgid, runId, "SIGTERM")) {
-    return;
-  }
-  const deadline = Date.now() + STOP_GRACE_MS;
-  while (Date.now() < deadline) {
-    if (!hasMarkedMember(pgid, runId)) {
-      return;
+const goneWithin = async (pgid: number, runId: string, ms: number) => {
+  const deadline = Date.now() + ms;
+  while (hasMarkedMember(pgid, runId)) {
+    if (Date.now() > deadline) {
+      return false;
     }
     await sleep(100);
   }
+  return true;
+};
+
+/**
+ * TERM, a grace period, then KILL, for one group of this run. Resolves false
+ * if a marked member is still alive after KILL.
+ */
+export const stopGroup = async (pgid: number, runId: string) => {
+  if (!signalGroup(pgid, runId, "SIGTERM")) {
+    return true;
+  }
+  if (await goneWithin(pgid, runId, STOP_GRACE_MS)) {
+    return true;
+  }
   signalGroup(pgid, runId, "SIGKILL");
+  return goneWithin(pgid, runId, 2_000);
 };
 
 export const readPgids = (runDir: string): number[] => {
@@ -183,15 +193,21 @@ export const createProcessGroups = (runId: string, runDir: string) => {
     return entry;
   };
 
+  /** Resolves to the names of groups that did not stop. */
   const stopAll = async () => {
     const tiers = [...new Set(started.map((s) => s.tier))].sort(
       (a, b) => b - a,
     );
+    const stuck: string[] = [];
     for (const tier of tiers) {
       const members = started.filter((s) => s.tier === tier);
       members.forEach((s) => (s.stopping = true));
-      await Promise.all(members.map((s) => stopGroup(s.pgid, runId)));
+      const stopped = await Promise.all(
+        members.map((s) => stopGroup(s.pgid, runId)),
+      );
+      stuck.push(...members.filter((_, i) => !stopped[i]).map((s) => s.name));
     }
+    return stuck;
   };
 
   /** For the `exit` hook: no awaiting, no grace. */

@@ -136,7 +136,8 @@ export const run = async (): Promise<number> => {
     removeTmpDir(tmp.wallet);
   });
 
-  let teardown: Promise<void> | undefined;
+  /** Resolves false when a process group survived. */
+  let teardown: Promise<boolean> | undefined;
   const tearDown = (failed: boolean) =>
     (teardown ??= (async () => {
       abort.abort();
@@ -147,7 +148,12 @@ export const run = async (): Promise<number> => {
       await Promise.all(inFlight);
       // A stage that passed its abort check just before the abort may have
       // started one more process.
-      await groups.stopAll();
+      const stuck = await groups.stopAll();
+      if (stuck.length > 0) {
+        process.stderr.write(
+          `network-smoke: still running after SIGKILL: ${stuck.join(", ")}\n`,
+        );
+      }
       try {
         if (stack) {
           if (failed) {
@@ -161,6 +167,7 @@ export const run = async (): Promise<number> => {
         removeTmpDir(tmp.wallet);
       }
       mark("torn down");
+      return stuck.length === 0;
     })());
 
   let signalled = false;
@@ -185,6 +192,7 @@ export const run = async (): Promise<number> => {
   };
 
   let failed = true;
+  let clean = false;
   try {
     const nodeTmp = createTmpDir(tmp.node);
     const walletTmp = createTmpDir(tmp.wallet);
@@ -328,10 +336,11 @@ export const run = async (): Promise<number> => {
   } catch (e) {
     process.stderr.write(`network-smoke: ${(e as Error).message}\n`);
   } finally {
-    await tearDown(failed);
+    clean = await tearDown(failed);
   }
+  const passed = !failed && clean;
   process.stdout.write(
-    `network-smoke: ${failed ? "FAILED" : "passed"}; logs in ${logDir}\n`,
+    `network-smoke: ${passed ? "passed" : "FAILED"}; logs in ${logDir}\n`,
   );
-  return failed ? 1 : 0;
+  return passed ? 0 : 1;
 };

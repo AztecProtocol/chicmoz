@@ -30,9 +30,12 @@ const down = async (runId: string) => {
       `run ${runId} is still owned by pid ${record.ownerPid}; stop that instead`,
     );
   }
+  const stuck: number[] = [];
   try {
     for (const pgid of readPgids(runDir).reverse()) {
-      await stopGroup(pgid, runId);
+      if (!(await stopGroup(pgid, runId))) {
+        stuck.push(pgid);
+      }
     }
     if (record.composeRunId) {
       const projects = await listProjects();
@@ -51,6 +54,11 @@ const down = async (runId: string) => {
     for (const dir of Object.values(tmpDirs(runId, runDir))) {
       removeTmpDir(dir);
     }
+  }
+  if (stuck.length > 0) {
+    throw new Error(
+      `run ${runId}: process groups ${stuck.join(", ")} still running after SIGKILL`,
+    );
   }
   process.stdout.write(`run ${runId} is down\n`);
 };
