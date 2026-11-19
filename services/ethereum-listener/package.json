@@ -47,7 +47,9 @@
     "generate": "yarn build && L2_NETWORK_ID=SANDBOX drizzle-kit generate",
     "migrate": "yarn node build/scripts/migrate.js",
     "lint": "yarn run lint-base --ext .ts .",
-    "lint-base": "yarn run g:lint"
+    "lint-base": "yarn run g:lint",
+    "test": "vitest run --config tests/vitest.config.ts",
+    "test-once": "vitest run --config tests/vitest.config.ts"
   },
   "type": "module"
 }
