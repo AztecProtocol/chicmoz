@@ -232,22 +232,18 @@ describe("onPendingTxs Function", () => {
     );
   });
 
-  it("should handle errors gracefully", async () => {
-    // Setup: Database error
+  it("stores and publishes nothing when the stored txs cannot be read", async () => {
+    // Read as an empty table, every mempool tx would be re-published as new.
     mockTxsController.getTxs.mockRejectedValue(
       new Error("Database connection failed"),
     );
 
-    // Execute
     await onPendingTxs([
       // @ts-expect-error - Mock object doesn't implement full Tx interface
       createMockAztecTx("test-tx")
     ]);
 
-    // Verify: Error logged
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      "Error handling pending txs:",
-      expect.any(Error),
-    );
+    expect(mockTxsController.storeOrUpdate).not.toHaveBeenCalled();
+    expect(mockMessageBus.publishMessage).not.toHaveBeenCalled();
   });
 });
