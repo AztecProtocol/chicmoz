@@ -5,7 +5,6 @@
   "main": "index.js",
   "license": "Apache-2.0",
   "dependencies": {
-    "@anatine/zod-openapi": "2.2.6",
     "@aztec-labs/aztec.js": "6.0.0",
     "@aztec-labs/foundation": "6.0.0",
     "@aztec-labs/protocol-contracts": "6.0.0",
@@ -30,7 +29,7 @@
     "morgan": "1.12.1",
     "openapi3-ts": "^4.4.0",
     "pg": "8.11.3",
-    "zod": "3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@aztec-labs/noir-contracts.js": "6.0.0",

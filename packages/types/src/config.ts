@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-export const addNonProdDefault = <T>(
-  schema: z.ZodSchema<T>,
-  defaultValue: T extends undefined ? never : T,
-): z.ZodSchema<T> | z.ZodDefault<z.ZodType<T, z.ZodTypeDef, T>> => {
+export const addNonProdDefault = <T extends z.ZodType>(
+  schema: T,
+  defaultValue: z.util.NoUndefined<z.output<T>>,
+): T | z.ZodDefault<T> => {
   if (NODE_ENV === NodeEnv.PROD) {
     return schema;
   }

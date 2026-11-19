@@ -31,7 +31,7 @@ const contractInstanceBalanceResponseSchema =
 
 const contractInstancesWithAztecScanNotesSchema = z.lazy(() =>
   z.object({
-    ...chicmozL2ContractInstanceDeluxeSchema.schema.shape,
+    ...chicmozL2ContractInstanceDeluxeSchema.unwrap().shape,
     aztecScanNotes: aztecScanNoteSchema,
   }),
 );

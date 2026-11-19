@@ -36,7 +36,7 @@ export const chicmozL1GenericContractEventSchema = z.object({
   id: z.string().uuid().optional(),
   eventName: z.string(),
   // TODO: does some events have bigints in args?
-  eventArgs: z.record(z.unknown()).optional(),
+  eventArgs: z.record(z.string(), z.unknown()).optional(),
   l1BlockNumber: z.coerce.bigint(),
   l1BlockHash: z.string().startsWith("0x"),
   l1BlockTimestamp: frTimestampSchema.optional().nullable(),

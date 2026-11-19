@@ -1,9 +1,9 @@
-import { generateSchema } from "@anatine/zod-openapi";
 import {
   CONSTRUCTOR_ARGS_MAX,
   chicmozL2ContractInstanceVerifiedDeploymentArgumentsSchema,
 } from "@chicmoz-pkg/types";
 import { describe, expect, it } from "vitest";
+import { toOpenApiSchema } from "../../src/svcs/http-server/routes/controllers/utils/openapi-schema.js";
 
 const constructorArgs =
   chicmozL2ContractInstanceVerifiedDeploymentArgumentsSchema.shape
@@ -36,9 +36,9 @@ describe("verified deployment constructorArgs", () => {
   });
 
   it("documents an array of strings with maxItems in OpenAPI", () => {
-    expect(generateSchema(constructorArgs)).toStrictEqual({
-      type: ["array"],
-      items: { type: ["string"] },
+    expect(toOpenApiSchema(constructorArgs, "input")).toStrictEqual({
+      type: "array",
+      items: { type: "string" },
       maxItems: CONSTRUCTOR_ARGS_MAX,
     });
   });

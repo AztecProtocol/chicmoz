@@ -6,6 +6,7 @@ const RESULTS_RUN = "bash .github/scripts/check-job-results.sh";
 const condition = z.union([z.string(), z.boolean()]).optional();
 const workflowSchema = z.object({
   jobs: z.record(
+    z.string(),
     z.object({
       name: z.string().optional(),
       if: condition,
@@ -17,7 +18,7 @@ const workflowSchema = z.object({
             if: condition,
             "continue-on-error": z.unknown().optional(),
             run: z.string().optional(),
-            env: z.record(z.unknown()).optional(),
+            env: z.record(z.string(), z.unknown()).optional(),
           }),
         )
         .optional(),
