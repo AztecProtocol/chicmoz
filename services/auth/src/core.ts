@@ -3,9 +3,6 @@ import autoBind from "auto-bind";
 import { DB } from "./database/db.js";
 import { Period, RateLimitDb } from "./database/rate-limit.js";
 
-const UUID_REGEX =
-  "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
-
 export class Core {
   private readonly logger: Logger;
   private readonly db: DB;
@@ -41,11 +38,6 @@ export class Core {
       return [false, undefined];
     }
     return [true, apiUrl[2]];
-  }
-
-  isUUID(u: string): boolean {
-    const re = RegExp(UUID_REGEX);
-    return re.exec(u) !== null;
   }
 
   checkRequestLimitReached(period: Period, apiKey: string) {
