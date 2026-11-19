@@ -58,13 +58,6 @@ export class Controller {
       return;
     }
 
-    //if (!this.core.isUUID(apiKey)) {
-    //  this.logger.info(`Invalid UUID: ${apiKey}`);
-    //  // TODO: for some reason it returns 500, fix it
-    //  res.status(400).send(`Invalid UUID: ${apiKey}`);
-    //  return;
-    //}
-
     let exists: boolean;
     //if (this.apiKeyCache.get(apiKey)) {
     //  exists = true;
