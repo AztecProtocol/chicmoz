@@ -20,10 +20,23 @@ const HOST_IDENTITY = [
 ];
 const SECRET_LAST_WORD = new Set(["secret", "password", "passphrase", "mnemonic"]);
 const SECRET_LAST_PAIR = new Set(["api key", "private key", "access token", "auth token", "refresh token"]);
-const QUERY_PARAM = /[?&]([A-Za-z0-9_-]+)=/g;
+const QUERY_PARAM = /[?&]([^=&#\s]+)=/g;
+const SECRET_SEGMENT = /(^|[-_])(api[-_]?key|secret|password|private[-_]?key|mnemonic)([-_]|$)/i;
 
-// By its last word, so `clientSecret` and `api_key` are secrets and `secretHash` is not.
+const decoded = (s: string): string => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
+// A separated secret word anywhere (`api_key_value`), or a camelCase one last
+// (`clientSecret`); `secretHash` is neither.
 export const isSecretName = (name: string): boolean => {
+  if (SECRET_SEGMENT.test(name)) {
+    return true;
+  }
   const words = name
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
@@ -151,7 +164,7 @@ const stringLeaks = (value: string, path: string, identity: readonly string[]): 
       reasons.push("URL with a path or query");
     }
   }
-  if ([...value.matchAll(QUERY_PARAM)].some(([, name]) => isSecretName(name ?? ""))) {
+  if ([...value.matchAll(QUERY_PARAM)].some(([, name]) => isSecretName(decoded(name ?? "")))) {
     reasons.push("secret-named query parameter");
   }
   if (ipTokens(value).some((ip) => !isAllowedIp(ip))) {

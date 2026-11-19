@@ -114,9 +114,10 @@ describe("committed fixtures", () => {
     const blocks = FIXTURE_SOURCES.flatMap((source) =>
       listFixtures(source, "l2-block").map((name) => loadFixture(source, "l2-block", name)),
     );
-    const missing = Object.entries(BLOCK_CONTENT_NEEDED).filter(([, has]) => !blocks.some((b) => has(b.data.expected)));
+    const recorded = blocks.filter((b) => !b.features.includes("synthetic"));
+    const missing = Object.entries(BLOCK_CONTENT_NEEDED).filter(([, has]) => !recorded.some((b) => has(b.data.expected)));
     expect(missing.map(([what]) => what)).toEqual([]);
-    const empty = BLOCK_COUNTS_NEEDED.filter((k) => blocks.every((b) => b.data.expected.counts[k] === 0));
+    const empty = BLOCK_COUNTS_NEEDED.filter((k) => recorded.every((b) => b.data.expected.counts[k] === 0));
     expect(empty).toEqual([]);
   });
 });
@@ -130,6 +131,8 @@ describe("sanitize", () => {
       cause: "connect ECONNREFUSED 10.1.2.3:8080 and 2a01:4f8::7, then 10.4.4.4.",
       apiKey: "abc",
       clientSecret: "abc",
+      api_key_value: "abc",
+      privatekey: "abc",
       local: "http://127.0.0.1:8080/l2/blocks?from=1",
       localPath: "http://127.0.0.1:8080/l2/blocks",
       lookalike: "http://127.example.net/x",
@@ -147,10 +150,12 @@ describe("sanitize", () => {
       "$.cause",
       "$.<key 4>",
       "$.<key 5>",
+      "$.<key 6>",
+      "$.<key 7>",
       "$.local",
       "$.localPath",
       "$.lookalike",
-      "$.<key 12> (key)",
+      "$.<key 14> (key)",
     ]);
     const clean = sanitize(raw);
     expect(findLeaks(toTagged(clean))).toEqual([]);
@@ -176,6 +181,8 @@ describe("sanitize", () => {
       mine: "worker-7",
       worker7: 1,
       route: "/l2/info?apiKey=x",
+      encoded: "/l2/info?%61piKey=x",
+      search: "/l2/search?q=11",
     };
     expect(findLeaks(local, "$", identity).map((l) => l.path)).toEqual([
       "$.host",
@@ -184,6 +191,7 @@ describe("sanitize", () => {
       "$.mine",
       "$.<key 4> (key)",
       "$.route",
+      "$.encoded",
     ]);
     const binary = BSON.serialize({ data: { b: new BSON.Binary(new TextEncoder().encode("http://10.0.0.1")) } });
     expect(frameLeaks(binary, "$").map((l) => l.reason)).toEqual(["binary value in a frame"]);

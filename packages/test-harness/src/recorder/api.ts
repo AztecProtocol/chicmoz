@@ -1,4 +1,5 @@
 import { jsonValue, type FixtureSource } from "../fixtures/format.js";
+import { findLeaks } from "../fixtures/sanitize.js";
 import { boundedJson } from "./http.js";
 import { createLimiter } from "./limiter.js";
 import { writeFixture } from "./write.js";
@@ -21,6 +22,9 @@ export const recordApiBodies = async (a: ApiRecording): Promise<void> => {
   }
   const limiter = createLimiter(a.log);
   for (const r of a.routes) {
+    if (findLeaks(r.path).length > 0) {
+      throw new Error(`route ${r.name} has a path the fixture guard rejects`);
+    }
     const url = new URL(r.path, base);
     if (url.origin !== base.origin) {
       throw new Error(`route ${r.name} leaves the recording API`);

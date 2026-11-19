@@ -67,12 +67,13 @@ const need = (name: keyof typeof v): string => {
   return value;
 };
 
-const posInt = (name: keyof typeof v, fallback?: string): number => {
+const posInt = (name: keyof typeof v, fallback?: string, max = Number.MAX_SAFE_INTEGER): number => {
   const raw = v[name] ?? fallback;
-  if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw)) {
-    throw new Error(`--${name} takes a positive integer\n${USAGE}`);
+  const n = typeof raw === "string" && /^[1-9]\d*$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(n) || n > max) {
+    throw new Error(`--${name} takes a positive integer up to ${max}\n${USAGE}`);
   }
-  return Number(raw);
+  return n;
 };
 
 const checkedUrl = (raw: string): string => {
@@ -93,23 +94,23 @@ const main = async () => {
 
   if (target === "node") {
     // Every option is checked before the first request.
-    if (v.heights && !/^[1-9]\d*(,[1-9]\d*)*$/.test(v.heights)) {
+    if (v.heights !== undefined && !/^[1-9]\d*(,[1-9]\d*)*$/.test(v.heights)) {
       throw new Error(`--heights takes positive integers joined by ","\n${USAGE}`);
     }
-    const [from, to] = v.scan
+    const [from, to] = v.scan !== undefined
       ? (/^([1-9]\d*)\.\.([1-9]\d*)$/.exec(v.scan) ?? []).slice(1).map(Number)
       : [];
-    if (v.scan && (from === undefined || to === undefined || from > to)) {
+    if (v.scan !== undefined && (from === undefined || to === undefined || from > to)) {
       throw new Error(`--scan takes <from>..<to> with from <= to\n${USAGE}`);
     }
-    const want = v.scan ? (need("want").split(",") as BlockFeature[]) : [];
+    const want = v.scan !== undefined ? (need("want").split(",") as BlockFeature[]) : [];
     if (!want.every((f) => BLOCK_FEATURES.includes(f))) {
       throw new Error(`--want takes ${BLOCK_FEATURES.join(", ")}`);
     }
-    const checkpoint = v.checkpoint ? posInt("checkpoint") : undefined;
+    const checkpoint = v.checkpoint !== undefined ? posInt("checkpoint") : undefined;
     const r = { url: checkedUrl(need("url")), source, limiter, log };
     const version = await recordNodeInfo(r);
-    if (v.heights) {
+    if (v.heights !== undefined) {
       await recordBlocks(r, version, v.heights.split(",").map(Number));
     }
     if (from !== undefined && to !== undefined) {
@@ -160,7 +161,8 @@ const main = async () => {
       network: need("network"),
       eventTypes: need("events").split(","),
       maxPerEvent: posInt("max", "1"),
-      timeoutMs: posInt("timeout-ms", "60000"),
+      // setTimeout fires at once beyond 2^31 - 1 ms.
+      timeoutMs: posInt("timeout-ms", "60000", 2 ** 31 - 1),
       log,
     });
     log(`frames: ${JSON.stringify(counts)}`);
