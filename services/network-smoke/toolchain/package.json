@@ -1,0 +1,42 @@
+{
+  "name": "network-smoke-aztec-toolchain",
+  "private": true,
+  "version": "6.0.0",
+  "dependencies": {
+    "@aztec-labs/aztec": "6.0.0",
+    "@aztec-labs/cli-wallet": "6.0.0",
+    "@aztec-foundation/l1-artifacts": "6.0.0",
+    "@aztec-labs/accounts": "6.0.0",
+    "@aztec-labs/bb-prover": "6.0.0",
+    "@aztec-labs/ethereum": "6.0.0",
+    "@aztec-labs/noir-contracts.js": "6.0.0",
+    "@aztec-labs/noir-protocol-circuits-types": "6.0.0",
+    "@aztec-labs/noir-test-contracts.js": "6.0.0",
+    "@aztec-labs/protocol-contracts": "6.0.0",
+    "@aztec-labs/stdlib": "6.0.0",
+    "@opentelemetry/api": "1.9.0",
+    "typescript": "5.8.3",
+    "ws": "^8.17.1",
+    "@jest/globals": "30.0.0",
+    "jest": "30.0.0",
+    "pg": "8.17.1",
+    "@babel/core": "7.29.7",
+    "browserslist": "4.29.3"
+  },
+  "overrides": {
+    "@aztec-foundation/constants-codegen": "6.0.0",
+    "@aztec-foundation/mock-protocol-circuits-artifacts": "6.0.0",
+    "@aztec-foundation/protocol-circuits-artifacts": "6.0.0",
+    "@aztec-foundation/protocol-contracts-artifacts": "6.0.0",
+    "@aztec-foundation/noir-noir_js": "6.0.0",
+    "ws": "^8.17.1",
+    "d3-color": "^3.1.0",
+    "rollup": "^4.59.0",
+    "systeminformation": "^5.31.0",
+    "node-forge": "^1.3.2",
+    "koa": "^2.16.4",
+    "serialize-javascript": "^7.0.3",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "jws": "^4.0.1"
+  }
+}

@@ -36,6 +36,7 @@ yarn lint                    # all workspaces (lint-staged + prettier run on com
 yarn test                    # unit: vitest across workspaces, no Docker
 yarn test:integration        # integration: Docker + `yarn build` first; own Postgres/Kafka/Redis per run (packages/test-harness)
 yarn harness ls|down <run>   # list or remove this host's harness compose projects
+yarn smoke                   # e2e: Docker, foundry, `yarn build` first; own anvil + Aztec local network per run (services/network-smoke)
 # per service: cd services/<name> && yarn build|lint|test|test:watch
 ```
 
@@ -51,6 +52,7 @@ yarn harness ls|down <run>   # list or remove this host's harness compose projec
 | `explorer-ui-v2`            | Public React SPA                                                                    | —                             | —                                                 |
 | `auth`                      | API-key gateway (rate limiting, key lifecycle). Mainnet only                        | `auth`, `apikey`              | —                                                 |
 | `event-cannon`              | Dev/test synthetic transaction firer. Never deployed                                | —                             | —                                                 |
+| `network-smoke`             | End-to-end smoke run of the backend on an Aztec local network. Never deployed       | —                             | —                                                 |
 
 Shared packages (`packages/`, published as `@chicmoz-pkg/*`): `types` (all
 domain Zod schemas — single source of truth), `message-registry` (topic names,
