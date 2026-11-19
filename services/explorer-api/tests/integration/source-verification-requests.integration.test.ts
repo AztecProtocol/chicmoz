@@ -103,6 +103,21 @@ describe("source verification requests", () => {
     expect(await publishCalls()).toEqual([]);
   });
 
+  // zod 3's .url() returns the input untrimmed, so the repository check sees
+  // the padding.
+  it("refuses a GitHub URL padded with spaces with 400", async () => {
+    const jobsBefore = await jobsOf(unverified);
+
+    const res = await submit(unverified, {
+      githubUrl: " https://github.com/example/token ",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: INVALID_URL_ERROR });
+    expect(await jobsOf(unverified)).toEqual(jobsBefore);
+    expect(await publishCalls()).toEqual([]);
+  });
+
   it("answers 404 for an unknown class", async () => {
     const res = await submit(unknownClass(), {
       githubUrl: "https://github.com/example/token",

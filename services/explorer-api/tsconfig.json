@@ -105,7 +105,8 @@
     "vitest.config.ts",
     "vitest.integration.config.ts"
   ],
-  // Integration tests type-check through tests/integration/tsconfig.json; the
-  // build (and so every image build) never compiles them.
-  "exclude": ["tests/integration"]
+  // Integration and characterization tests import @chicmoz/test-harness, which
+  // build:packages does not build; they type-check through their own
+  // tsconfig.json, and the build (and so every image build) never compiles them.
+  "exclude": ["tests/integration", "tests/characterization"]
 }

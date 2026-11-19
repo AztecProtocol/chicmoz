@@ -1,0 +1,384 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`request schemas > block by hash keeps the hex string 1`] = `
+{
+  "params": {
+    "heightOrHash": "0xabababababababababababababababababababababababababababababababab",
+  },
+}
+`;
+
+exports[`request schemas > block by height coerces a decimal height 1`] = `
+{
+  "params": {
+    "heightOrHash": {
+      "$bigint": "12",
+    },
+  },
+}
+`;
+
+exports[`request schemas > blocks coerce from and to 1`] = `
+{
+  "query": {
+    "from": {
+      "$bigint": "1",
+    },
+    "to": {
+      "$bigint": "10",
+    },
+  },
+}
+`;
+
+exports[`request schemas > blocks leave an absent range absent 1`] = `
+{
+  "query": {},
+}
+`;
+
+exports[`request schemas > blocks refuse a negative from 1`] = `
+{
+  "$fails": [
+    "query",
+  ],
+}
+`;
+
+exports[`request schemas > class artifact upload keeps the artifact string 1`] = `
+{
+  "body": {
+    "stringifiedArtifactJson": "{}",
+  },
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "version": 1,
+  },
+  "query": {},
+}
+`;
+
+exports[`request schemas > contract class coerces the version 1`] = `
+{
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "version": 1,
+  },
+  "query": {},
+}
+`;
+
+exports[`request schemas > contract classes take an empty query 1`] = `
+{
+  "query": {},
+}
+`;
+
+exports[`request schemas > contract instance reads includeArtifactJson=false as true 1`] = `
+{
+  "params": {
+    "address": "0xabababababababababababababababababababababababababababababababab",
+  },
+  "query": {
+    "includeArtifactJson": true,
+  },
+}
+`;
+
+exports[`request schemas > contract instances coerce every query key 1`] = `
+{
+  "query": {
+    "fromHeight": {
+      "$bigint": "1",
+    },
+    "limit": 10,
+    "offset": 0,
+    "protocol": true,
+    "toHeight": {
+      "$bigint": "9",
+    },
+    "verified": true,
+  },
+}
+`;
+
+exports[`request schemas > contract instances with notes take an empty query 1`] = `
+{
+  "query": {},
+}
+`;
+
+exports[`request schemas > deployment verification with metadata, null dates and notes 1`] = `
+{
+  "body": {
+    "deployerMetadata": {
+      "appUrl": "https://example.org",
+      "aztecScanNotes": {
+        "category": null,
+        "comment": "c",
+        "name": "n",
+        "origin": "o",
+        "uploadedAt": {
+          "$date": "2026-01-01T00:00:00.000Z",
+        },
+      },
+      "contractIdentifier": "token",
+      "contractType": null,
+      "creatorContact": "c@example.org",
+      "creatorName": "c",
+      "details": "d",
+      "repoUrl": "https://github.com/example/token",
+      "reviewedAt": {
+        "$undefined": true,
+      },
+    },
+    "verifiedDeploymentArguments": {
+      "constructorArgs": [
+        "0x1",
+        "2",
+      ],
+      "deployer": "0xabababababababababababababababababababababababababababababababab",
+      "publicKeysString": "0x01",
+      "salt": "0xabababababababababababababababababababababababababababababababab",
+      "stringifiedArtifactJson": "{}",
+    },
+  },
+  "params": {
+    "address": "0xabababababababababababababababababababababababababababababababab",
+  },
+  "query": {},
+}
+`;
+
+exports[`request schemas > deployment verification without metadata 1`] = `
+{
+  "body": {
+    "verifiedDeploymentArguments": {
+      "constructorArgs": [
+        "0x1",
+        "2",
+      ],
+      "deployer": "0xabababababababababababababababababababababababababababababababab",
+      "publicKeysString": "0x01",
+      "salt": "0xabababababababababababababababababababababababababababababababab",
+    },
+  },
+  "params": {
+    "address": "0xabababababababababababababababababababababababababababababababab",
+  },
+  "query": {},
+}
+`;
+
+exports[`request schemas > fee juice deposits by address 1`] = `
+{
+  "params": {
+    "address": "0xab",
+  },
+}
+`;
+
+exports[`request schemas > governance configurations default the page 1`] = `
+{
+  "query": {
+    "limit": 20,
+    "offset": 0,
+  },
+}
+`;
+
+exports[`request schemas > governance proposals coerce the range and default the page 1`] = `
+{
+  "query": {
+    "from": 1,
+    "limit": 20,
+    "offset": 0,
+    "state": "Active",
+    "to": 5,
+  },
+}
+`;
+
+exports[`request schemas > governance proposer history defaults the page 1`] = `
+{
+  "query": {
+    "limit": 20,
+    "offset": 0,
+  },
+}
+`;
+
+exports[`request schemas > governance signals by round coerce the round 1`] = `
+{
+  "params": {
+    "round": {
+      "$bigint": "7",
+    },
+  },
+}
+`;
+
+exports[`request schemas > governance signals coerce the round to bigint 1`] = `
+{
+  "query": {
+    "limit": 50,
+    "offset": 0,
+    "payloadAddress": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "round": {
+      "$bigint": "3",
+    },
+  },
+}
+`;
+
+exports[`request schemas > governance votes coerce support and default the page 1`] = `
+{
+  "params": {
+    "proposalId": "1",
+  },
+  "query": {
+    "limit": 50,
+    "offset": 0,
+    "support": true,
+  },
+}
+`;
+
+exports[`request schemas > hourly counts coerce hours 1`] = `
+{
+  "query": {
+    "hours": 48,
+  },
+}
+`;
+
+exports[`request schemas > hourly counts default hours to 24 1`] = `
+{
+  "query": {
+    "hours": 24,
+  },
+}
+`;
+
+exports[`request schemas > private function coerces the selector 1`] = `
+{
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "functionSelector": 123,
+  },
+}
+`;
+
+exports[`request schemas > public call requests keep one absent address absent 1`] = `
+{
+  "query": {
+    "contractAddress": "0x01",
+  },
+}
+`;
+
+exports[`request schemas > public log search coerces the index 1`] = `
+{
+  "query": {
+    "frLogEntry": "0xabababababababababababababababababababababababababababababababab",
+    "index": 3,
+  },
+}
+`;
+
+exports[`request schemas > rpc node by name 1`] = `
+{
+  "params": {
+    "rpcNodeName": "node-1",
+  },
+}
+`;
+
+exports[`request schemas > search prefixes a bare hex phrase 1`] = `
+{
+  "query": {
+    "q": "0xab",
+  },
+}
+`;
+
+exports[`request schemas > search turns a decimal phrase into a bigint 1`] = `
+{
+  "query": {
+    "q": {
+      "$bigint": "42",
+    },
+  },
+}
+`;
+
+exports[`request schemas > source verification job takes an RFC 4122 job id 1`] = `
+{
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "jobId": "3f1b8a6e-2c4d-4e8f-9a1b-7c6d5e4f3a2b",
+    "version": 1,
+  },
+}
+`;
+
+exports[`request schemas > source verification request leaves gitRef and subPath absent 1`] = `
+{
+  "body": {
+    "githubUrl": "https://github.com/example/token",
+  },
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "version": 2,
+  },
+}
+`;
+
+exports[`request schemas > standard artifact refuses a name of no standard 1`] = `
+{
+  "$fails": [
+    "body",
+  ],
+}
+`;
+
+exports[`request schemas > standard artifact takes a name of its version 1`] = `
+{
+  "body": {
+    "name": "token",
+    "version": "4.2.0-aztecnr-rc.2",
+  },
+  "params": {
+    "contractClassId": "0xabababababababababababababababababababababababababababababababab",
+    "version": 1,
+  },
+}
+`;
+
+exports[`request schemas > tx effect coerces height and index 1`] = `
+{
+  "params": {
+    "blockHeight": {
+      "$bigint": "5",
+    },
+    "txEffectIndex": 0,
+  },
+}
+`;
+
+exports[`request schemas > ui blocks take a status filter without a range 1`] = `
+{
+  "query": {
+    "status": "proven",
+  },
+}
+`;
+
+exports[`request schemas > validators page defaults limit and offset 1`] = `
+{
+  "query": {
+    "limit": 20,
+    "offset": 0,
+  },
+}
+`;
