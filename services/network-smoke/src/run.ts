@@ -1,21 +1,22 @@
-import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   appendFileSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Stack, up } from "@chicmoz/test-harness";
+import { COMPOSE_FILE, REPO_ROOT, type Stack, up } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
 import { ENDPOINTS_ENV, type Endpoints } from "./endpoints.js";
 import { L1_CHAIN_ID, startAnvil, startAztecNode } from "./network.js";
 import { freePorts } from "./ports.js";
-import { createProcessGroups } from "./processes.js";
+import { createProcessGroups, startTimeOf } from "./processes.js";
 import {
   SERVICES,
   missingBuilds,
@@ -27,12 +28,16 @@ import { prepareToolchain } from "./toolchain.js";
 import { httpOk, rpc, waitUntil } from "./wait.js";
 
 const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url));
+// Per-test timeouts bound each test; this bounds Vitest itself.
+const SUITE_TIMEOUT_MS = 15 * 60_000;
 
 export const RUN_ID_PATTERN = /^ns[0-9a-f]{10}$/;
 
 export type RunRecord = {
   runId: string;
   ownerPid: number;
+  /** With the pid, identifies the owner even after the pid is reused. */
+  ownerStart?: string;
   composeRunId?: string;
 };
 
@@ -49,9 +54,8 @@ const tail = (file: string, lines = 20) => {
 };
 
 /**
- * Starts the pipeline, runs the assertions in a Vitest child and tears down
- * everything it started. Vitest never owns a process: its CLI exits on
- * SIGINT before any async cleanup of its own hooks could run.
+ * The run owner. Vitest only asserts: its CLI exits on SIGINT before its own
+ * async hooks could tear anything down.
  */
 export const run = async (): Promise<number> => {
   if (platform() !== "linux") {
@@ -66,13 +70,18 @@ export const run = async (): Promise<number> => {
   const runDir = join(config.dir, runId);
   const logDir = join(runDir, "logs");
   mkdirSync(logDir, { recursive: true });
-  const record: RunRecord = { runId, ownerPid: process.pid };
-  const saveRecord = () =>
-    writeFileSync(join(runDir, "run.json"), JSON.stringify(record));
+  const record: RunRecord = {
+    runId,
+    ownerPid: process.pid,
+    ownerStart: startTimeOf(process.pid),
+  };
+  const saveRecord = () => {
+    const file = join(runDir, "run.json");
+    writeFileSync(`${file}.tmp`, JSON.stringify(record));
+    renameSync(`${file}.tmp`, file);
+  };
   saveRecord();
   const tmp = tmpDirs(runId, runDir);
-  const nodeTmp = createTmpDir(tmp.node);
-  const walletTmp = createTmpDir(tmp.wallet);
 
   const t0 = Date.now();
   const mark = (name: string) => {
@@ -84,8 +93,6 @@ export const run = async (): Promise<number> => {
 
   const groups = createProcessGroups(runId, runDir);
   const abort = new AbortController();
-  // Setup work that cannot be cancelled (compose up, migrations, npm ci);
-  // teardown waits for it so a stack that comes up late is still removed.
   const inFlight: Promise<unknown>[] = [];
   const track = <T>(work: Promise<T>) => {
     inFlight.push(work.catch(() => undefined));
@@ -93,11 +100,9 @@ export const run = async (): Promise<number> => {
   };
   let stack: Stack | undefined;
   let stackRemoved = false;
-  let vitest: ChildProcess | undefined;
 
   process.on("exit", () => {
     groups.killAllSync();
-    vitest?.kill("SIGKILL");
     if (stack && !stackRemoved) {
       try {
         execFileSync(
@@ -106,39 +111,50 @@ export const run = async (): Promise<number> => {
             "compose",
             "-p",
             stack.runId,
+            "-f",
+            COMPOSE_FILE,
+            "--profile",
+            "infra",
             "down",
             "-v",
             "--remove-orphans",
             "--timeout",
             "0",
           ],
-          { stdio: "ignore" },
+          { cwd: REPO_ROOT, stdio: "ignore", timeout: 60_000 },
         );
       } catch {
         // `yarn harness ls` still lists it.
       }
     }
+    removeTmpDir(tmp.node);
+    removeTmpDir(tmp.wallet);
   });
 
   let teardown: Promise<void> | undefined;
   const tearDown = (failed: boolean) =>
     (teardown ??= (async () => {
       abort.abort();
-      vitest?.kill("SIGTERM");
       await groups.stopAll();
+      // Compose up and migrations cannot be cancelled: every started setup
+      // operation settles before the project is removed, so a project that
+      // comes up late is removed too.
       await Promise.all(inFlight);
       // A stage that passed its abort check just before the abort may have
       // started one more process.
       await groups.stopAll();
-      if (stack) {
-        if (failed) {
-          await stack.saveLogs().catch(() => undefined);
+      try {
+        if (stack) {
+          if (failed) {
+            await stack.saveLogs().catch(() => undefined);
+          }
+          await stack.down();
+          stackRemoved = true;
         }
-        await stack.down();
-        stackRemoved = true;
+      } finally {
+        removeTmpDir(tmp.node);
+        removeTmpDir(tmp.wallet);
       }
-      removeTmpDir(tmp.node);
-      removeTmpDir(tmp.wallet);
       mark("torn down");
     })());
 
@@ -165,6 +181,8 @@ export const run = async (): Promise<number> => {
 
   let failed = true;
   try {
+    const nodeTmp = createTmpDir(tmp.node);
+    const walletTmp = createTmpDir(tmp.wallet);
     const toolchain = await track(
       prepareToolchain({
         toolchainDir: config.toolchainDir,
@@ -181,7 +199,17 @@ export const run = async (): Promise<number> => {
     const aztecNodeUrl = `http://127.0.0.1:${ports.aztec}`;
     const explorerApiUrl = `http://127.0.0.1:${ports.explorerApi}`;
 
-    const infra = track(
+    // The first failure aborts the other branch instead of waiting for it.
+    let firstFailure: { reason: unknown } | undefined;
+    const failFast = <T>(work: Promise<T>) =>
+      track(
+        work.catch((reason: unknown) => {
+          firstFailure ??= { reason };
+          abort.abort();
+          throw reason;
+        }),
+      );
+    const infra = failFast(
       (async () => {
         const started = await up();
         stack = started;
@@ -194,7 +222,7 @@ export const run = async (): Promise<number> => {
         return started;
       })(),
     );
-    const chain = track(
+    const chain = failFast(
       (async () => {
         startAnvil(groups, toolchain, ports, runDir);
         await waitUntil(
@@ -218,17 +246,14 @@ export const run = async (): Promise<number> => {
         mark("aztec node ready");
       })(),
     );
-    const [infraResult, chainResult] = await Promise.allSettled([infra, chain]);
-    if (infraResult.status === "rejected") {
-      throw infraResult.reason;
-    }
-    if (chainResult.status === "rejected") {
-      throw chainResult.reason;
+    await Promise.allSettled([infra, chain]);
+    if (firstFailure) {
+      throw firstFailure.reason;
     }
     abort.signal.throwIfAborted();
 
     startServices(groups, {
-      stack: infraResult.value,
+      stack: await infra,
       ports,
       runId,
       anvilUrl,
@@ -249,6 +274,7 @@ export const run = async (): Promise<number> => {
       { timeoutMs: 60_000, dead: alive, signal: abort.signal },
     );
     mark("services ready");
+    abort.signal.throwIfAborted();
 
     const endpoints: Endpoints = {
       runId,
@@ -263,30 +289,36 @@ export const run = async (): Promise<number> => {
       dirname(createRequire(import.meta.url).resolve("vitest/package.json")),
       "vitest.mjs",
     );
-    const child = spawn(
+    const vitest = groups.start(
+      "vitest",
       process.execPath,
       [vitestBin, "run", "--config", "vitest.smoke.config.ts"],
       {
         cwd: PACKAGE_DIR,
-        stdio: "inherit",
+        tier: 3,
+        inheritOutput: true,
+        exitIsDeath: false,
         env: {
-          PATH: process.env.PATH ?? "",
-          HOME: process.env.HOME ?? "",
           TERM: process.env.TERM ?? "dumb",
           CI: process.env.CI ?? "",
-          // The wallet's stores are temporary LMDB files under TMPDIR.
           TMPDIR: walletTmp,
           [ENDPOINTS_ENV]: JSON.stringify(endpoints),
         },
       },
     );
-    vitest = child;
-    const code = await new Promise<number>((resolve) =>
-      child.on("exit", (exitCode) => resolve(exitCode ?? 1)),
-    );
+    let timer: NodeJS.Timeout | undefined;
+    const code = await new Promise<number | string>((resolve) => {
+      vitest.child.on("exit", (exitCode) => resolve(exitCode ?? "a signal"));
+      vitest.child.on("error", (e) => resolve(e.message));
+      timer = setTimeout(
+        () => resolve(`no result within ${SUITE_TIMEOUT_MS / 60_000} min`),
+        SUITE_TIMEOUT_MS,
+      );
+    });
+    clearTimeout(timer);
     mark(`tests exited ${code}`);
     for (const death of groups.deaths) {
-      const name = death.split(" ")[0];
+      const name = death.split(/[ :]/)[0];
       process.stderr.write(
         `network-smoke: ${death} during the run\n${tail(join(logDir, `${name}.log`))}\n`,
       );

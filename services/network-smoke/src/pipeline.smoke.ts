@@ -27,7 +27,10 @@ const get = async (path: string): Promise<unknown> => {
   return res.json();
 };
 const latestHeight = async () =>
-  z.coerce.number().parse(await get("/l2/latest-height"));
+  z.coerce
+    .number()
+    .int()
+    .parse(await get("/l2/latest-height"));
 
 // The message bus logs this line each time a handler throws and the message
 // will be redelivered (packages/message-bus/src/class.ts).
@@ -49,7 +52,10 @@ describe("explorer pipeline on a local Aztec network", () => {
     await vi.waitFor(
       async () => {
         expect(await latestHeight(), "latest height").toBeGreaterThanOrEqual(1);
-        chicmozL2BlockLightSchema.parse(await get("/l2/blocks/1"));
+        const block = chicmozL2BlockLightSchema.parse(
+          await get("/l2/blocks/1"),
+        );
+        expect(Number(block.height)).toBe(1);
       },
       { timeout: 120_000, interval: 1_000 },
     );
@@ -57,6 +63,7 @@ describe("explorer pipeline on a local Aztec network", () => {
 
   it("serves the test's own transaction at its block", async () => {
     sent = await sendTx(node);
+    expect(sent.blockNumber, "receipt block").toBeGreaterThan(0);
     await vi.waitFor(
       async () => {
         const effect = chicmozL2TxEffectDeluxeSchema.parse(
@@ -71,6 +78,7 @@ describe("explorer pipeline on a local Aztec network", () => {
 
   it("streams the transaction's block over the websocket with the node's hash", async () => {
     const block = await node.getBlock(BlockNumber(sent.blockNumber));
+    expect(block, `node block ${sent.blockNumber}`).toBeDefined();
     const nodeHash = block?.hash.toString().toLowerCase();
     await vi.waitFor(
       () => {
@@ -112,12 +120,14 @@ describe("explorer pipeline on a local Aztec network", () => {
           );
           const proposed = block.proposedOnL1;
           const actual = {
+            height: Number(block.height),
             hash: block.hash.toLowerCase(),
             archive: proposed?.archive.toLowerCase(),
             l1BlockNumber: proposed?.l1BlockNumber,
             l1TransactionHash: proposed?.l1TransactionHash?.toLowerCase(),
           };
           const want = {
+            height: e.height,
             hash: e.hash,
             archive: e.archive,
             l1BlockNumber: e.proposal?.l1BlockNumber,
@@ -137,11 +147,12 @@ describe("explorer pipeline on a local Aztec network", () => {
     );
   });
 
-  it("reports tips that are not degraded", async () => {
+  it("reports tips that are fresh and not degraded", async () => {
     await vi.waitFor(
       async () => {
         const health = chicmozL2TipsHealthSchema.parse(await get("/l2/tips"));
         expect(health.degraded, health.degradedReason ?? "").toBe(false);
+        expect(health.stale, `tips ${health.stalenessMs} ms old`).toBe(false);
         expect(health.tips.proposed.number).toBeGreaterThanOrEqual(
           sent.blockNumber,
         );
@@ -171,7 +182,8 @@ describe("explorer pipeline on a local Aztec network", () => {
       );
     }
     // One or two failures that succeed on redelivery are at-least-once
-    // delivery working; a message no handler accepts fails every second.
+    // delivery working; a message no handler accepts fails on every
+    // redelivery.
     const repeated = Object.fromEntries([...counts].filter(([, n]) => n >= 3));
     expect(repeated, "handler failures per service and topic").toEqual({});
   });

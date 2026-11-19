@@ -82,8 +82,7 @@ export const startAztecNode = (
         WS_BLOCK_CHECK_INTERVAL_MS: "500",
         // The toolchain installs without scripts, so bcrypto has no native build.
         NODE_BACKEND: "js",
-        // Admin auth stays on with a hash whose key nobody holds: no key is
-        // generated or logged, and nothing can call the admin API.
+        // Admin auth stays on with a random hash: no key is generated or logged.
         AZTEC_ADMIN_API_KEY_HASH: randomBytes(32).toString("hex"),
       },
     },

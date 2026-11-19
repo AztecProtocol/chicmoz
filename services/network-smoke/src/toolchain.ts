@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import {
   accessSync,
   constants,
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -11,9 +10,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { settleAll } from "./wait.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -32,22 +32,28 @@ export type Toolchain = { aztecEntry: string; anvil: string; forge: string };
 
 type LockEntry = { integrity?: string; resolved?: string; link?: boolean };
 
-/** `npm ci` skips the digest check for an entry without `integrity`. */
+const SHA512 = /^sha512-[A-Za-z0-9+/]{86}==$/;
+
+/**
+ * `npm ci` skips the digest check for an entry without a parseable
+ * `integrity`, and a `link` entry installs from the local disk.
+ */
 const checkLock = (lock: string) => {
   const { packages } = JSON.parse(lock) as {
     packages: Record<string, LockEntry>;
   };
   const bad = Object.entries(packages)
-    .filter(([path, entry]) => path !== "" && !entry.link)
+    .filter(([path]) => path !== "")
     .filter(
       ([, entry]) =>
-        !entry.integrity?.startsWith("sha512-") ||
+        entry.link !== undefined ||
+        !SHA512.test(entry.integrity ?? "") ||
         !entry.resolved?.startsWith(REGISTRY),
     )
     .map(([path]) => path);
   if (bad.length > 0) {
     throw new Error(
-      `toolchain/package-lock.json: entries without a sha512 integrity or a ${REGISTRY} URL: ${bad.join(", ")}`,
+      `toolchain/package-lock.json: entries without one sha512 integrity and a ${REGISTRY} URL: ${bad.join(", ")}`,
     );
   }
 };
@@ -72,22 +78,21 @@ const installAztec = async (
   const tmp = `${dir}.tmp-${runId}`;
   mkdirSync(tmp, { recursive: true });
   try {
-    copyFileSync(
-      join(TOOLCHAIN_SRC, "package.json"),
-      join(tmp, "package.json"),
-    );
-    copyFileSync(
-      join(TOOLCHAIN_SRC, "package-lock.json"),
-      join(tmp, "package-lock.json"),
-    );
-    // No install scripts run. bcrypto, the one dependency that needs its
-    // native build, runs on its pure-JS backend instead (NODE_BACKEND=js).
+    // The bytes checked and hashed above, not a second read of the checkout.
+    writeFileSync(join(tmp, "package.json"), manifest);
+    writeFileSync(join(tmp, "package-lock.json"), lock);
+    // No install scripts run; see NODE_BACKEND where the node starts.
     const { stdout, stderr } = await execFileAsync(
       "npm",
       ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
       { cwd: tmp, maxBuffer: 64 * 1024 * 1024, timeout: 600_000 },
     );
     writeFileSync(log, stdout + stderr);
+    // Never publish a tree without the entry point under this lock's name:
+    // every later run would reuse it.
+    if (!existsSync(join(tmp, ENTRY))) {
+      throw new Error(`npm ci finished without ${ENTRY}; see ${log}`);
+    }
     try {
       renameSync(tmp, dir);
     } catch (e) {
@@ -105,12 +110,12 @@ const installAztec = async (
 const findBinary = (name: string, binDir?: string) => {
   const dirs = binDir ? [binDir] : (process.env.PATH ?? "").split(delimiter);
   for (const dir of dirs.filter(Boolean)) {
-    const path = join(dir, name);
+    const path = resolve(dir, name);
     try {
       accessSync(path, constants.X_OK);
       return path;
     } catch {
-      // not here
+      continue;
     }
   }
   throw new Error(
@@ -129,8 +134,10 @@ const pinnedFoundry = async (binDir?: string) => {
     forge: findBinary("forge", binDir),
   };
   for (const path of Object.values(binaries)) {
-    const { stdout } = await execFileAsync(path, ["--version"]);
-    if (!stdout.includes(`Version: ${version}`)) {
+    const { stdout } = await execFileAsync(path, ["--version"], {
+      timeout: 30_000,
+    });
+    if (/ Version: (\S+)/.exec(stdout)?.[1] !== version) {
       throw new Error(
         `${path} is not foundry ${version} (toolchain/foundry-version): ${stdout.split("\n")[0]}`,
       );
@@ -150,9 +157,8 @@ export const prepareToolchain = async ({
   runId: string;
   log: string;
 }): Promise<Toolchain> => {
-  const [aztecEntry, foundry] = await Promise.all([
-    installAztec(toolchainDir, runId, log),
-    pinnedFoundry(foundryBinDir),
-  ]);
-  return { aztecEntry, ...foundry };
+  const aztecEntry = installAztec(toolchainDir, runId, log);
+  const foundry = pinnedFoundry(foundryBinDir);
+  await settleAll([aztecEntry, foundry]);
+  return { aztecEntry: await aztecEntry, ...(await foundry) };
 };

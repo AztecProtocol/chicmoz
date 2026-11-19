@@ -10,8 +10,6 @@ export type SentTx = { txHash: string; blockNumber: number };
  * test account: one transaction the explorer has never seen.
  */
 export const sendTx = async (node: AztecNode): Promise<SentTx> => {
-  // Ephemeral stores are temporary LMDB files under TMPDIR, which the runner
-  // points into the run directory.
   const wallet = await EmbeddedWallet.create(node, {
     ephemeral: true,
     pxe: { proverEnabled: false },

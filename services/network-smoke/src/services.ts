@@ -9,6 +9,7 @@ import {
 } from "@chicmoz/test-harness";
 import { type Ports } from "./ports.js";
 import { type ProcessGroups } from "./processes.js";
+import { settleAll } from "./wait.js";
 
 type Service = {
   entry: string;
@@ -54,7 +55,7 @@ export const missingBuilds = (): string[] =>
     .filter((path) => !existsSync(path));
 
 export const prepareDatabases = (stack: Stack) =>
-  Promise.all(
+  settleAll(
     Object.entries(SERVICES).flatMap(([name, svc]) =>
       "database" in svc
         ? [

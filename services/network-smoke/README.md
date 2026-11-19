@@ -46,5 +46,5 @@ Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose
   - There are no multi-block checkpoints and no reorgs.
 - **Interfaces.** anvil binds `127.0.0.1`. The node's RPC and admin ports, explorer-api and the websocket publisher have no host option and listen on all interfaces. The admin API keeps authentication on with a random key hash generated per run, and the network holds only the public test accounts.
 - **Kills and supply chain.**
-  - A SIGKILL of the runner leaves its processes and project for `down <run>`. A kill during the harness's `up()` leaves a labelled project for `yarn harness down`.
+  - A SIGKILL of the runner leaves its processes and project for `down <run>`. A kill during the harness's `up()` leaves a labelled project for `yarn harness down`. A kill during the first toolchain install can leave `npm ci` running and an `aztec-*.tmp-<run>` directory in the toolchain dir.
   - `yarn npm audit` does not cover the toolchain's npm tree.

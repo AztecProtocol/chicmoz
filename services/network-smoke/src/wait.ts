@@ -59,12 +59,19 @@ export const waitUntil = async (
     if (died) {
       throw new Error(`${what}: ${died}`);
     }
+    let ready = false;
     try {
-      if (await check()) {
-        return;
-      }
+      ready = await check();
     } catch (e) {
       last = (e as Error).message;
+    }
+    if (ready) {
+      signal.throwIfAborted();
+      const diedMeanwhile = dead();
+      if (diedMeanwhile) {
+        throw new Error(`${what}: ${diedMeanwhile}`);
+      }
+      return;
     }
     if (Date.now() > deadline) {
       throw new Error(
@@ -72,5 +79,18 @@ export const waitUntil = async (
       );
     }
     await sleep(intervalMs);
+  }
+};
+
+/**
+ * `Promise.all` that waits for every promise to settle before rejecting with
+ * the first failure, so no sibling is still running when the caller cleans up.
+ */
+export const settleAll = async (work: Promise<unknown>[]): Promise<void> => {
+  const failed = (await Promise.allSettled(work)).find(
+    (r): r is PromiseRejectedResult => r.status === "rejected",
+  );
+  if (failed) {
+    throw failed.reason;
   }
 };

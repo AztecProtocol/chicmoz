@@ -23,13 +23,13 @@ export type Started = {
 };
 
 /**
- * Pids in process group `pgid` whose environment carries this run's marker.
- * A group whose leader died can still hold live descendants, and a pgid with
- * no marked member may already belong to someone else.
+ * Whether process group `pgid` has a member carrying this run's marker. A
+ * group whose leader died can still hold live descendants, and a pgid with no
+ * marked member may already belong to someone else. Best effort: the group
+ * can empty and its pgid be reused between this scan and a signal.
  */
-export const markedMembers = (pgid: number, runId: string): number[] => {
+const hasMarkedMember = (pgid: number, runId: string): boolean => {
   const marker = `${RUN_MARKER}=${runId}`;
-  const pids: number[] = [];
   for (const entry of readdirSync("/proc")) {
     if (!/^\d+$/.test(entry)) {
       continue;
@@ -44,23 +44,36 @@ export const markedMembers = (pgid: number, runId: string): number[] => {
           .split("\0")
           .includes(marker)
       ) {
-        pids.push(Number(entry));
+        return true;
       }
     } catch {
       // Exited while we looked, or not readable by us: not ours either way.
     }
   }
-  return pids;
+  return false;
+};
+
+/** Kernel start time of `pid` (clock ticks since boot), or undefined if gone. */
+export const startTimeOf = (pid: number): string | undefined => {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    // Field 22 overall; the fields after "(comm)" start at field 3.
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  } catch {
+    return undefined;
+  }
 };
 
 const signalGroup = (pgid: number, runId: string, signal: NodeJS.Signals) => {
-  if (markedMembers(pgid, runId).length === 0) {
+  if (!hasMarkedMember(pgid, runId)) {
     return false;
   }
   try {
     process.kill(-pgid, signal);
-  } catch {
-    // The group emptied between the check and the signal.
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ESRCH") {
+      throw e;
+    }
   }
   return true;
 };
@@ -72,7 +85,7 @@ export const stopGroup = async (pgid: number, runId: string) => {
   }
   const deadline = Date.now() + STOP_GRACE_MS;
   while (Date.now() < deadline) {
-    if (markedMembers(pgid, runId).length === 0) {
+    if (!hasMarkedMember(pgid, runId)) {
       return;
     }
     await sleep(100);
@@ -110,9 +123,20 @@ export const createProcessGroups = (runId: string, runDir: string) => {
       cwd,
       env,
       tier,
-    }: { cwd: string; env: Record<string, string>; tier: number },
+      inheritOutput = false,
+      exitIsDeath = true,
+    }: {
+      cwd: string;
+      env: Record<string, string>;
+      tier: number;
+      /** Write to the runner's stdout and stderr instead of `logs/<name>.log`. */
+      inheritOutput?: boolean;
+      exitIsDeath?: boolean;
+    },
   ): Started => {
-    const out = openSync(join(runDir, "logs", `${name}.log`), "a");
+    const out = inheritOutput
+      ? "inherit"
+      : openSync(join(runDir, "logs", `${name}.log`), "a");
     const child = spawn(command, args, {
       cwd,
       // An explicit environment: nothing from the caller's shell (tokens,
@@ -126,16 +150,15 @@ export const createProcessGroups = (runId: string, runDir: string) => {
       detached: true,
       stdio: ["ignore", out, out],
     });
-    closeSync(out);
+    // A failed spawn emits "error" later; unhandled, it would crash the runner.
+    child.on("error", (e) => deaths.push(`${name}: ${e.message}`));
+    if (typeof out === "number") {
+      closeSync(out);
+    }
     if (child.pid === undefined) {
       throw new Error(`${name}: could not start ${command}`);
     }
-    // A detached child leads its own group: pgid = pid. Recorded before any
-    // await, so `down` finds it even if the runner is killed right after.
-    appendFileSync(
-      join(runDir, "pgids"),
-      `${name} ${child.pid} ${child.pid}\n`,
-    );
+    // A detached child leads its own group: pgid = pid.
     const entry: Started = {
       name,
       pgid: child.pid,
@@ -143,13 +166,16 @@ export const createProcessGroups = (runId: string, runDir: string) => {
       tier,
       stopping: false,
     };
+    started.push(entry);
     child.on("exit", (code, signal) => {
-      if (!entry.stopping) {
+      if (exitIsDeath && !entry.stopping) {
         deaths.push(`${name} exited (${signal ?? `code ${code}`})`);
       }
     });
-    child.on("error", (e) => deaths.push(`${name}: ${e.message}`));
-    started.push(entry);
+    appendFileSync(
+      join(runDir, "pgids"),
+      `${name} ${child.pid} ${child.pid}\n`,
+    );
     return entry;
   };
 
@@ -172,8 +198,5 @@ export const createProcessGroups = (runId: string, runDir: string) => {
     }
   };
 
-  const isAlive = (s: Started) =>
-    s.child.exitCode === null && s.child.signalCode === null;
-
-  return { start, stopAll, killAllSync, isAlive, deaths };
+  return { start, stopAll, killAllSync, deaths };
 };

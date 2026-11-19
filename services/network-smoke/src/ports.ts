@@ -45,7 +45,8 @@ export const parsePorts = (value: string): Ports => {
 
 const listen = (port: number) =>
   new Promise<Server>((resolve, reject) => {
-    const server = createServer();
+    // A connection left open would keep close() from ever calling back.
+    const server = createServer((socket) => socket.destroy());
     server.once("error", reject);
     server.listen(port, () => resolve(server));
   });

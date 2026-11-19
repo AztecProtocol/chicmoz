@@ -1,16 +1,15 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { REPO_ROOT } from "@chicmoz/test-harness";
 import { z } from "zod";
 import { type Ports, parsePorts } from "./ports.js";
 
 export type Config = {
-  /** Run directories: logs, marks, process groups, node and wallet temp data. */
   dir: string;
-  /** Installed Aztec toolchains, one per lock hash, shared across runs. */
+  /** One installed Aztec toolchain per lock hash, shared across runs. */
   toolchainDir: string;
   ports?: Ports;
-  /** Where `anvil` and `forge` live; otherwise they are looked up on PATH. */
+  /** Otherwise `anvil` and `forge` come from PATH. */
   foundryBinDir?: string;
 };
 
@@ -24,16 +23,19 @@ const env = z
   })
   .parse(process.env);
 
+// Absolute, because children run in other working directories and the TMPDIR
+// symlinks need an absolute target.
 export const readConfig = (): Config => ({
-  dir: env.NETWORK_SMOKE_DIR ?? join(REPO_ROOT, ".network-smoke"),
-  toolchainDir:
+  dir: resolve(env.NETWORK_SMOKE_DIR ?? join(REPO_ROOT, ".network-smoke")),
+  toolchainDir: resolve(
     env.NETWORK_SMOKE_TOOLCHAIN_DIR ??
-    join(
-      env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-      "chicmoz-network-smoke",
-    ),
+      join(
+        env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
+        "chicmoz-network-smoke",
+      ),
+  ),
   ports: env.NETWORK_SMOKE_PORTS
     ? parsePorts(env.NETWORK_SMOKE_PORTS)
     : undefined,
-  foundryBinDir: env.FOUNDRY_BIN_DIR,
+  foundryBinDir: env.FOUNDRY_BIN_DIR ? resolve(env.FOUNDRY_BIN_DIR) : undefined,
 });

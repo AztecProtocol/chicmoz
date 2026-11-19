@@ -29,6 +29,7 @@ export {
 } from "./postgres.js";
 export { REPO_ROOT } from "./repo.js";
 export {
+  COMPOSE_FILE,
   attach,
   downProject,
   listProjects,

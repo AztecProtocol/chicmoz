@@ -3,15 +3,11 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { downProject, listProjects } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
-import { readPgids, stopGroup } from "./processes.js";
+import { readPgids, startTimeOf, stopGroup } from "./processes.js";
 import { RUN_ID_PATTERN, type RunRecord, run } from "./run.js";
 import { removeTmpDir, tmpDirs } from "./tmp.js";
 
-/**
- * Recovery after the runner itself was killed: stops the run's process
- * groups, removes its compose project and its TMPDIR links. Only a run
- * whose owner is gone.
- */
+/** Cleans up after a runner that was killed; refuses while it still runs. */
 const down = async (runId: string) => {
   if (platform() !== "linux") {
     throw new Error("down needs Linux (/proc)");
@@ -25,30 +21,35 @@ const down = async (runId: string) => {
     throw new Error(`no run ${runId} in ${runDir}`);
   }
   const record = JSON.parse(readFileSync(recordFile, "utf8")) as RunRecord;
-  if (existsSync(`/proc/${record.ownerPid}`)) {
-    const cmdline = readFileSync(`/proc/${record.ownerPid}/cmdline`, "utf8");
-    if (cmdline.includes("cli.js")) {
-      throw new Error(
-        `run ${runId} is still owned by pid ${record.ownerPid}; stop that instead`,
-      );
-    }
-  }
-  for (const pgid of readPgids(runDir).reverse()) {
-    await stopGroup(pgid, runId);
-  }
-  if (record.composeRunId) {
-    const projects = await listProjects();
-    if (projects.some((p) => p.runId === record.composeRunId)) {
-      await downProject(record.composeRunId);
-      process.stdout.write(`removed compose project ${record.composeRunId}\n`);
-    }
-  } else {
-    process.stdout.write(
-      "no compose project recorded; if the run died while starting it, see `yarn harness ls`\n",
+  if (
+    record.ownerStart !== undefined &&
+    startTimeOf(record.ownerPid) === record.ownerStart
+  ) {
+    throw new Error(
+      `run ${runId} is still owned by pid ${record.ownerPid}; stop that instead`,
     );
   }
-  for (const dir of Object.values(tmpDirs(runId, runDir))) {
-    removeTmpDir(dir);
+  try {
+    for (const pgid of readPgids(runDir).reverse()) {
+      await stopGroup(pgid, runId);
+    }
+    if (record.composeRunId) {
+      const projects = await listProjects();
+      if (projects.some((p) => p.runId === record.composeRunId)) {
+        await downProject(record.composeRunId);
+        process.stdout.write(
+          `removed compose project ${record.composeRunId}\n`,
+        );
+      }
+    } else {
+      process.stdout.write(
+        "no compose project recorded; if the run died while starting it, see `yarn harness ls`\n",
+      );
+    }
+  } finally {
+    for (const dir of Object.values(tmpDirs(runId, runDir))) {
+      removeTmpDir(dir);
+    }
   }
   process.stdout.write(`run ${runId} is down\n`);
 };
