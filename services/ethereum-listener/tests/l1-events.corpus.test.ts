@@ -222,9 +222,8 @@ describe("L1 event frames from recorded logs", () => {
     }
   });
 
-  // explorer-api's L1 consumers redeliver a frame they cannot parse forever,
-  // and the rollup and deposit callbacks log a failed parse instead of
-  // throwing, so a dropped event shows only as a missing publish.
+  // The rollup and deposit callbacks log a failed parse instead of throwing,
+  // so a dropped event shows only as a missing publish.
   it("publishes one frame per recorded log, with the committed topic and bytes", async () => {
     expect(
       Object.fromEntries(

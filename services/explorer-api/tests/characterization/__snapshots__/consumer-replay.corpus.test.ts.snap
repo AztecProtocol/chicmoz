@@ -108,6 +108,20 @@ exports[`committed frames replayed into the explorer-api consumers > aztec-liste
 ]
 `;
 
+exports[`committed frames replayed into the explorer-api consumers > aztec-listener local-network/rpc-node-alive reaches the database with the same arguments 1`] = `
+[
+  {
+    "args": [
+      {
+        "rpcNodeName": "rpc-example",
+        "rpcUrl": "https://rpc.example.org",
+      },
+    ],
+    "seam": "storeL2RpcNode",
+  },
+]
+`;
+
 exports[`committed frames replayed into the explorer-api consumers > aztec-listener rpc-node-error reaches the database with the same arguments 1`] = `
 [
   {
@@ -247,6 +261,20 @@ exports[`committed frames replayed into the explorer-api consumers > aztec-liste
       },
     ],
     "seam": "storeL2RpcNodeHealth",
+  },
+]
+`;
+
+exports[`committed frames replayed into the explorer-api consumers > aztec-listener testnet/rpc-node-alive reaches the database with the same arguments 1`] = `
+[
+  {
+    "args": [
+      {
+        "rpcNodeName": "rpc-example",
+        "rpcUrl": "https://rpc.example.org",
+      },
+    ],
+    "seam": "storeL2RpcNode",
   },
 ]
 `;
