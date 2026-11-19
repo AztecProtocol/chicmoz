@@ -205,7 +205,14 @@ export const createProcessGroups = (runId: string, runDir: string) => {
       const stopped = await Promise.all(
         members.map((s) => stopGroup(s.pgid, runId)),
       );
-      stuck.push(...members.filter((_, i) => !stopped[i]).map((s) => s.name));
+      for (const [i, s] of members.entries()) {
+        if (!stopped[i]) {
+          // A child that outlived SIGKILL must not keep the runner from
+          // exiting with its failure.
+          s.child.unref();
+          stuck.push(s.name);
+        }
+      }
     }
     return stuck;
   };
