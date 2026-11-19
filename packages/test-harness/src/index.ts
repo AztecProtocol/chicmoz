@@ -32,7 +32,6 @@ export {
   COMPOSE_FILE,
   attach,
   downProject,
-  listProjects,
   up,
   type Stack,
   type StackEnv,
