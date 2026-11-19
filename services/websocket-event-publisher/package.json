@@ -15,7 +15,7 @@
     "@chicmoz-pkg/message-registry": "workspace:^",
     "@chicmoz-pkg/types": "workspace:^",
     "exponential-backoff": "3.1.1",
-    "ws": "8.22.2"
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@types/node": "20.5.0",
