@@ -1,3 +1,7 @@
+import {
+  parseGithubPrUrl,
+  parseGovernanceForumUrl,
+} from "@chicmoz-pkg/types";
 import { logger } from "../../logger.js";
 
 export type GovernanceProposalMetadata = {
@@ -48,10 +52,13 @@ const extractForumLink = (body: string | null): string | null => {
   if (!body) {
     return null;
   }
-  const match = body.match(
-    /https?:\/\/(?:forum\.aztec\.network|gov\.aztec\.network|[^\s)\]]*discourse[^\s)\]]*)[^\s)\]]*/i,
-  );
-  return match?.[0] ?? null;
+  for (const [candidate] of body.matchAll(/https:\/\/[^\s<>")\]]+/gi)) {
+    const forumLink = parseGovernanceForumUrl(candidate);
+    if (forumLink) {
+      return forumLink;
+    }
+  }
+  return null;
 };
 
 const fetchIpfsContent = async (
@@ -112,13 +119,9 @@ export const resolvePayloadMetadata = async (
     return { title: null, github_pr: null, forum_link: null, description: null };
   }
 
-  // GitHub PR
-  const githubMatch = uri.match(
-    /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/,
-  );
-  if (githubMatch) {
-    const [, org, repo, numberStr] = githubMatch;
-    const number = parseInt(numberStr, 10);
+  const githubPr = parseGithubPrUrl(uri);
+  if (githubPr) {
+    const { org, repo, number, url } = githubPr;
     try {
       const pr = await fetchGitHubPR(org, repo, number);
       return {
@@ -129,7 +132,7 @@ export const resolvePayloadMetadata = async (
           number,
           title: pr.title,
           merged: pr.merged,
-          url: uri,
+          url,
         },
         forum_link: extractForumLink(pr.body),
         description: pr.body?.slice(0, 500) ?? null,
@@ -145,16 +148,12 @@ export const resolvePayloadMetadata = async (
     }
   }
 
-  // Forum link
-  if (
-    uri.includes("forum.aztec.network") ||
-    uri.includes("discourse") ||
-    uri.includes("gov.aztec.network")
-  ) {
+  const forumLink = parseGovernanceForumUrl(uri);
+  if (forumLink) {
     return {
       title: null,
       github_pr: null,
-      forum_link: uri,
+      forum_link: forumLink,
       description: null,
     };
   }

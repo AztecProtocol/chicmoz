@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { frTimestampSchema } from "../aztec/utils.js";
+import {
+  parseGithubPrUrl,
+  parseGovernanceForumUrl,
+} from "./governance-links.js";
 
 const ethAddressSchema = z
   .string()
@@ -201,16 +205,36 @@ export type ChicmozL1GovernanceProposerUpdated = z.infer<
 export const governanceGithubPrSchema = z.object({
   org: z.string(),
   repo: z.string(),
-  number: z.coerce.number().int().positive(),
+  // No coercion: a coercion that throws would escape the .catch(null) below.
+  number: z.number().int().positive(),
   title: z.string(),
   merged: z.boolean(),
-  url: z.string().url(),
+  url: z.string().refine((url) => parseGithubPrUrl(url) !== null, {
+    message: "Expected an https github.com pull request URL",
+  }),
 });
+
+const governanceForumLinkSchema = z
+  .string()
+  .refine((url) => parseGovernanceForumUrl(url) !== null, {
+    message: "Expected an https URL on a governance forum host",
+  });
+
+// Links read back from storage drop to null instead of failing the whole
+// proposal, so a row stored under older rules still parses.
+const githubPrFieldSchema = governanceGithubPrSchema
+  .nullable()
+  .optional()
+  .catch(null);
+const forumLinkFieldSchema = governanceForumLinkSchema
+  .nullable()
+  .optional()
+  .catch(null);
 
 export const governanceProposalMetadataSchema = z.object({
   title: z.string().nullable().optional(),
-  github_pr: governanceGithubPrSchema.nullable().optional(),
-  forum_link: z.string().nullable().optional(),
+  github_pr: githubPrFieldSchema,
+  forum_link: forumLinkFieldSchema,
   description: z.string().nullable().optional(),
 });
 
@@ -242,8 +266,8 @@ export const chicmozL1GovernanceProposalSchema = z.object({
   uri: z.string().nullable().optional(),
   metadata: governanceProposalMetadataSchema.nullable().optional(),
   title: z.string().nullable().optional(),
-  forum_link: z.string().nullable().optional(),
-  github_pr: governanceGithubPrSchema.nullable().optional(),
+  forum_link: forumLinkFieldSchema,
+  github_pr: githubPrFieldSchema,
   l1BlockNumber: z.coerce.bigint(),
   l1BlockHash: z.string(),
   l1BlockTimestamp: z.coerce.date(),

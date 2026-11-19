@@ -652,7 +652,7 @@ Get a list of contract classes.
 **Query Parameters**:
 
 - `page`: Page number (default: 1)
-- `limit`: Items per page (default: 10)
+- `limit`: Items per page, an integer from 1 to 100
 
 **Response**:
 
@@ -681,7 +681,7 @@ Get a list of contract instances.
 **Query Parameters**:
 
 - `page`: Page number (default: 1)
-- `limit`: Items per page (default: 10)
+- `limit`: Items per page, an integer from 1 to 100
 - `classId`: Filter by contract class ID
 
 **Response**:

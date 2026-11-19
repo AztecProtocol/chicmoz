@@ -199,7 +199,7 @@ export const getContractInstancesSchema = z.object({
     fromHeight: chicmozL2BlockSchema.shape.height.optional(),
     toHeight: chicmozL2BlockSchema.shape.height.optional(),
     offset: z.coerce.number().nonnegative().optional(),
-    limit: z.coerce.number().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
     verified: z.coerce.boolean().optional(),
     protocol: z.coerce.boolean().optional(),
   }),
@@ -235,7 +235,7 @@ export const getContractClassesSchema = z.object({
   query: z.object({
     verifiedSourceOnly: z.coerce.boolean().optional(),
     offset: z.coerce.number().nonnegative().optional(),
-    limit: z.coerce.number().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
     verified: z.coerce.boolean().optional(),
     protocol: z.coerce.boolean().optional(),
   }),

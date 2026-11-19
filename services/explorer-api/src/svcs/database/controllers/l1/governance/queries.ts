@@ -1,6 +1,9 @@
 import { eq, desc, and, asc, gte, isNull, or } from "drizzle-orm";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
-import type { ProposalState } from "@chicmoz-pkg/types";
+import {
+  governanceProposalMetadataSchema,
+  type ProposalState,
+} from "@chicmoz-pkg/types";
 import {
   l1GovernanceProposalsTable,
   l1GovernanceVotesTable,
@@ -12,20 +15,38 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Flatten metadata JSONB into top-level fields expected by the API schema / UI. */
-const flattenProposalMetadata = <T extends { metadata: unknown }>(row: T): T & {
+const { forum_link: forumLinkSchema, github_pr: githubPrSchema } =
+  governanceProposalMetadataSchema.shape;
+
+/**
+ * Flatten metadata JSONB into top-level fields expected by the API schema / UI.
+ * Stored links that fail the response schema's link rules come back as null,
+ * both flattened and inside `metadata`.
+ */
+export const flattenProposalMetadata = <T extends { metadata: unknown }>(
+  row: T,
+): Omit<T, "metadata" | "title" | "forum_link" | "github_pr" | "votesCast"> & {
+  metadata: Record<string, unknown> | null;
   title: string | null;
   forum_link: string | null;
   github_pr: unknown;
   votesCast: bigint;
 } => {
-  const meta = (row.metadata as Record<string, unknown> | null) ?? {};
+  const stored =
+    typeof row.metadata === "object" &&
+    row.metadata !== null &&
+    !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : null;
+  const forumLink = forumLinkSchema.parse(stored?.forum_link) ?? null;
+  const githubPr = githubPrSchema.parse(stored?.github_pr) ?? null;
   const voteRow = row as T & { summedYea: bigint | string; summedNay: bigint | string };
   return {
     ...row,
-    title: (meta?.title as string | undefined) ?? null,
-    forum_link: (meta?.forum_link as string | undefined) ?? null,
-    github_pr: (meta?.github_pr as Record<string, unknown> | null) ?? null,
+    metadata: stored && { ...stored, forum_link: forumLink, github_pr: githubPr },
+    title: (stored?.title as string | undefined) ?? null,
+    forum_link: forumLink,
+    github_pr: githubPr,
     votesCast: BigInt(voteRow.summedYea) + BigInt(voteRow.summedNay),
   };
 };
