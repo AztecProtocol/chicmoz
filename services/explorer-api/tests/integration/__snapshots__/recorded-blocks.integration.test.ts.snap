@@ -1,132 +1,26 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l1/l2-validators/totals answers from its cache entry 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l1/l2-validators/totals answers from the committed string of its cache entry > answer 1`] = `
 {
-  "cached": {
-    "maxStake": "200000000000000000000000",
-    "nonValidating": 0,
-    "stakeByStatus": {
-      "VALIDATING": "200000000000000000000000",
-    },
-    "statusCounts": {
-      "VALIDATING": 1,
-    },
-    "total": 1,
-    "totalStake": "200000000000000000000000",
-    "validating": 1,
-    "validatingStake": "200000000000000000000000",
+  "maxStake": "200000000000000000000000",
+  "nonValidating": 0,
+  "stakeByStatus": {
+    "VALIDATING": "200000000000000000000000",
   },
-  "response": {
-    "maxStake": "200000000000000000000000",
-    "nonValidating": 0,
-    "stakeByStatus": {
-      "VALIDATING": "200000000000000000000000",
-    },
-    "statusCounts": {
-      "VALIDATING": 1,
-    },
-    "total": 1,
-    "totalStake": "200000000000000000000000",
-    "validating": 1,
-    "validatingStake": "200000000000000000000000",
+  "statusCounts": {
+    "VALIDATING": 1,
   },
+  "total": 1,
+  "totalStake": "200000000000000000000000",
+  "validating": 1,
+  "validatingStake": "200000000000000000000000",
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes answers from its cache entry 1`] = `
-{
-  "cached": [
-    {
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "l1ChainId": 31337,
-      "l2NetworkId": "SANDBOX",
-      "lastSeenAt": "2026-01-02T00:00:00.000Z",
-      "nodeVersion": "6.0.0",
-      "rollupVersion": "1685378643",
-      "rpcNodeName": "rpc-example",
-      "rpcUrl": "https://rpc.example.org",
-    },
-  ],
-  "response": [
-    {
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "l1ChainId": 31337,
-      "l2NetworkId": "SANDBOX",
-      "lastSeenAt": "2026-01-02T00:00:00.000Z",
-      "nodeVersion": "6.0.0",
-      "rollupVersion": "1685378643",
-      "rpcNodeName": "rpc-example",
-    },
-  ],
-}
-`;
-
-exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes/:rpcNodeName answers from its cache entry 1`] = `
-{
-  "cached": {
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes answers from the committed string of its cache entry > answer 1`] = `
+[
+  {
     "createdAt": "2026-01-01T00:00:00.000Z",
-    "errors": [
-      {
-        "cause": "xxx.xxx.xxx.xxx",
-        "count": 1,
-        "createdAt": {
-          "$dbtime": true,
-        },
-        "data": {
-          "args": [
-            46972,
-            {
-              "includeTransactions": true,
-            },
-          ],
-          "error": {},
-          "fnName": "getBlock",
-        },
-        "lastSeenAt": {
-          "$dbtime": true,
-        },
-        "message": "xxx.xxx.xxx.xxx",
-        "name": "Error",
-        "rpcNodeName": "rpc-example",
-        "stack": "xxx.xxx.xxx.xxx",
-      },
-    ],
-    "l1ChainId": 31337,
-    "l2NetworkId": "SANDBOX",
-    "lastSeenAt": "2026-01-02T00:00:00.000Z",
-    "nodeVersion": "6.0.0",
-    "rollupVersion": "1685378643",
-    "rpcNodeName": "rpc-example",
-    "rpcUrl": "https://rpc.example.org",
-  },
-  "response": {
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "errors": [
-      {
-        "cause": "xxx.xxx.xxx.xxx",
-        "count": 1,
-        "createdAt": {
-          "$dbtime": true,
-        },
-        "data": {
-          "args": [
-            46972,
-            {
-              "includeTransactions": true,
-            },
-          ],
-          "error": {},
-          "fnName": "getBlock",
-        },
-        "lastSeenAt": {
-          "$dbtime": true,
-        },
-        "message": "xxx.xxx.xxx.xxx",
-        "name": "Error",
-        "rpcNodeName": "rpc-example",
-        "stack": "xxx.xxx.xxx.xxx",
-      },
-    ],
     "l1ChainId": 31337,
     "l2NetworkId": "SANDBOX",
     "lastSeenAt": "2026-01-02T00:00:00.000Z",
@@ -134,10 +28,44 @@ exports[`recorded chain data read back through Postgres and Redis > cache reader
     "rollupVersion": "1685378643",
     "rpcNodeName": "rpc-example",
   },
+]
+`;
+
+exports[`recorded chain data read back through Postgres and Redis > cache readers > GET /l2/rpc-nodes/:rpcNodeName answers from the committed string of its cache entry > answer 1`] = `
+{
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "errors": [
+    {
+      "cause": "xxx.xxx.xxx.xxx",
+      "count": 1,
+      "createdAt": "2000-01-01T00:00:00.000Z",
+      "data": {
+        "args": [
+          46972,
+          {
+            "includeTransactions": true,
+          },
+        ],
+        "error": {},
+        "fnName": "getBlock",
+      },
+      "lastSeenAt": "2000-01-01T00:00:00.000Z",
+      "message": "xxx.xxx.xxx.xxx",
+      "name": "Error",
+      "rpcNodeName": "rpc-example",
+      "stack": "xxx.xxx.xxx.xxx",
+    },
+  ],
+  "l1ChainId": 31337,
+  "l2NetworkId": "SANDBOX",
+  "lastSeenAt": "2026-01-02T00:00:00.000Z",
+  "nodeVersion": "6.0.0",
+  "rollupVersion": "1685378643",
+  "rpcNodeName": "rpc-example",
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > POST verifies the recorded deployment from the string its cache entry holds > cached string 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > POST verifies the recorded deployment from the committed string of its cache entry > string the verification writes 1`] = `
 {
   "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
   "artifactContractName": "AuthRegistry",
@@ -196,7 +124,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > after a verified upload with constructed aztec-scan notes and deployer metadata > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 1`] = `
 {
   "artifactContractName": "AuthRegistry",
   "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
@@ -228,7 +156,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 with includeArtifactJson 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > after a verified upload with constructed aztec-scan notes and deployer metadata > class and instance read back with the stored artifact, deployment arguments and notes > class 0x280746c6b1377b8ca1414d898b0c1e63b02fc20f42b89c2e84fed4a615084a71 with includeArtifactJson 1`] = `
 {
   "artifactContractName": "AuthRegistry",
   "artifactHash": "0x1d5f899f6dad791d8f2591bed29f998f8ea07a6ec06f1781e4a8685f611c64ab",
@@ -265,7 +193,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > class and instance read back with the stored artifact, deployment arguments and notes > instance 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > after a verified upload with constructed aztec-scan notes and deployer metadata > class and instance read back with the stored artifact, deployment arguments and notes > instance 1`] = `
 {
   "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
   "artifactContractName": "AuthRegistry",
@@ -282,10 +210,10 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
       },
     ],
     "updatedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
     "uploadedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
   },
   "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
@@ -301,7 +229,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
     "details": "Authorization registry deployed by the local network",
     "repoUrl": "https://example.org/repo",
     "uploadedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
   },
   "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -349,7 +277,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > constructed aztec-scan notes and deployer metadata read back from the POST and the notes route > POST response 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > after a verified upload with constructed aztec-scan notes and deployer metadata > the POST answer and the notes route read back the stored notes and metadata > POST response 1`] = `
 {
   "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
   "artifactContractName": "AuthRegistry",
@@ -371,10 +299,10 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
       },
     ],
     "updatedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
     "uploadedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
   },
   "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
@@ -390,7 +318,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
     "details": "Authorization registry deployed by the local network",
     "repoUrl": "https://example.org/repo",
     "uploadedAt": {
-      "$dbtime": true,
+      "$dbtime": "string",
     },
   },
   "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -438,7 +366,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
 }
 `;
 
-exports[`recorded chain data read back through Postgres and Redis > contract instance verification > constructed aztec-scan notes and deployer metadata read back from the POST and the notes route > notes route 1`] = `
+exports[`recorded chain data read back through Postgres and Redis > contract instance verification > after a verified upload with constructed aztec-scan notes and deployer metadata > the POST answer and the notes route read back the stored notes and metadata > notes route 1`] = `
 [
   {
     "address": "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83",
@@ -456,10 +384,10 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
         },
       ],
       "updatedAt": {
-        "$dbtime": true,
+        "$dbtime": "string",
       },
       "uploadedAt": {
-        "$dbtime": true,
+        "$dbtime": "string",
       },
     },
     "blockHash": "0x140a7a6f041c79a930c774ae8a5f8eb5a85d4291d1468369c6aeb7ca4e850870",
@@ -475,7 +403,7 @@ exports[`recorded chain data read back through Postgres and Redis > contract ins
       "details": "Authorization registry deployed by the local network",
       "repoUrl": "https://example.org/repo",
       "uploadedAt": {
-        "$dbtime": true,
+        "$dbtime": "string",
       },
     },
     "immutablesHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -616,7 +544,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
   "timestamp": 1795115720000,
   "transactionFee": "624030504500000000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7",
 }
@@ -654,7 +582,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
     "timestamp": 1795115720000,
     "transactionFee": "624030504500000000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x033db141c801216c615a24eb00f292585a0aee8d0e964fbad7e3f092b5353df7",
   },
@@ -771,7 +699,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
   "timestamp": 1795115792000,
   "transactionFee": "543307292450000000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67",
 }
@@ -827,7 +755,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
     "timestamp": 1795115792000,
     "transactionFee": "543307292450000000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x22d4455dff088623c19bd763be4b9dce0a8a8e44a63be5d2bbf0dd6bf3485f67",
   },
@@ -959,7 +887,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
   "timestamp": 1795116440000,
   "transactionFee": "83831918625000000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
 }
@@ -1030,7 +958,7 @@ exports[`recorded chain data read back through Postgres and Redis > local-networ
     "timestamp": 1795116440000,
     "transactionFee": "83831918625000000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x13286b6218ee7a63c2ca31c6f31b7c8c4626b842fb1a9f67cb93052ad4aef00e",
   },
@@ -1284,7 +1212,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "4504420720707200000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864",
 }
@@ -1343,7 +1271,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "4504420720707200000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x253dcac8cd893e263308ec5dadcf7bc8d893d4ccd4fdc390f3bfe1d5dbc67864",
   },
@@ -1457,7 +1385,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "956783903085400000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6",
 }
@@ -1510,7 +1438,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "956783903085400000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x0eb07fa22679b23bbe51cf16a541fcfadcd3b1867f6539645e619711fb8be4b6",
   },
@@ -1794,7 +1722,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "875500140080000000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9",
 }
@@ -1847,7 +1775,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "5408735865397600000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08",
 }
@@ -2067,7 +1995,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "875500140080000000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x0e7ffe4809d6e853660734fc410c0d795047e2088ac136bd63639b5633113cc9",
   },
@@ -2117,7 +2045,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "5408735865397600000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x1ea1f914745f7247f1b31517d742db0acbb7a4ca47f26272179c6b0e26540b08",
   },
@@ -2232,7 +2160,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "5488093378094800000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d",
 }
@@ -2286,7 +2214,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "5488093378094800000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x18c5982475f0aa7e899b7a135933a5312098dc8454d9f5c578bbf598baab6e2d",
   },
@@ -2397,7 +2325,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
   "timestamp": 1795107396000,
   "transactionFee": "2388197882111600000",
   "txBirthTimestamp": {
-    "$dbtime": true,
+    "$dbtime": "number",
   },
   "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66",
 }
@@ -2447,7 +2375,7 @@ exports[`recorded chain data read back through Postgres and Redis > testnet bloc
     "timestamp": 1795107396000,
     "transactionFee": "2388197882111600000",
     "txBirthTimestamp": {
-      "$dbtime": true,
+      "$dbtime": "number",
     },
     "txHash": "0x1d9a07ac805d0b17aa4692144a3a3430c67217147617894cb7fcfc192c212c66",
   },

@@ -105,25 +105,6 @@ export const snapshotOf = (
   { dbTimeKeys = [], dbUuidKeys = [] }: DbFilled = {},
 ): Canonical => canonical(prepare(value, new Set(dbUuidKeys)), { dbTimeKeys });
 
-// The node's own times come from its payload and the frozen clock; only its
-// error rows are stamped by Postgres (`defaultNow()`).
-export const rpcNodeSnapshotOf = (value: unknown): Canonical => {
-  if (!isPlainObject(value)) {
-    throw new TypeError("rpc node body is not an object");
-  }
-  const { errors, ...node } = value;
-  return {
-    ...(canonical(node) as Record<string, Canonical>),
-    ...(errors === undefined
-      ? {}
-      : {
-          errors: canonical(errors, {
-            dbTimeKeys: ["createdAt", "lastSeenAt"],
-          }),
-        }),
-  };
-};
-
 type ProducerFrame = { eventType: string; bson: string };
 
 /** The consumer-side payload of a frame aztec-listener's producer test committed. */
@@ -170,13 +151,76 @@ export const cacheAt = (stack: Stack, namespace: string, keys: CacheKeys) => {
   };
 };
 
+const FIXED = {
+  iso: "2000-01-01T00:00:00.000Z",
+  uuid: "00000000-0000-4000-8000-000000000000",
+} as const;
+
+// The exact form a Date takes through JSON.stringify, so a writer that starts
+// sending another form fails here instead of being masked.
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const HOLDS: Record<keyof typeof FIXED, (value: unknown) => boolean> = {
+  iso: (value) => typeof value === "string" && ISO_TIME.test(value),
+  uuid: (value) => typeof value === "string" && UUID.test(value),
+};
+
+/** A value the database fills at `path` (`"*"` steps into every array element). */
+export type DbFilledAt = { path: readonly string[]; wire: keyof typeof FIXED };
+
+const fixAt = (
+  value: unknown,
+  [head, ...rest]: readonly string[],
+  wire: keyof typeof FIXED,
+): number => {
+  if (head === "*") {
+    if (!Array.isArray(value)) {
+      throw new TypeError("expected an array");
+    }
+    return value.reduce<number>((n, item) => n + fixAt(item, rest, wire), 0);
+  }
+  if (!isPlainObject(value) || !Object.hasOwn(value, head)) {
+    throw new TypeError(`no ${head}`);
+  }
+  if (rest.length > 0) {
+    return fixAt(value[head], rest, wire);
+  }
+  if (!HOLDS[wire](value[head])) {
+    throw new TypeError(`${head} is not a database-filled ${wire}`);
+  }
+  value[head] = FIXED[wire];
+  return 1;
+};
+
+/**
+ * The writer's cache string with every database-filled value replaced by a
+ * fixed one of the same wire type; every other byte is the writer's.
+ */
+export const normalizedCacheString = (
+  stored: string,
+  filled: readonly DbFilledAt[],
+): string => {
+  const parsed: unknown = JSON.parse(stored);
+  // Holds unless JSON.stringify would reorder integer-like keys or respell a
+  // number or an escape, any of which would hide a writer change.
+  if (JSON.stringify(parsed) !== stored) {
+    throw new Error("the cache string does not round-trip through JSON");
+  }
+  for (const { path, wire } of filled) {
+    if (fixAt(parsed, path, wire) === 0) {
+      throw new Error(`nothing at ${path.join("/")}`);
+    }
+  }
+  return JSON.stringify(parsed);
+};
+
 type OpenApiSchema = {
   type?: string | string[];
   required?: string[];
   items?: OpenApiSchema;
   anyOf?: OpenApiSchema[];
   oneOf?: OpenApiSchema[];
-  properties?: Record<string, unknown>;
+  properties?: Record<string, OpenApiSchema>;
 };
 
 type OpenApiDocument = {
@@ -194,25 +238,99 @@ type OpenApiDocument = {
   >;
 };
 
-const objectVariant = (schema: OpenApiSchema): OpenApiSchema =>
-  [...(schema.anyOf ?? []), ...(schema.oneOf ?? [])].find(
-    (variant) => variant.properties !== undefined,
-  ) ?? schema;
+/** GET routes whose document schema names no required key anywhere. */
+const NO_REQUIRED_KEYS: Record<string, string> = {
+  "/l2/dropped-txs/{hash}":
+    "the document describes the body as an object without properties",
+};
+
+const jsonTypeOf = (value: unknown) =>
+  value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+
+const variantsOf = (schema: OpenApiSchema) => [
+  ...(schema.anyOf ?? []),
+  ...(schema.oneOf ?? []),
+];
+
+const hasRequiredKeys = (schema: OpenApiSchema): boolean =>
+  (schema.required?.length ?? 0) > 0 ||
+  Object.values(schema.properties ?? {}).some(hasRequiredKeys) ||
+  (schema.items !== undefined && hasRequiredKeys(schema.items)) ||
+  variantsOf(schema).some(hasRequiredKeys);
+
+// OpenAPI 3.1 allows a list of types (e.g. ["object", "null"]).
+const declares = (schema: OpenApiSchema, type: string) =>
+  [schema.type].flat().includes(type) ||
+  (type === "object" && schema.properties !== undefined) ||
+  (type === "array" && schema.items !== undefined);
+
+const collectMismatches = (
+  schema: OpenApiSchema,
+  value: unknown,
+  at: string,
+  out: string[],
+): void => {
+  const type = jsonTypeOf(value);
+  const variants = variantsOf(schema);
+  const own =
+    variants.length === 0
+      ? schema
+      : variants.find((variant) => declares(variant, type));
+  if (own === undefined || (type !== "object" && type !== "array")) {
+    return;
+  }
+  if (own.type !== undefined && !declares(own, type)) {
+    out.push(`${at || "/"}: ${type}, not ${String(own.type)}`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    const { items } = own;
+    if (items) {
+      value.forEach((item, i) =>
+        collectMismatches(items, item, `${at}/${i}`, out),
+      );
+    }
+    return;
+  }
+  const object = value as Record<string, unknown>;
+  for (const key of own.required ?? []) {
+    if (!Object.hasOwn(object, key)) {
+      out.push(`${at}/${key}`);
+    }
+  }
+  for (const [key, property] of Object.entries(own.properties ?? {})) {
+    if (Object.hasOwn(object, key)) {
+      collectMismatches(property, object[key], `${at}/${key}`, out);
+    }
+  }
+};
 
 /**
- * The `required` keys of a GET route's 200 JSON schema in the generated
- * document, and whether that schema describes an array of such objects.
+ * Where `body` departs from the GET route's 200 JSON schema in the generated
+ * document: a required key absent at any depth, or an object or array where
+ * the schema declares another type.
  */
-export const requiredKeysOf = (spec: unknown, openApiPath: string) => {
+export const documentMismatches = (
+  spec: unknown,
+  openApiPath: string,
+  body: unknown,
+): string[] => {
   const schema = (spec as OpenApiDocument).paths?.[openApiPath]?.get
     ?.responses?.["200"]?.content?.["application/json"]?.schema;
   if (!schema) {
     throw new Error(`no GET 200 JSON schema for ${openApiPath}`);
   }
-  // OpenAPI 3.1 allows a list of types (e.g. ["object", "null"]).
-  const isArray = [schema.type].flat().includes("array");
-  const element = objectVariant(isArray ? (schema.items ?? {}) : schema);
-  return { isArray, required: element.required ?? [] };
+  const listed = Object.hasOwn(NO_REQUIRED_KEYS, openApiPath);
+  if (hasRequiredKeys(schema) === listed) {
+    throw new Error(
+      listed
+        ? `${openApiPath} names required keys now: drop it from NO_REQUIRED_KEYS`
+        : `${openApiPath} names no required key: list it in NO_REQUIRED_KEYS with the reason`,
+    );
+  }
+  const out: string[] = [];
+  collectMismatches(schema, body, "", out);
+  return out;
 };
 
 /** Rows a cache test removes so that only its seeded entry can answer. */

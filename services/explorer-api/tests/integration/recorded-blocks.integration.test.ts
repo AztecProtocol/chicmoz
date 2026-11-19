@@ -12,7 +12,16 @@ import {
   type PendingTxsEvent,
 } from "@chicmoz-pkg/message-registry";
 import { BSON } from "bson";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { rawArtifact } from "./support/contracts.js";
 import {
   type ExplorerApiForTest,
@@ -20,18 +29,22 @@ import {
 } from "./support/explorer-api.js";
 import {
   type DbFilled,
+  type DbFilledAt,
   cacheAt,
+  documentMismatches,
+  normalizedCacheString,
   producerFrameData,
   recordedBlocks,
   removeRpcNodes,
   removeValidators,
-  requiredKeysOf,
-  rpcNodeSnapshotOf,
   setInstanceSalt,
   snapshotOf,
 } from "./support/recorded-blocks.js";
 
-vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 0, 1) });
+const TESTNET_DAY = Date.UTC(2026, 0, 1);
+const LOCAL_DAY = Date.UTC(2026, 0, 2);
+
+vi.useFakeTimers({ toFake: ["Date"], now: TESTNET_DAY });
 
 const TESTNET = recordedBlocks("testnet");
 const LOCAL = recordedBlocks("local-network");
@@ -67,18 +80,47 @@ const RPC_NODE_ERROR = producerFrameData(
   "L2_RPC_NODE_ERROR_EVENT",
 ) as ChicmozL2RpcNodeErrorEvent;
 
-/** Bodies served by a GET route, kept for the required-keys check. */
-const served: Array<{ openApiPath: string; body: unknown }> = [];
+/**
+ * Pins the writer's string at `entry`, database-filled values fixed, as
+ * `__snapshots__/cache/<name>.json.snap`, and returns that file's bytes, so a
+ * reader is shown what an earlier revision committed rather than its own.
+ */
+const pinCacheString = async (
+  entry: ReturnType<typeof cacheAt>,
+  name: string,
+  filled: readonly DbFilledAt[] = [],
+) => {
+  const file = `__snapshots__/cache/${name}.json.snap`;
+  await expect(
+    normalizedCacheString(await entry.stored(), filled),
+  ).toMatchFileSnapshot(file);
+  const url = new URL(file, import.meta.url);
+  if (!existsSync(url)) {
+    throw new Error(
+      `${file} is written when this file's tests finish: run them again`,
+    );
+  }
+  return readFileSync(url, "utf8");
+};
 
 describe("recorded chain data read back through Postgres and Redis", () => {
   let api: ExplorerApiForTest;
+  let spec: unknown;
+  let localNetwork: Promise<void> | undefined;
 
+  /** A GET that names its OpenAPI path is checked against the document. */
   const get = async (path: string, openApiPath?: string, status = 200) => {
     const res = await api.request.get(path);
     expect(res.status, `GET ${path}: ${res.text.slice(0, 300)}`).toBe(status);
     const body: unknown = res.body;
     if (openApiPath) {
-      served.push({ openApiPath, body });
+      spec ??= (
+        await import("../../src/svcs/http-server/open-api-spec.js")
+      ).genereateOpenApiSpec();
+      expect(
+        documentMismatches(spec, openApiPath, body),
+        `GET ${path} against ${openApiPath}`,
+      ).toEqual([]);
     }
     return body;
   };
@@ -98,6 +140,16 @@ describe("recorded chain data read back through Postgres and Redis", () => {
     for (const { event } of blocks) {
       await deliver(blockHandler, event);
     }
+  };
+
+  // Reads filter on the current rollup version, the one first seen latest, so
+  // the local network arrives a day after testnet and stays current. Every
+  // group after testnet's runs on that day with these blocks stored, whichever
+  // tests are selected.
+  const atLocalNetwork = () => {
+    vi.setSystemTime(LOCAL_DAY);
+    localNetwork ??= deliverBlocks(LOCAL);
+    return localNetwork;
   };
 
   // Every stored column comes back through the row readers' schemas, then
@@ -136,21 +188,19 @@ describe("recorded chain data read back through Postgres and Redis", () => {
   };
 
   describe("testnet blocks", () => {
-    beforeAll(() => deliverBlocks(TESTNET));
+    beforeAll(() => {
+      vi.setSystemTime(TESTNET_DAY);
+      return deliverBlocks(TESTNET);
+    });
     readBackBlocks(TESTNET);
   });
 
-  // Reads filter on the current rollup version, the one first seen latest; a
-  // day later the local network's version is current.
   describe("local-network blocks", () => {
-    beforeAll(async () => {
-      vi.setSystemTime(Date.UTC(2026, 0, 2));
-      await deliverBlocks(LOCAL);
-    });
+    beforeAll(atLocalNetwork);
     readBackBlocks(LOCAL);
 
-    // Class bodies stay out of the required-keys check: the generated document
-    // has only a POST operation under the class path.
+    // Class bodies are not checked against the document: it has only a POST
+    // operation under the class path.
     it.each(CLASS_IDS)(
       "class %s reads back as the block handler stored it, with and without includeArtifactJson",
       async (classId) => {
@@ -178,6 +228,8 @@ describe("recorded chain data read back through Postgres and Redis", () => {
   });
 
   describe("txs", () => {
+    beforeAll(atLocalNetwork);
+
     it("the recorded pending txs read back as the pending-tx handler stored them", async () => {
       const { pendingTxHandler } = await import(
         "../../src/events/received/on-pending-txs.js"
@@ -218,6 +270,8 @@ describe("recorded chain data read back through Postgres and Redis", () => {
   describe("contract instance verification", () => {
     const [address] = INSTANCES;
     const artifact = rawArtifact("auth_registry_contract-AuthRegistry");
+    const instanceEntry = () =>
+      cacheAt(api.stack, api.namespace, ["l2", "contract-instances", address]);
     let deploymentArguments: {
       publicKeysString: string;
       salt: string;
@@ -229,6 +283,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       api.request.post(`/l2/contract-instances/${address}`).send(body);
 
     beforeAll(async () => {
+      await atLocalNetwork();
       // The local network deploys AuthRegistry without an initializer at salt 1.
       const instance = await getContractInstanceFromInstantiationParams(
         loadContractArtifact(artifact),
@@ -244,13 +299,9 @@ describe("recorded chain data read back through Postgres and Redis", () => {
     });
 
     // The POST reads the instance through the cache; a 200 while the row's
-    // salt disagrees proves the answer came from the stored string.
-    it("POST verifies the recorded deployment from the string its cache entry holds", async () => {
-      const entry = cacheAt(api.stack, api.namespace, [
-        "l2",
-        "contract-instances",
-        address,
-      ]);
+    // salt disagrees proves the answer came from the committed string.
+    it("POST verifies the recorded deployment from the committed string of its cache entry", async () => {
+      const entry = instanceEntry();
       await entry.remove();
       const first = await verify({
         verifiedDeploymentArguments: {
@@ -259,13 +310,31 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         },
       });
       expect(first.status, first.text).toBe(200);
-      const stored = await entry.stored();
-      expect(snapshotOf(JSON.parse(stored), VERIFIED_DB)).toMatchSnapshot(
-        "cached string",
-      );
+      // The verification's own writer stores the artifact too: pinned in
+      // digest form; the committed seed is the POST's smaller cache-miss entry.
+      expect(
+        snapshotOf(JSON.parse(await entry.stored()), VERIFIED_DB),
+      ).toMatchSnapshot("string the verification writes");
+      await entry.remove();
+      const miss = await verify({
+        verifiedDeploymentArguments: {
+          ...deploymentArguments,
+          salt: new Fr(3).toString(),
+        },
+      });
+      expect([miss.status, miss.text]).toEqual([
+        400,
+        "Uploaded salt does not match the DB",
+      ]);
+      const committed = await pinCacheString(entry, "contract-instance", [
+        { path: ["verifiedDeploymentArguments", "id"], wire: "uuid" },
+      ]);
 
-      const otherSalt = new Fr(2).toString();
-      await setInstanceSalt(address, otherSalt);
+      onTestFinished(async () => {
+        await setInstanceSalt(address, deploymentArguments.salt);
+        await entry.remove();
+      });
+      await setInstanceSalt(address, new Fr(2).toString());
       await entry.remove();
       const fromDatabase = await verify({
         verifiedDeploymentArguments: deploymentArguments,
@@ -275,7 +344,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         "Uploaded salt does not match the DB",
       ]);
 
-      await entry.seed(stored);
+      await entry.seed(committed);
       const fromCache = await verify({
         verifiedDeploymentArguments: deploymentArguments,
       });
@@ -283,90 +352,96 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         200,
         "Contract instance deployment arguments verified and stored",
       ]);
-      await setInstanceSalt(address, deploymentArguments.salt);
-      await entry.remove();
     });
 
     // Constructed: no recorded upload carries notes; outside production the
     // verified-deployment POST stores them with the deployer metadata.
-    it("constructed aztec-scan notes and deployer metadata read back from the POST and the notes route", async () => {
-      const { rollupAddress } = CHAIN_INFO.chainInfo.l1ContractAddresses;
-      const res = await verify({
-        verifiedDeploymentArguments: deploymentArguments,
-        deployerMetadata: {
-          contractIdentifier: "AuthRegistry",
-          details: "Authorization registry deployed by the local network",
-          creatorName: "Aztec",
-          creatorContact: "contact@example.org",
-          appUrl: "https://app.example.org",
-          repoUrl: "https://example.org/repo",
-          aztecScanNotes: {
-            name: "AuthRegistry",
-            origin: "local network setup",
-            comment: "Protocol-adjacent registry",
-            category: "infra",
-            relatedL1ContractAddresses: [
-              {
-                address: rollupAddress,
-                note: "rollup",
-              },
-            ],
-          },
-        },
-      });
-      expect(res.status, res.text).toBe(200);
-      expect(snapshotOf(res.body, VERIFIED_DB)).toMatchSnapshot(
-        "POST response",
-      );
-      const notes = await get(
-        "/l2/contract-instances/with-aztec-scan-notes",
-        "/l2/contract-instances/with-aztec-scan-notes",
-      );
-      expect(notes).toHaveLength(1);
-      expect(snapshotOf(notes, VERIFIED_DB)).toMatchSnapshot("notes route");
-    });
+    describe("after a verified upload with constructed aztec-scan notes and deployer metadata", () => {
+      let posted: Awaited<ReturnType<typeof verify>>;
 
-    // Their cache entries are removed, as when they expire, so the routes
-    // read the rows the verification and notes left.
-    it("class and instance read back with the stored artifact, deployment arguments and notes", async () => {
-      const instanceEntry = cacheAt(api.stack, api.namespace, [
-        "l2",
-        "contract-instances",
-        address,
-      ]);
-      await instanceEntry.remove();
-      expect(
-        snapshotOf(
-          await get(
-            `/l2/contract-instances/${address}`,
-            "/l2/contract-instances/{address}",
-          ),
-          VERIFIED_DB,
-        ),
-      ).toMatchSnapshot("instance");
-      for (const classId of CLASS_IDS) {
-        for (const flag of ["without-artifact", "with-artifact"] as const) {
-          await cacheAt(api.stack, api.namespace, [
-            "l2",
-            "contract-classes",
-            classId,
-            CLASS_VERSION,
-            flag,
-          ]).remove();
-        }
-        const path = `/l2/contract-classes/${classId}/versions/${CLASS_VERSION}`;
-        expect(snapshotOf(await get(path))).toMatchSnapshot(`class ${classId}`);
+      beforeAll(async () => {
+        const { rollupAddress } = CHAIN_INFO.chainInfo.l1ContractAddresses;
+        posted = await verify({
+          verifiedDeploymentArguments: {
+            ...deploymentArguments,
+            stringifiedArtifactJson: JSON.stringify(artifact),
+          },
+          deployerMetadata: {
+            contractIdentifier: "AuthRegistry",
+            details: "Authorization registry deployed by the local network",
+            creatorName: "Aztec",
+            creatorContact: "contact@example.org",
+            appUrl: "https://app.example.org",
+            repoUrl: "https://example.org/repo",
+            aztecScanNotes: {
+              name: "AuthRegistry",
+              origin: "local network setup",
+              comment: "Protocol-adjacent registry",
+              category: "infra",
+              relatedL1ContractAddresses: [
+                { address: rollupAddress, note: "rollup" },
+              ],
+            },
+          },
+        });
+        expect(posted.status, posted.text).toBe(200);
+      });
+
+      it("the POST answer and the notes route read back the stored notes and metadata", async () => {
+        expect(snapshotOf(posted.body, VERIFIED_DB)).toMatchSnapshot(
+          "POST response",
+        );
+        const notes = await get(
+          "/l2/contract-instances/with-aztec-scan-notes",
+          "/l2/contract-instances/with-aztec-scan-notes",
+        );
+        expect(notes).toHaveLength(1);
+        expect(snapshotOf(notes, VERIFIED_DB)).toMatchSnapshot("notes route");
+      });
+
+      // Their cache entries are removed, as when they expire, so the routes
+      // read the rows the verification left.
+      it("class and instance read back with the stored artifact, deployment arguments and notes", async () => {
+        await instanceEntry().remove();
         expect(
-          snapshotOf(await get(`${path}?includeArtifactJson=true`)),
-        ).toMatchSnapshot(`class ${classId} with includeArtifactJson`);
-      }
+          snapshotOf(
+            await get(
+              `/l2/contract-instances/${address}`,
+              "/l2/contract-instances/{address}",
+            ),
+            VERIFIED_DB,
+          ),
+        ).toMatchSnapshot("instance");
+        for (const classId of CLASS_IDS) {
+          for (const flag of ["without-artifact", "with-artifact"] as const) {
+            await cacheAt(api.stack, api.namespace, [
+              "l2",
+              "contract-classes",
+              classId,
+              CLASS_VERSION,
+              flag,
+            ]).remove();
+          }
+          const path = `/l2/contract-classes/${classId}/versions/${CLASS_VERSION}`;
+          expect(snapshotOf(await get(path))).toMatchSnapshot(
+            `class ${classId}`,
+          );
+          expect(
+            snapshotOf(await get(`${path}?includeArtifactJson=true`)),
+          ).toMatchSnapshot(`class ${classId} with includeArtifactJson`);
+        }
+      });
     });
   });
 
-  // Each reader is shown the string its own writer stored, after the rows are
-  // gone: an equal answer means it parsed the cache entry, not the database.
+  // Each reader is shown the committed string after the rows are gone: an
+  // answer the database alone cannot give means it parsed that string.
   describe("cache readers", () => {
+    beforeAll(atLocalNetwork);
+
+    // From no rows, so the error's count does not depend on the other test.
     const deliverRpcNode = async () => {
+      await removeRpcNodes();
       const { l2RpcNodeInfoHandler } = await import(
         "../../src/events/received/on-rpc-node-info.js"
       );
@@ -377,7 +452,8 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       await l2RpcNodeErrorHandler.cb(RPC_NODE_ERROR);
     };
 
-    it("GET /l2/rpc-nodes answers from its cache entry", async () => {
+    it("GET /l2/rpc-nodes answers from the committed string of its cache entry", async () => {
+      const path = "/l2/rpc-nodes";
       await deliverRpcNode();
       const entry = cacheAt(api.stack, api.namespace, [
         "l2",
@@ -385,22 +461,17 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         LOCAL_TIP,
       ]);
       await entry.remove();
-      const fresh = await get("/l2/rpc-nodes", "/l2/rpc-nodes");
-      expect(fresh).toHaveLength(1);
-      const stored = await entry.stored();
-      expect({
-        response: (fresh as unknown[]).map(rpcNodeSnapshotOf),
-        cached: (JSON.parse(stored) as unknown[]).map(rpcNodeSnapshotOf),
-      }).toMatchSnapshot();
+      expect(await get(path, path)).toHaveLength(1);
+      const committed = await pinCacheString(entry, "rpc-nodes");
 
       await removeRpcNodes();
       await entry.remove();
-      expect(await get("/l2/rpc-nodes")).toEqual([]);
-      await entry.seed(stored);
-      expect(await get("/l2/rpc-nodes")).toEqual(fresh);
+      expect(await get(path)).toEqual([]);
+      await entry.seed(committed);
+      expect(snapshotOf(await get(path, path))).toMatchSnapshot("answer");
     });
 
-    it("GET /l2/rpc-nodes/:rpcNodeName answers from its cache entry", async () => {
+    it("GET /l2/rpc-nodes/:rpcNodeName answers from the committed string of its cache entry", async () => {
       await deliverRpcNode();
       const { rpcNodeName } = RPC_NODE.rpcNode;
       const path = `/l2/rpc-nodes/${rpcNodeName}`;
@@ -411,23 +482,26 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         LOCAL_TIP,
       ]);
       await entry.remove();
-      const fresh = await get(path, "/l2/rpc-nodes/:rpcNodeName");
-      const stored = await entry.stored();
-      expect({
-        response: rpcNodeSnapshotOf(fresh),
-        cached: rpcNodeSnapshotOf(JSON.parse(stored)),
-      }).toMatchSnapshot();
+      await get(path, "/l2/rpc-nodes/:rpcNodeName");
+      // The node's own times come from its payload and the frozen clock; only
+      // its error rows are stamped by Postgres (`defaultNow()`).
+      const committed = await pinCacheString(entry, "rpc-node", [
+        { path: ["errors", "*", "createdAt"], wire: "iso" },
+        { path: ["errors", "*", "lastSeenAt"], wire: "iso" },
+      ]);
 
       await removeRpcNodes();
       await entry.remove();
       await get(path, undefined, 404);
-      await entry.seed(stored);
-      expect(await get(path)).toEqual(fresh);
+      await entry.seed(committed);
+      expect(
+        snapshotOf(await get(path, "/l2/rpc-nodes/:rpcNodeName")),
+      ).toMatchSnapshot("answer");
     });
 
     // Constructed: validators come from an L1 contract read nothing recorded.
     // The attester is the recorded ValidatorQueued one, on the local rollup.
-    it("GET /l1/l2-validators/totals answers from its cache entry", async () => {
+    it("GET /l1/l2-validators/totals answers from the committed string of its cache entry", async () => {
       const { chainInfoHandler } = await import(
         "../../src/events/received/on-chain-info.js"
       );
@@ -462,60 +536,14 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         "totals",
       ]);
       await entry.remove();
-      const fresh = await get(path, path);
-      expect(fresh).toMatchObject({ total: 1 });
-      const stored = await entry.stored();
-      expect({
-        response: snapshotOf(fresh),
-        cached: snapshotOf(JSON.parse(stored)),
-      }).toMatchSnapshot();
+      expect(await get(path, path)).toMatchObject({ total: 1 });
+      const committed = await pinCacheString(entry, "validator-totals");
 
       await removeValidators();
       await entry.remove();
       expect(await get(path)).toMatchObject({ total: 0 });
-      await entry.seed(stored);
-      expect(await get(path)).toEqual(fresh);
+      await entry.seed(committed);
+      expect(snapshotOf(await get(path, path))).toMatchSnapshot("answer");
     });
-  });
-
-  // A client generated from the document relies on these keys; the snapshots
-  // above pin values, this pins the contract the document states for them.
-  it("every served body has the keys the OpenAPI document requires for its route", async () => {
-    const { genereateOpenApiSpec } = await import(
-      "../../src/svcs/http-server/open-api-spec.js"
-    );
-    const spec = genereateOpenApiSpec();
-    const missing: string[] = [];
-    const checked = new Set<string>();
-    for (const { openApiPath, body } of served) {
-      const { isArray, required } = requiredKeysOf(spec, openApiPath);
-      expect(Array.isArray(body), openApiPath).toBe(isArray);
-      const items = isArray ? (body as unknown[]) : [body];
-      for (const item of items) {
-        checked.add(openApiPath);
-        for (const key of required) {
-          if (
-            item === null ||
-            typeof item !== "object" ||
-            !Object.hasOwn(item, key)
-          ) {
-            missing.push(`${openApiPath}: ${key}`);
-          }
-        }
-      }
-    }
-    expect([...checked].sort()).toEqual([
-      "/l1/l2-validators/totals",
-      "/l2/blocks/{blockHeight}/txEffects",
-      "/l2/blocks/{heightOrHash}",
-      "/l2/contract-instances/with-aztec-scan-notes",
-      "/l2/contract-instances/{address}",
-      "/l2/dropped-txs/{hash}",
-      "/l2/rpc-nodes",
-      "/l2/rpc-nodes/:rpcNodeName",
-      "/l2/txEffects/{hash}",
-      "/l2/txs/{hash}",
-    ]);
-    expect([...new Set(missing)]).toEqual([]);
   });
 });
