@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.smoke.ts"],
     pool: "forks",
+    // One file whose tests share state. Otherwise Vitest starts a fork per
+    // CPU, gigabytes of idle processes on a large host.
+    poolOptions: { forks: { singleFork: true } },
     // The tests share one transaction and build on each other's results.
     bail: 1,
     testTimeout: 240_000,
