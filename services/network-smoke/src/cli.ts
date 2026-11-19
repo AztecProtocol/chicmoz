@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { platform } from "node:os";
 import { join } from "node:path";
-import { downProject, listProjects } from "@chicmoz/test-harness";
+import { downProject } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
 import { readPgids, startTimeOf, stopGroup } from "./processes.js";
 import { RUN_ID_PATTERN, type RunRecord, run } from "./run.js";
 import { removeTmpDir, tmpDirs } from "./tmp.js";
+
+const HARNESS_RUN_ID = /^ih[0-9a-f]{10}$/;
 
 /** Cleans up after a runner that was killed; refuses while it still runs. */
 const down = async (runId: string) => {
@@ -38,13 +40,15 @@ const down = async (runId: string) => {
       }
     }
     if (record.composeRunId) {
-      const projects = await listProjects();
-      if (projects.some((p) => p.runId === record.composeRunId)) {
-        await downProject(record.composeRunId);
-        process.stdout.write(
-          `removed compose project ${record.composeRunId}\n`,
+      // Not gated on `listProjects()`: it lists containers, and an
+      // interrupted teardown can leave only the network or a volume.
+      if (!HARNESS_RUN_ID.test(record.composeRunId)) {
+        throw new Error(
+          `run ${runId}: "${record.composeRunId}" is not a harness run id`,
         );
       }
+      await downProject(record.composeRunId);
+      process.stdout.write(`removed compose project ${record.composeRunId}\n`);
     } else {
       process.stdout.write(
         "no compose project recorded; if the run died while starting it, see `yarn harness ls`\n",
