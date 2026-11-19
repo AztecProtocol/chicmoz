@@ -20,14 +20,19 @@ let nodeInfo: NodeInfo;
 
 export const init = async () => {
   if (NODE_ENV === NodeEnv.DEV) {
-    onL2RpcNodeError({
-      name: "Mocked Node Error",
-      message: "Lorem ipsum dolor sit amet",
-      cause: "UnknownCause",
-      stack: new Error().stack?.toString() ?? "UnknownStack",
-      data: {},
-      rpcNodeName: "mocked-rpc-node",
-    });
+    onL2RpcNodeError(
+      {
+        name: "Mocked Node Error",
+        message: "Lorem ipsum dolor sit amet",
+        cause: "UnknownCause",
+        stack: new Error().stack?.toString() ?? "UnknownStack",
+        data: {},
+        rpcNodeName: "mocked-rpc-node",
+      },
+      // rpc_url is unique in explorer-api; a reserved .invalid host never
+      // collides with a configured node.
+      "http://mocked-rpc-node.invalid",
+    );
   }
   await ensureInitializedBlockHeights();
   const initResult = await initNetworkClient();
