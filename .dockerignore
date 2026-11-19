@@ -11,9 +11,10 @@ k8s/production/
 **/dist/
 **/node_modules/
 
-# Test output and recorded test data
+# Test output and test-only data (recorded fixtures, snapshots)
 **/coverage/
 packages/test-harness/fixtures/
+**/__snapshots__/
 
 # Local dev and IDE files
 .env*
