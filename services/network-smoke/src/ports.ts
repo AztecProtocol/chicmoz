@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { type Server, createServer } from "node:net";
 
 export const PORT_NAMES = [
@@ -59,19 +60,59 @@ const portOf = (server: Server) => {
   return address.port;
 };
 
-/**
- * Free ports from the OS, all held until every one is chosen. Another process
- * can still take one before our child binds it; the child then dies and the
- * run fails naming it.
- */
-export const freePorts = async (): Promise<Ports> => {
-  const held: Server[] = [];
+const MIN_PORT = 10_000;
+
+/** The kernel's ephemeral floor from `ip_local_port_range`'s text, if usable. */
+export const parseEphemeralFloor = (text: string): number | undefined => {
+  const floor = Number(text.trim().split(/\s+/)[0]);
+  return Number.isInteger(floor) && floor > MIN_PORT + 2 * PORT_NAMES.length
+    ? floor
+    : undefined;
+};
+
+const ephemeralFloor = () => {
   try {
-    const single = async () => {
-      const server = await listen(0);
-      held.push(server);
-      return portOf(server);
-    };
+    return parseEphemeralFloor(
+      readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8"),
+    );
+  } catch {
+    return undefined;
+  }
+};
+
+/** A random first port of `span` consecutive ports, all below `floor`. */
+export const portBelow = (floor: number, span = 1, random = Math.random) =>
+  MIN_PORT + Math.floor(random() * (floor - span - MIN_PORT + 1));
+
+/**
+ * Free ports, all held until every one is chosen. Where the kernel's
+ * ephemeral range is readable they are random ports below it, which
+ * outgoing connections never take; elsewhere the OS assigns them. Another
+ * listener can still take one before our child binds it; the child then dies
+ * and the run fails naming it.
+ */
+export const freePorts = async (floor = ephemeralFloor()): Promise<Ports> => {
+  const held: Server[] = [];
+  const hold = async (port: number) => {
+    const server = await listen(port);
+    held.push(server);
+    return portOf(server);
+  };
+  const single = async (span = 1) => {
+    if (floor === undefined) {
+      return hold(0);
+    }
+    for (let attempt = 0; attempt < 50; attempt++) {
+      try {
+        return await hold(portBelow(floor, span));
+      } catch {
+        // In use, or one we already hold: draw again.
+        continue;
+      }
+    }
+    throw new Error(`no free port between ${MIN_PORT} and ${floor}`);
+  };
+  try {
     const [anvil, aztec, aztecAdmin, aztecP2p, explorerApi] = [
       await single(),
       await single(),
@@ -80,9 +121,9 @@ export const freePorts = async (): Promise<Ports> => {
       await single(),
     ];
     for (let attempt = 0; attempt < 20; attempt++) {
-      const ws = await single();
+      const ws = await single(2);
       try {
-        held.push(await listen(ws + 1));
+        await hold(ws + 1);
         return check({
           anvil,
           aztec,
