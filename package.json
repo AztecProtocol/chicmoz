@@ -19,8 +19,6 @@
     "husky": "8.0.3",
     "lint-staged": "15.1.0",
     "prettier": "3.5.3",
-    "prettier-plugin-organize-imports": "4.1.0",
-    "prettier-plugin-sort-json": "4.1.1",
     "typescript": "5.8.3"
   },
   "scripts": {
@@ -37,17 +35,6 @@
     "g:lint": "cd $INIT_CWD && eslint --fix",
     "postinstall": "husky install",
     "prepare": "husky install"
-  },
-  "dependenciesMeta": {
-    "prettier-plugin-organize-imports@4.1.0": {
-      "unplugged": true
-    },
-    "prettier-plugin-sort-json@4.1.1": {
-      "unplugged": true
-    },
-    "tslib@2.6.3": {
-      "unplugged": true
-    }
   },
   "resolutions": {
     "viem": "2.20.0",
