@@ -5,11 +5,13 @@ import {
   startExplorerApiForTest,
 } from "./support/explorer-api.js";
 
-// Local-network blocks only: one database serves one rollup version. Every
-// expected value is what the node reported when the block was recorded.
-const recorded = listFixtures("local-network", "l2-block").map(
-  (name) => loadFixture("local-network", "l2-block", name).data,
-);
+// Local-network blocks only: one database serves one rollup version. Hashes,
+// archives and tx hashes are the node's RPC fields; class ids and instance
+// addresses were decoded from logs and confirmed by node lookups. Delivered
+// by height, as a deployment needs its class stored first.
+const recorded = listFixtures("local-network", "l2-block")
+  .map((name) => loadFixture("local-network", "l2-block", name).data)
+  .sort((a, b) => a.expected.height - b.expected.height);
 
 describe("recorded blocks through the block handler", () => {
   let api: ExplorerApiForTest;

@@ -37,10 +37,8 @@ const baseBlock = (): L2Block => {
 let base: L2Block | undefined;
 
 /**
- * A block at `height` holding one clone of a recorded tx effect per entry of
- * `txHashes`, with a fresh random coinbase so every call has its own hash.
- * Its commitments do not match its body, which nothing on the handler's path
- * checks.
+ * The coinbase is salted to tell headers at one height apart. The handler
+ * does not recompute the body's commitments, so cloned effects are accepted.
  */
 export const buildBlock = async (
   height: bigint,
@@ -69,9 +67,9 @@ export const buildBlock = async (
   const decoded = L2Block.fromBuffer(Buffer.from(hex, "hex"));
   const built: BuiltBlock = {
     hex,
-    hash: (await decoded.hash()).toString() ,
+    hash: (await decoded.hash()).toString(),
     height: BigInt(decoded.number),
-    txHashes: decoded.body.txEffects.map((t) => t.txHash.toString() ),
+    txHashes: decoded.body.txEffects.map((t) => t.txHash.toString()),
   };
   if (built.height !== height || built.txHashes.join() !== txHashes.join()) {
     throw new Error(`built block does not round-trip: height ${built.height}, txs ${built.txHashes.join()}`);
@@ -79,5 +77,4 @@ export const buildBlock = async (
   return built;
 };
 
-/** A tx hash no recorded block or other call uses. */
-export const freshTxHash = (): HexString => TxHash.random().toString() ;
+export const freshTxHash = (): HexString => TxHash.random().toString();

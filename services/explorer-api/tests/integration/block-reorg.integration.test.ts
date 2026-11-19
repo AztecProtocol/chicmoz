@@ -63,6 +63,7 @@ describe("block conflicts on a real database", () => {
     const below = await buildBlock(100n, [t]);
     const current = await buildBlock(101n, [freshTxHash()]);
     const incoming = await buildBlock(101n, [t]);
+    expect(incoming.hash).not.toBe(current.hash);
     await store(below);
     await store(current);
 
@@ -79,7 +80,9 @@ describe("block conflicts on a real database", () => {
     const t = freshTxHash();
     const replaced = await buildBlock(200n, [t]);
     const incoming = await buildBlock(200n, [t]);
+    expect(incoming.hash).not.toBe(replaced.hash);
     await store(replaced);
+    expect(await owners(t)).toEqual([{ blockHash: replaced.hash, isOrphaned: false }]);
 
     await expect(store(incoming)).resolves.toBeUndefined();
     expect(await canonicalHash(200n)).toBe(incoming.hash);
@@ -93,6 +96,8 @@ describe("block conflicts on a real database", () => {
     const old301 = await buildBlock(301n, [t2]);
     const new300 = await buildBlock(300n, [freshTxHash()]);
     const new301 = await buildBlock(301n, [t2]);
+    expect(new300.hash).not.toBe(old300.hash);
+    expect(new301.hash).not.toBe(old301.hash);
     await store(old300);
     await store(old301);
 
@@ -105,6 +110,7 @@ describe("block conflicts on a real database", () => {
 
     await expect(store(new301)).resolves.toBeUndefined();
     const settled = async () => {
+      expect(await canonicalHash(300n)).toBe(new300.hash);
       expect(await canonicalHash(301n)).toBe(new301.hash);
       expect(await orphanOf(old301.hash)).toBe("absent");
       expect(await orphanOf(old300.hash)).toEqual({ hasOrphanedParent: false });
