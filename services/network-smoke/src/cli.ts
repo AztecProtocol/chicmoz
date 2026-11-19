@@ -3,7 +3,7 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { downProject } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
-import { readPgids, startTimeOf, stopGroup } from "./processes.js";
+import { ownerAlive, readPgids, stopGroup } from "./processes.js";
 import { RUN_ID_PATTERN, type RunRecord, run } from "./run.js";
 import { removeTmpDir, tmpDirs } from "./tmp.js";
 
@@ -23,11 +23,7 @@ const down = async (runId: string) => {
     throw new Error(`no run ${runId} in ${runDir}`);
   }
   const record = JSON.parse(readFileSync(recordFile, "utf8")) as RunRecord;
-  const ownerAlive =
-    record.ownerStart === undefined
-      ? existsSync(`/proc/${record.ownerPid}`)
-      : startTimeOf(record.ownerPid) === record.ownerStart;
-  if (ownerAlive) {
+  if (ownerAlive(record)) {
     throw new Error(
       `run ${runId} is still owned by pid ${record.ownerPid}; stop that instead`,
     );

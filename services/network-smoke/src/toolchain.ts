@@ -38,7 +38,7 @@ const SHA512 = /^sha512-[A-Za-z0-9+/]{86}==$/;
  * `npm ci` skips the digest check for an entry without a parseable
  * `integrity`, and a `link` entry installs from the local disk.
  */
-const checkLock = (lock: string) => {
+export const checkLock = (lock: string) => {
   const { packages } = JSON.parse(lock) as {
     packages: Record<string, LockEntry>;
   };

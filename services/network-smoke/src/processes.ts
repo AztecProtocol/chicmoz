@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
+  existsSync,
   openSync,
   readFileSync,
   readdirSync,
@@ -22,6 +23,15 @@ export type Started = {
   stopping: boolean;
 };
 
+/** The process group in a `/proc/<pid>/stat` line. */
+export const pgrpOf = (stat: string) =>
+  // After "(comm)": state ppid pgrp …; comm itself may contain spaces and ")".
+  Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+
+/** Whether a `/proc/<pid>/environ` text carries exactly this run's marker. */
+export const carriesMarker = (environ: string, runId: string) =>
+  environ.split("\0").includes(`${RUN_MARKER}=${runId}`);
+
 /**
  * Whether process group `pgid` has a member carrying this run's marker. A
  * group whose leader died can still hold live descendants, and a pgid with no
@@ -29,20 +39,14 @@ export type Started = {
  * can empty and its pgid be reused between this scan and a signal.
  */
 const hasMarkedMember = (pgid: number, runId: string): boolean => {
-  const marker = `${RUN_MARKER}=${runId}`;
   for (const entry of readdirSync("/proc")) {
     if (!/^\d+$/.test(entry)) {
       continue;
     }
     try {
-      const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
-      // After "(comm)": state ppid pgrp …; comm itself may contain spaces.
-      const pgrp = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
       if (
-        pgrp === pgid &&
-        readFileSync(`/proc/${entry}/environ`, "utf8")
-          .split("\0")
-          .includes(marker)
+        pgrpOf(readFileSync(`/proc/${entry}/stat`, "utf8")) === pgid &&
+        carriesMarker(readFileSync(`/proc/${entry}/environ`, "utf8"), runId)
       ) {
         return true;
       }
@@ -63,6 +67,20 @@ export const startTimeOf = (pid: number): string | undefined => {
     return undefined;
   }
 };
+
+/**
+ * Whether a run's owner still runs. Pid and kernel start time must both match,
+ * so a reused pid does not count; a record without a start time falls back to
+ * the pid alone.
+ */
+export const ownerAlive = (
+  owner: { ownerPid: number; ownerStart?: string },
+  startOf = startTimeOf,
+  pidExists = (pid: number) => existsSync(`/proc/${pid}`),
+) =>
+  owner.ownerStart === undefined
+    ? pidExists(owner.ownerPid)
+    : startOf(owner.ownerPid) === owner.ownerStart;
 
 const signalGroup = (pgid: number, runId: string, signal: NodeJS.Signals) => {
   if (!hasMarkedMember(pgid, runId)) {

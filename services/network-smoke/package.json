@@ -10,6 +10,8 @@
     "build": "yarn tsc -p tsconfig.build.json",
     "lint": "yarn run lint-base --ext .ts .",
     "lint-base": "yarn run g:lint",
+    "test": "vitest run --dir src",
+    "test-once": "vitest run --dir src",
     "smoke": "node build/cli.js run",
     "down": "node build/cli.js down"
   },
