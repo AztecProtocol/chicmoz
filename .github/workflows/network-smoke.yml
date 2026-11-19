@@ -8,7 +8,7 @@ on:
     - cron: "23 4 * * *"
   workflow_dispatch:
 
-# A new push to a PR cancels its older run; other runs of one commit queue.
+# A new push to a PR cancels its older run; other runs of one commit wait, one pending at most.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -34,7 +34,7 @@ jobs:
         id: full
         if: github.event_name != 'pull_request'
         run: echo "run=true" >> "$GITHUB_OUTPUT"
-      # Anything the run builds, installs or starts; the Aztec pin is in package.json's resolutions.
+      # The Aztec pin is in package.json's resolutions.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: github.event_name == 'pull_request'
@@ -68,7 +68,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The release tarball, checked against its digest: no installer script runs.
       - name: Install foundry
         env:
           # foundry_v<version>_linux_amd64.tar.gz; change with toolchain/foundry-version.
@@ -91,11 +90,11 @@ jobs:
           --include '@chicmoz/explorer-api' --include '@chicmoz/websocket-event-publisher'
           --include '@chicmoz/network-smoke'
           run build
-      # Tarballs only: `npm ci` re-checks each against the lock's integrity.
+      # npm's content cache only; `npm ci` re-checks each tarball against the lock's integrity.
       - name: Cache the Aztec toolchain downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.npm
+          path: ~/.npm/_cacache
           key: network-smoke-npm-${{ hashFiles('services/network-smoke/toolchain/package-lock.json') }}
       - name: Pull the stack images
         run: docker compose -f packages/test-harness/compose/compose.yaml --profile infra pull --quiet
@@ -112,6 +111,7 @@ jobs:
             .harness/
           retention-days: 7
           if-no-files-found: ignore
+          # Both output directories start with a dot.
           include-hidden-files: true
 
   status:

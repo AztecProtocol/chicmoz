@@ -24,7 +24,7 @@ Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose
 
 ## In CI
 
-`.github/workflows/network-smoke.yml` runs it on pull requests that change what it builds or starts, nightly, and on demand, and reports `network-smoke-status`. It is not a required check. Foundry comes from the pinned release tarball, checked by sha256, and `~/.npm` is cached by the toolchain lock's hash. A failing run uploads each run's `logs/` and `marks.txt` and the harness's `.harness/` for 7 days.
+`.github/workflows/network-smoke.yml` runs it on pull requests that change what it builds or starts, nightly, and on demand, and reports `network-smoke-status`. It is not a required check. On failure, CI keeps whatever run logs, marks and harness logs exist, for 7 days.
 
 ## What it checks
 
