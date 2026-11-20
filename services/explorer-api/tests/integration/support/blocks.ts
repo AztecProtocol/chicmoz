@@ -1,4 +1,5 @@
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
+import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { EthAddress } from "@aztec-labs/foundation/eth-address";
 import { Body, L2Block } from "@aztec-labs/stdlib/block";
 import {
@@ -39,10 +40,12 @@ let base: L2Block | undefined;
 /**
  * The coinbase is salted to tell headers at one height apart. The handler
  * does not recompute the body's commitments, so cloned effects are accepted.
+ * `version` replaces the recorded rollup version.
  */
 export const buildBlock = async (
   height: bigint,
   txHashes: HexString[],
+  { version }: { version?: number } = {},
 ): Promise<BuiltBlock> => {
   base ??= baseBlock();
   const [effect] = base.body.txEffects;
@@ -53,6 +56,7 @@ export const buildBlock = async (
     ...base.header.globalVariables,
     blockNumber: BlockNumber(Number(height)),
     coinbase: EthAddress.random(),
+    ...(version === undefined ? {} : { version: new Fr(version) }),
   });
   const block = new L2Block(
     base.archive,
