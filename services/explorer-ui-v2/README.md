@@ -6,7 +6,7 @@ grids) against the existing chicmoz API.
 
 ## Stack
 
-- React 18 + Vite 5
+- React 18 + Vite 8
 - TanStack Router (file-based routing, lazy-loaded pages)
 - TanStack Query (data fetching against the chicmoz REST API)
 - Plain CSS with custom-property design tokens (`src/styles/tokens.css`,

@@ -2,7 +2,6 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import * as path from "path";
 import { defineConfig, loadEnv, type PluginOption } from "vite";
-import svgr from "vite-plugin-svgr";
 
 const DEFAULT_FAVICON_HREF =
   "/src/assets/aztec-scan-brandkit/AS logo purple.svg";
@@ -32,18 +31,17 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [
       react(),
-      svgr(),
       localGreenFaviconPlugin(useLocalGreenFavicon),
       TanStackRouterVite(),
     ],
     resolve: {
       alias: [
-        { find: "~", replacement: path.resolve(__dirname, "src") },
+        { find: "~", replacement: path.resolve(import.meta.dirname, "src") },
         // Tests run the harness from source; nothing under src imports it.
         {
           find: "@chicmoz/test-harness",
           replacement: path.resolve(
-            __dirname,
+            import.meta.dirname,
             "../../packages/test-harness/src/index.ts",
           ),
         },
