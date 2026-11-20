@@ -1,6 +1,7 @@
 import { chicmozL2PendingTxSchema, jsonStringify } from "@chicmoz-pkg/types";
 import { canonical, listFixtures, loadFixture } from "@chicmoz/test-harness";
 import { type AxiosAdapter } from "axios";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -240,6 +241,43 @@ describe("UI parsing of explorer-api bodies", () => {
       ).toMatchSnapshot();
     },
   );
+
+  // No recording has this body; explorer-api's cache test pins the instance
+  // with notes it serves.
+  it("parses an instance with notes through the notes list schema", async () => {
+    const instance = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../explorer-api/tests/integration/__snapshots__/cache/contract-instance-with-notes.json.snap",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as { address: string; aztecScanNotes: unknown };
+    const parsed = await fetchAs(
+      {
+        uiModule: "contract",
+        call: () => api.ContractL2API.getContractInstancesWithAztecScanNotes(),
+      },
+      "/l2/contract-instances/with-aztec-scan-notes",
+      [instance],
+    );
+
+    expect(
+      (parsed as { address: string; aztecScanNotes: unknown }[]).map(
+        ({ address, aztecScanNotes }) => ({ address, aztecScanNotes }),
+      ),
+    ).toEqual([
+      {
+        address: instance.address,
+        aztecScanNotes: {
+          ...(instance.aztecScanNotes as object),
+          uploadedAt: new Date("2000-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2000-01-01T00:00:00.000Z"),
+        },
+      },
+    ]);
+  });
 
   // The message comes from zod and changes with it; status 400 keeps a schema
   // failure from rendering as "not found".

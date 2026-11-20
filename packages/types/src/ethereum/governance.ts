@@ -177,7 +177,7 @@ export type ChicmozL1GovernancePayloadSubmitted = z.infer<
 // ── Governance Configuration / Proposer History Events ───────────────────────
 
 export const chicmozL1GovernanceConfigUpdatedSchema = z.object({
-  configuration: z.record(z.unknown()),
+  configuration: z.record(z.string(), z.unknown()),
   l1BlockNumber: z.coerce.bigint(),
   l1BlockHash: z.string().startsWith("0x"),
   l1BlockTimestamp: frTimestampSchema.optional().nullable(),
@@ -329,7 +329,7 @@ export type ChicmozL1GovernancePayloadRound = z.infer<
 /** A governance configuration snapshot. */
 export const chicmozL1GovernanceConfigurationSchema = z.object({
   id: z.string().uuid().optional(),
-  configuration: z.record(z.unknown()),
+  configuration: z.record(z.string(), z.unknown()),
   updatedAt: z.coerce.date(),
   l1BlockNumber: z.coerce.bigint(),
   l1BlockHash: z.string(),

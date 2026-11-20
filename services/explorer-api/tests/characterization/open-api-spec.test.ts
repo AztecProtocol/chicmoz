@@ -73,7 +73,12 @@ describe("OpenAPI document", () => {
     );
   });
 
-  it("gives every request and response body a non-empty schema, except the search response", () => {
-    expect(emptyTopLevelSchemas(spec)).toEqual(["GET /l2/search 200"]);
+  it("gives every request and response body a non-empty schema", () => {
+    expect(emptyTopLevelSchemas(spec)).toEqual([]);
+  });
+
+  // A failed generation is logged and replaced by a non-empty placeholder.
+  it("documents every response without the generation fallback", () => {
+    expect(JSON.stringify(spec)).not.toContain("Schema generation failed");
   });
 });

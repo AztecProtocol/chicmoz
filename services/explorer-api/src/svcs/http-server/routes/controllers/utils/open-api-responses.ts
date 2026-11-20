@@ -1,4 +1,3 @@
-import { generateSchema } from "@anatine/zod-openapi";
 import {
   chicmozChainInfoSchema,
   chicmozContractInstanceBalanceSchema,
@@ -26,6 +25,7 @@ import {
 } from "@chicmoz-pkg/types";
 import { z } from "zod";
 import { logger } from "../../../../../logger.js";
+import { toOpenApiSchema } from "./openapi-schema.js";
 
 // TODO: this whole set-up should be done at runtime (start up)
 // TODO: bigints should be handled better
@@ -34,8 +34,7 @@ import { logger } from "../../../../../logger.js";
 const getResponse = (zodSchema: z.ZodType<any, any>, name?: string) => {
   let schema: unknown = {};
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    schema = generateSchema(zodSchema);
+    schema = toOpenApiSchema(zodSchema, "output");
   } catch (e) {
     logger.error(
       `Failed to generate OpenAPI schema for ${name}: ${(e as Error).stack}`,
@@ -298,7 +297,7 @@ export const chainErrorsResponse = rpcNodeErrorResponseArray;
 const cleanedContractEventsSchema = chicmozL1GenericContractEventSchema.extend({
   l1BlockNumber: z.string(), // Convert BigInt to string
   l1BlockTimestamp: z.string(), // Convert Date to string
-  eventArgs: z.record(z.unknown()).optional(),
+  eventArgs: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const contractEventsResponse = getResponse(

@@ -73,6 +73,7 @@ export const createErrorMiddleware = (logger: Logger): ErrorRequestHandler => {
       }
     }
 
+    // Every zod 4 copy's ZodError passes this check, the Aztec SDK's included.
     if (err instanceof ZodError) {
       logger.info(JSON.stringify(err.issues));
       res
