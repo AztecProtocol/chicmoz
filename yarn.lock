@@ -2256,6 +2256,7 @@ __metadata:
     "@chicmoz-pkg/message-bus": "workspace:^"
     "@chicmoz-pkg/message-registry": "workspace:^"
     "@chicmoz-pkg/types": "workspace:^"
+    "@chicmoz/test-harness": "workspace:^"
     "@types/node": "npm:24.19.2"
     "@types/ws": "npm:8.5.12"
     eslint: "npm:8.53.0"
