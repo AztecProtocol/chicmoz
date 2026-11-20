@@ -36,7 +36,8 @@
     "kafkajs": "2.2.4",
     "typescript": "5.8.3",
     "viem": "2.20.0",
-    "vitest": "3.2.7",
+    "vite": "8.3.8",
+    "vitest": "5.1.0",
     "yaml": "2.7.1"
   },
   "main": "build/index.js",

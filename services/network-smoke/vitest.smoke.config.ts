@@ -8,7 +8,7 @@ export default defineConfig({
     pool: "forks",
     // Otherwise Vitest starts a fork per CPU for this one file: gigabytes of
     // idle processes on a large host.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     // The tests share one transaction and build on each other's results.
     bail: 1,
     testTimeout: 240_000,

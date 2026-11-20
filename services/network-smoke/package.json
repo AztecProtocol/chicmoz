@@ -23,7 +23,8 @@
     "@chicmoz-pkg/types": "workspace:^",
     "@chicmoz/test-harness": "workspace:^",
     "viem": "2.20.0",
-    "vitest": "3.2.7",
+    "vite": "8.3.8",
+    "vitest": "5.1.0",
     "ws": "8.23.0",
     "zod": "^3.23.8"
   },
