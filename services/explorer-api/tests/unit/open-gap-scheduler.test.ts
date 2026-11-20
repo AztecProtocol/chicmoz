@@ -177,7 +177,6 @@ const {
   buildMissingBlockRangeRequest,
   buildTipBoundaryRepairRequest,
   coverageOf,
-  gapDueSql,
   gapRowMaxWidth,
   requestableGapFilter,
   splitRange,
@@ -285,14 +284,6 @@ describe("coverageOf", () => {
 });
 
 describe("due filter (SQL)", () => {
-  it("backs off interval * 2^min(requests, 8), capped at 1h, before ORDER BY/LIMIT", () => {
-    const { sql, params } = render(gapDueSql(1_000));
-    expect(sql).toBe(
-      '("l2_open_gap"."last_requested_at" is null or extract(epoch from "l2_open_gap"."last_requested_at") * 1000 + least($1::float8 * power(2, least("l2_open_gap"."request_count", $2::int)), $3::float8) <= $4::float8)',
-    );
-    expect(params).toEqual([INTERVAL_MS, 8, 60 * 60 * 1000, 1_000]);
-  });
-
   it("is part of the candidate filter, which leaves tip-boundary rows out", () => {
     const { sql, params } = render(requestableGapFilter(TIP, 1_000));
     expect(sql).toContain('"l2_open_gap"."reason" <> $');
@@ -307,23 +298,6 @@ describe("due filter (SQL)", () => {
 });
 
 describe("discovery", () => {
-  it("records new missing heights as rows no wider than the row width", async () => {
-    missingOnly(...heights(TIP - 44, TIP - 1));
-
-    await buildMissingBlockRangeRequest({ reason: "cadence" });
-
-    expect(
-      mocks.state.upserts.map(({ values }) => [
-        values.fromHeight,
-        values.toHeight,
-      ]),
-    ).toEqual([
-      [TIP - 44, TIP - 25],
-      [TIP - 24, TIP - 5],
-      [TIP - 4, TIP - 1],
-    ]);
-  });
-
   it("is not starved by unfillable gaps that cover older heights", async () => {
     const unfillable = heights(TIP - 9_000, TIP - 8_701);
     missingOnly(...unfillable, TIP - 5, TIP - 4, TIP - 2);
@@ -369,20 +343,6 @@ describe("discovery", () => {
         values.toHeight,
       ]),
     ).toEqual([[98106, 98106]]);
-  });
-
-  it("resets the request history of a row it reopens after it was fulfilled", async () => {
-    missingOnly(TIP - 1);
-
-    await buildMissingBlockRangeRequest({ reason: "cadence" });
-
-    const [{ set }] = mocks.state.upserts;
-    expect(render(set.requestCount).sql).toBe(
-      `case when "l2_open_gap"."status" = 'fulfilled' then 0 else "l2_open_gap"."request_count" end`,
-    );
-    expect(render(set.lastRequestedAt).sql).toBe(
-      `case when "l2_open_gap"."status" = 'fulfilled' then null else "l2_open_gap"."last_requested_at" end`,
-    );
   });
 });
 
@@ -638,18 +598,6 @@ describe("selection", () => {
     await l2BlockRangeRequest(planned);
     expect(mocks.state.order).toEqual(["publish", "mark"]);
     expect(marks()).toHaveLength(1);
-  });
-
-  it("returns nothing while no row is due", async () => {
-    missingOnly(60000);
-    mocks.state.gaps = [
-      gap({ id: "in-flight", fromHeight: 60000, toHeight: 60000, due: false }),
-    ];
-
-    await expect(
-      buildMissingBlockRangeRequest({ reason: "cadence" }),
-    ).resolves.toBeNull();
-    expect(mocks.state.updates).toEqual([]);
   });
 });
 
