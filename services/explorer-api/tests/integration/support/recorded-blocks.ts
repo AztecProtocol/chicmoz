@@ -4,6 +4,7 @@ import {
   type Stack,
   REPO_ROOT,
   canonical,
+  frameBytes,
   listFixtures,
   loadFixture,
 } from "@chicmoz/test-harness";
@@ -107,16 +108,21 @@ export const snapshotOf = (
 
 type ProducerFrame = { eventType: string; bson: string };
 
-/** The consumer-side payload of a frame aztec-listener's producer test committed. */
-export const producerFrameData = (name: string, eventType: string): unknown => {
+const PRODUCER_FRAMES = {
+  "aztec-listener":
+    "services/aztec-listener/tests/characterization/__snapshots__/producer-frames.json.snap",
+  "ethereum-listener":
+    "services/ethereum-listener/tests/__snapshots__/l1-frames.json.snap",
+} as const;
+
+/** The consumer-side payload of a frame a producer test committed (aztec-listener's by default). */
+export const producerFrameData = (
+  name: string,
+  eventType: string,
+  producer: keyof typeof PRODUCER_FRAMES = "aztec-listener",
+): unknown => {
   const frames = JSON.parse(
-    readFileSync(
-      join(
-        REPO_ROOT,
-        "services/aztec-listener/tests/characterization/__snapshots__/producer-frames.json.snap",
-      ),
-      "utf8",
-    ),
+    readFileSync(join(REPO_ROOT, PRODUCER_FRAMES[producer]), "utf8"),
   ) as Record<string, ProducerFrame | undefined>;
   const frame = frames[name];
   if (frame?.eventType !== eventType) {
@@ -125,6 +131,16 @@ export const producerFrameData = (name: string, eventType: string): unknown => {
   const bytes = new Uint8Array(Buffer.from(frame.bson, "hex"));
   return (BSON.deserialize(bytes) as { data: unknown }).data;
 };
+
+/** The consumer-side payload of a recorded local-network frame fixture. */
+export const recordedFrameData = (name: string): unknown =>
+  (
+    BSON.deserialize(
+      frameBytes(loadFixture("local-network", "frame", name)),
+    ) as {
+      data: unknown;
+    }
+  ).data;
 
 /** Redis access at the exact key string explorer-api builds for `keys`. */
 export const cacheAt = (stack: Stack, namespace: string, keys: CacheKeys) => {
