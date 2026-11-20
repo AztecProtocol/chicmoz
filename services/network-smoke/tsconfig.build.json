@@ -1,10 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    // Lint maps the harness to its source, which exists before its build/;
-    // the build compiles against the harness's build output.
-    "paths": {}
+    "rootDir": "./src"
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]

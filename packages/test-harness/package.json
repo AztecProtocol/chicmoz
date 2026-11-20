@@ -40,8 +40,13 @@
     "vitest": "5.1.0",
     "yaml": "2.7.1"
   },
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./build/index.js"
+    }
+  },
   "files": [
     "build"
   ]
