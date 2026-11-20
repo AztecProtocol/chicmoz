@@ -9,10 +9,7 @@
     "outDir": "./build",
     "skipLibCheck": true,
     "strict": true,
-    "target": "ESNext",
-    "paths": {
-      "@chicmoz/test-harness": ["../../packages/test-harness/src/index.ts"]
-    }
+    "target": "ESNext"
   },
   "include": ["src", "vitest.smoke.config.ts"]
 }
