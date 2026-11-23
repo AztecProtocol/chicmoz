@@ -6,7 +6,6 @@ import {
   defineChain,
   http,
   maxInt256,
-  webSocket,
 } from "viem";
 import { foundry, mainnet, sepolia } from "viem/chains";
 import {
@@ -18,6 +17,7 @@ import {
 import { logger } from "../../logger.js";
 import { getL1Contracts } from "../contracts/index.js";
 import { getCachedBlockTimestamp } from "./cached-block-timestamps.js";
+import { createWebSocketClient } from "./web-socket-client.js";
 export { startContractWatchers as watchContractsEvents } from "../contracts/index.js";
 
 let publicWsClient: PublicClient | undefined = undefined;
@@ -61,10 +61,10 @@ export const initClient = () => {
       },
     },
   });
-  publicWsClient = createPublicClient({
+  publicWsClient = createWebSocketClient({
     chain,
-    transport: webSocket(),
-  });
+    url: ETHEREUM_WS_RPC_URL,
+  }).client;
   publicHttpClient = createPublicClient({ chain, transport: http() });
   if (ETHEREUM_ALCHEMY_HTTP_URL) {
     publicHttpBackupClient = createPublicClient({
