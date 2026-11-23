@@ -2048,6 +2048,7 @@ __metadata:
     "@chicmoz/test-harness": "workspace:^"
     "@types/node": "npm:24.19.2"
     "@types/pg": "npm:8.11.8"
+    "@types/ws": "npm:8.5.12"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     bottleneck: "npm:2.19.5"
@@ -2063,6 +2064,7 @@ __metadata:
     viem: "npm:2.37.9"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
+    ws: "npm:8.23.0"
     zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
