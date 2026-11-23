@@ -14,6 +14,7 @@ import * as chainInfoPoller from "./pollers/chain-info-poller.js";
 import * as pendingTxsPoller from "./pollers/txs_poller.js";
 import * as droppedTxVerifier from "./pollers/dropped-tx-verifier.js";
 import * as l2TipsPoller from "./pollers/l2-tips-poller.js";
+import * as processReport from "./process-report.js";
 import { NodeInfo } from "@aztec-labs/aztec.js/contracts";
 
 let nodeInfo: NodeInfo;
@@ -54,6 +55,7 @@ export const init = async () => {
 };
 
 export const startPoller = () => {
+  processReport.start();
   blockPoller.startPolling();
   if (AZTEC_LISTEN_FOR_PENDING_TXS) {
     pendingTxsPoller.startPolling();
@@ -83,5 +85,6 @@ export const pollerService: MicroserviceBaseSvc = {
     chainInfoPoller.stopPolling();
     l2TipsPoller.stopPolling();
     droppedTxVerifier.stop();
+    processReport.stop();
   },
 };
