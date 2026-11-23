@@ -12,7 +12,7 @@ const logProcessReport = () => {
     process.memoryUsage();
   const poll = takePollStats();
   logger.info(
-    `process report: rssMiB=${toMiB(rss)} heapUsedMiB=${toMiB(heapUsed)} heapTotalMiB=${toMiB(heapTotal)} externalMiB=${toMiB(external)} arrayBuffersMiB=${toMiB(arrayBuffers)} pendingTxPollLastMs=${poll.lastPollDurationMs ?? "-"} pendingTxPollLastTxs=${poll.lastPendingTxCount ?? "-"} pendingTxPollSkippedTicks=${poll.skippedTicks}`,
+    `process report: rssMiB=${toMiB(rss)} heapUsedMiB=${toMiB(heapUsed)} heapTotalMiB=${toMiB(heapTotal)} externalMiB=${toMiB(external)} arrayBuffersMiB=${toMiB(arrayBuffers)} pendingTxPollInFlightMs=${poll.inFlightMs ?? "-"} pendingTxPollLastMs=${poll.lastPollDurationMs ?? "-"} pendingTxPollLastTxs=${poll.lastPendingTxCount ?? "-"} pendingTxPollStoredTxs=${poll.lastStoredTxCount ?? "-"} pendingTxPollSkippedTicks=${poll.skippedTicks}`,
   );
 };
 

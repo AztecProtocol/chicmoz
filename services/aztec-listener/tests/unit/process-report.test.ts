@@ -23,6 +23,7 @@ vi.mock("../../src/events/emitted/on-pending-txs.js", () => ({
   onPendingTxs: vi.fn(),
 }));
 
+import { onPendingTxs } from "../../src/events/emitted/on-pending-txs.js";
 import { pollerService } from "../../src/svcs/poller/index.js";
 import { startPolling } from "../../src/svcs/poller/pollers/txs_poller.js";
 import {
@@ -35,23 +36,29 @@ describe("process report", () => {
     vi.useRealTimers();
   });
 
-  it("reports the ticks skipped behind a slow poll until the poller service shuts down", async () => {
+  it("reports a slow poll's age and skipped ticks, then its stored-row count, until the poller service shuts down", async () => {
     vi.useFakeTimers();
     const slowPoll = Promise.withResolvers<never[]>();
     mockNetworkClient.getPendingTxs.mockReturnValue(slowPoll.promise);
+    vi.mocked(onPendingTxs).mockResolvedValue(3);
+    const lastReport = () => String(mockLogger.info.mock.lastCall?.[0]);
     startPolling();
     // Offset by half a tick so no poll tick lands on the report's tick.
     await vi.advanceTimersByTimeAsync(TX_POLL_INTERVAL_MS / 2);
     startProcessReport();
 
     await vi.advanceTimersByTimeAsync(PROCESS_REPORT_INTERVAL_MS);
-    // 15 ticks in the report's minute: the first starts the slow poll, 14 are skipped.
-    expect(mockLogger.info).toHaveBeenCalledExactlyOnceWith(
-      expect.stringContaining("pendingTxPollSkippedTicks=14"),
-    );
+    // Report at 62 s; 15 ticks since 2 s: the one at 4 s starts the slow poll, 14 are skipped.
+    expect(mockLogger.info).toHaveBeenCalledOnce();
+    expect(lastReport()).toContain("pendingTxPollInFlightMs=58000");
+    expect(lastReport()).toContain("pendingTxPollSkippedTicks=14");
+
+    slowPoll.resolve([]);
+    await vi.advanceTimersByTimeAsync(PROCESS_REPORT_INTERVAL_MS);
+    expect(mockLogger.info).toHaveBeenCalledTimes(2);
+    expect(lastReport()).toContain("pendingTxPollStoredTxs=3");
 
     await pollerService.shutdown();
-    slowPoll.resolve([]);
     mockLogger.info.mockClear();
     await vi.advanceTimersByTimeAsync(PROCESS_REPORT_INTERVAL_MS);
     expect(mockLogger.info).not.toHaveBeenCalled();

@@ -5,9 +5,11 @@ import { getPendingTxs } from "../network-client/index.js";
 
 let pollInterval: NodeJS.Timeout;
 let pollInFlight = false;
+let pollStartedAt = 0;
 let skippedTicks = 0;
 let lastPollDurationMs: number | undefined;
 let lastPendingTxCount: number | undefined;
+let lastStoredTxCount: number | undefined;
 
 export const startPolling = () => {
   pollInterval = setInterval(() => {
@@ -26,24 +28,30 @@ export const stopPolling = () => {
   }
 };
 
-/** Last settled poll's duration, last fetched pending-set size; resets skippedTicks. */
+/** Running poll's age, last settled poll's duration and set sizes; resets skippedTicks. */
 export const takePollStats = () => {
-  const stats = { lastPollDurationMs, lastPendingTxCount, skippedTicks };
+  const stats = {
+    inFlightMs: pollInFlight ? Date.now() - pollStartedAt : undefined,
+    lastPollDurationMs,
+    lastPendingTxCount,
+    lastStoredTxCount,
+    skippedTicks,
+  };
   skippedTicks = 0;
   return stats;
 };
 
 const fetchAndPublishPendingTxs = async () => {
   pollInFlight = true;
-  const startedAt = Date.now();
+  pollStartedAt = Date.now();
   try {
     const txs = await getPendingTxs();
     lastPendingTxCount = txs.length;
-    await onPendingTxs(txs);
+    lastStoredTxCount = (await onPendingTxs(txs)) ?? lastStoredTxCount;
   } catch (error) {
     logger.warn("Error fetching pending txs", error);
   } finally {
-    lastPollDurationMs = Date.now() - startedAt;
+    lastPollDurationMs = Date.now() - pollStartedAt;
     pollInFlight = false;
   }
 };
