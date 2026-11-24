@@ -17,6 +17,18 @@ const onError = (name: string) => (e: Error) => {
   logger.error(`${name}: ${e.stack}`);
 };
 
+// A log that fails its schema fails again on every re-read, so it is logged and
+// passed over; a failed L1 read or publish rejects the batch before storeHeight.
+// Any throw from `parse` counts: zod's bigint coercion throws a TypeError.
+const parseOrSkip = <T>(description: string, parse: () => T): T | undefined => {
+  try {
+    return parse();
+  } catch (e) {
+    logger.error(`${description}: ${(e as Error).message}`);
+    return undefined;
+  }
+};
+
 // TODO: Move to a more appropriate location
 type OnLogsCallbackWrapperArgs = {
   isFinalized: boolean;
@@ -95,8 +107,10 @@ const l2BlockProposedOnLogs: OnLogsWrapper<L2BlockProposedEventParameters> =
   (wrapperArgs) => async (logs) => {
     let failureCount = 0;
     await asyncForEach(logs, async (log) => {
-      try {
-        await emit.l2BlockProposed(
+      const l1BlockTimestamp = await getBlockTimestamp(log.blockNumber);
+      const blockProposed = parseOrSkip(
+        `🎓 Rollup blockProposed failed for block ${log.blockNumber}`,
+        () =>
           chicmozL1L2BlockProposedSchema.parse({
             l1ContractAddress: log.address,
             l1BlockNumber: log.blockNumber,
@@ -105,16 +119,15 @@ const l2BlockProposedOnLogs: OnLogsWrapper<L2BlockProposedEventParameters> =
             isFinalized: wrapperArgs.isFinalized,
             l2BlockNumber: log.args.checkpointNumber,
             archive: log.args.archive,
-            l1BlockTimestamp: await getBlockTimestamp(log.blockNumber),
+            l1BlockTimestamp,
           }),
-        );
-        wrapperArgs.updateHeight(log.blockNumber);
-      } catch (e) {
+      );
+      if (blockProposed === undefined) {
         failureCount++;
-        logger.error(
-          `🎓 Rollup blockProposed failed for block ${log.blockNumber}: ${(e as Error).message}`,
-        );
+        return;
       }
+      await emit.l2BlockProposed(blockProposed);
+      wrapperArgs.updateHeight(log.blockNumber);
     });
     await wrapperArgs.storeHeight();
     if (failureCount > 0) {
@@ -128,8 +141,10 @@ const l2BlockVerifiedOnLogs: OnLogsWrapper<L2ProofVerifiedEventParameters> =
   (wrapperArgs) => async (logs) => {
     let failureCount = 0;
     await asyncForEach(logs, async (log) => {
-      try {
-        await emit.l2ProofVerified(
+      const l1BlockTimestamp = await getBlockTimestamp(log.blockNumber);
+      const proofVerified = parseOrSkip(
+        `🎩 Rollup proofVerified failed for block ${log.blockNumber}`,
+        () =>
           chicmozL1L2ProofVerifiedSchema.parse({
             l1ContractAddress: log.address,
             l1BlockNumber: log.blockNumber,
@@ -138,16 +153,15 @@ const l2BlockVerifiedOnLogs: OnLogsWrapper<L2ProofVerifiedEventParameters> =
             isFinalized: wrapperArgs.isFinalized,
             l2BlockNumber: log.args.checkpointNumber,
             proverId: log.args.proverId,
-            l1BlockTimestamp: await getBlockTimestamp(log.blockNumber),
+            l1BlockTimestamp,
           }),
-        );
-        wrapperArgs.updateHeight(log.blockNumber);
-      } catch (e) {
+      );
+      if (proofVerified === undefined) {
         failureCount++;
-        logger.error(
-          `🎩 Rollup proofVerified failed for block ${log.blockNumber}: ${(e as Error).message}`,
-        );
+        return;
       }
+      await emit.l2ProofVerified(proofVerified);
+      wrapperArgs.updateHeight(log.blockNumber);
     });
     await wrapperArgs.storeHeight();
     if (failureCount > 0) {
@@ -307,37 +321,27 @@ const depositToAztecPublicOnLogs: OnLogsWrapper<DepositToAztecPublicEventParamet
   (wrapperArgs) => async (logs) => {
     let failureCount = 0;
     await asyncForEach(logs, async (log) => {
-      try {
-        const { to, amount, secretHash, key, index } = log.args;
-        if (
-          to === undefined ||
-          amount === undefined ||
-          secretHash === undefined ||
-          key === undefined ||
-          index === undefined
-        ) {
-          throw new Error(
-            `DepositToAztecPublic: missing args in log ${log.transactionHash}:${log.logIndex}`,
+      const l1BlockTimestamp = await getBlockTimestamp(log.blockNumber);
+
+      // Fetch the L1 transaction to get msg.sender (the depositor).
+      let l1Sender: string | null = null;
+      if (log.transactionHash) {
+        try {
+          const tx = await getPublicHttpClient().getTransaction({
+            hash: log.transactionHash,
+          });
+          l1Sender = tx.from;
+        } catch (e) {
+          logger.warn(
+            `DepositToAztecPublic: could not fetch tx sender for ${log.transactionHash}: ${(e as Error).message}`,
           );
         }
-        const l1BlockTimestamp = await getBlockTimestamp(log.blockNumber);
+      }
 
-        // Fetch the L1 transaction to get msg.sender (the depositor).
-        let l1Sender: string | null = null;
-        if (log.transactionHash) {
-          try {
-            const tx = await getPublicHttpClient().getTransaction({
-              hash: log.transactionHash,
-            });
-            l1Sender = tx.from;
-          } catch (e) {
-            logger.warn(
-              `DepositToAztecPublic: could not fetch tx sender for ${log.transactionHash}: ${(e as Error).message}`,
-            );
-          }
-        }
-
-        await emit.feeJuicePortalDeposit(
+      const { to, amount, secretHash, key, index } = log.args;
+      const deposit = parseOrSkip(
+        `🧃 FeeJuicePortal depositToAztecPublic failed for tx ${log.transactionHash}:${log.logIndex}`,
+        () =>
           chicmozL1FeeJuicePortalDepositSchema.parse({
             l1ContractAddress: log.address,
             l1BlockNumber: log.blockNumber,
@@ -353,14 +357,13 @@ const depositToAztecPublicOnLogs: OnLogsWrapper<DepositToAztecPublicEventParamet
             key,
             index,
           }),
-        );
-        wrapperArgs.updateHeight(log.blockNumber);
-      } catch (e) {
+      );
+      if (deposit === undefined) {
         failureCount++;
-        logger.error(
-          `🧃 FeeJuicePortal depositToAztecPublic failed for tx ${log.transactionHash}:${log.logIndex}: ${(e as Error).message}`,
-        );
+        return;
       }
+      await emit.feeJuicePortalDeposit(deposit);
+      wrapperArgs.updateHeight(log.blockNumber);
     });
     await wrapperArgs.storeHeight();
     if (failureCount > 0) {
