@@ -152,7 +152,7 @@ const ensureJobDefinition = async (compilerImage: string): Promise<string> => {
         image: compilerImage,
         executionRoleArn: AWS_BATCH_EXECUTION_ROLE_ARN,
         // Placeholder; the real compile command arrives via containerOverrides.
-        command: ["/bin/sh", "-c", "echo chicmoz-compiler-placeholder"],
+        command: ["echo chicmoz-compiler-placeholder"],
         resourceRequirements: [
           { type: "VCPU", value: String(vcpu) },
           { type: "MEMORY", value: String(memoryMib) },
@@ -207,7 +207,9 @@ const launch = async (state: JobState, scripts: JobScripts): Promise<void> => {
         [TAG_COMPILER_IMAGE]: state.compilerImage,
       },
       containerOverrides: {
-        command: ["/bin/sh", "-c", buildCombinedScript(scripts)],
+        // Batch `command` is the container's CMD, run by the compiler image's
+        // ENTRYPOINT (`/bin/sh -c`), so it carries only the script.
+        command: [buildCombinedScript(scripts)],
         environment: [
           { name: "NARGO_HOME", value: "/root/nargo" },
           { name: "GIT_URL", value: state.githubUrl },
