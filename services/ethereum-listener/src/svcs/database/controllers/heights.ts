@@ -65,13 +65,20 @@ export const inMemoryHeightTracker = async ({
       isFinalized,
     });
   };
+  const resumeFrom =
+    lastProcessedHeight < genesisBlock
+      ? genesisBlock
+      : lastProcessedHeight + 1n;
   return {
     updateHeight: updateMemory,
     storeHeight: updateDb,
+    // Blocks up to latestHeight, the finalized block, are the finalized
+    // poller's: a live watcher's first eth_getLogs spans from its start to the
+    // tip, which endpoints that cap the range refuse on every poll.
     fromBlock:
-      lastProcessedHeight < genesisBlock
-        ? genesisBlock
-        : lastProcessedHeight + 1n,
+      !isFinalized && resumeFrom <= latestHeight
+        ? latestHeight + 1n
+        : resumeFrom,
     getMemoryHeight,
     setOverrideStoreHeight,
   };
@@ -153,9 +160,7 @@ export const getHeights = async ({
   if (!res.length) {
     const earliestBlockNumber = await getEarliestRollupBlockNumber();
     return {
-      // New watchers start from genesis to backfill historical events.
-      // On first run this may take time, but it ensures no events are missed
-      // when new event types or contracts are added.
+      // The finalized poller backfills a new event from genesis.
       latestPendingHeight: earliestBlockNumber,
       latestFinalizedHeight: earliestBlockNumber,
     };
