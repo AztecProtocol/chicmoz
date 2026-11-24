@@ -24,6 +24,7 @@ const READS = [
   "blocks search by height",
   "UI blocks table",
   "UI tx effects table",
+  "UI tx effects of a height",
   "latest tx effects",
   "tx effects of a height",
   "tx effect at a height and index",
@@ -234,6 +235,13 @@ describe("reads scoped to the current rollup version on a real database", () => 
         read: async () =>
           (await ui.getTxEffectForUiTable({ getType: 0 })).map((t) => t.txHash),
         expected: txs(current),
+      },
+      "UI tx effects of a height": {
+        read: async () =>
+          (await ui.getTxEffectForUiTable({ blockHeight: 3n, getType: 1 })).map(
+            (t) => t.txHash,
+          ),
+        expected: txs(current.slice(-1)),
       },
       // Orphans stay in, flagged isOrphaned.
       "latest tx effects": {
