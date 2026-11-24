@@ -3,9 +3,20 @@ import { type IncomingMessage, createServer } from "node:http";
 import { type AddressInfo } from "node:net";
 import { GovernanceAbi, RegistryAbi } from "@aztec-foundation/l1-artifacts";
 import { loadFixture } from "@chicmoz/test-harness";
-import { type Hex, encodeFunctionResult, getAddress, pad, toHex } from "viem";
+import {
+  type Hex,
+  encodeEventTopics,
+  encodeFunctionResult,
+  getAddress,
+  getContract,
+  pad,
+  parseAbi,
+  toHex,
+} from "viem";
+import { foundry } from "viem/chains";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
+import { createWebSocketClient } from "../src/network-client/client/web-socket-client.js";
 
 const seam = vi.hoisted(() => {
   vi.stubEnv("L2_NETWORK_ID", "TESTNET");
@@ -302,4 +313,77 @@ describe("live watcher eth_getLogs ranges", () => {
     unwatch();
     await node.close();
   }, 20_000);
+
+  // Catches a restart from the last delivered block, or from the original
+  // fromBlock, after the chain has moved further than one request may span.
+  it("a watcher restarted after an outage resumes after the finalized block", async () => {
+    const abi = parseAbi(["event Foo(uint256 indexed x)"]);
+    const [delivering, quiet] = [
+      "0x00000000000000000000000000000000000000aa",
+      "0x00000000000000000000000000000000000000bb",
+    ] as const;
+    const logAt = (address: Hex, block: bigint): RawLog => ({
+      address,
+      topics: encodeEventTopics({
+        abi,
+        eventName: "Foo",
+        args: { x: block },
+      }) as Hex[],
+      data: "0x",
+      blockNumber: toHex(block),
+      blockHash: pad(toHex(block), { size: 32 }),
+      transactionHash: pad(toHex(block), { size: 32 }),
+      transactionIndex: "0x0",
+      logIndex: "0x0",
+      removed: false,
+    });
+    useJumpingClock();
+    const chain: Chain = { head: 1_000n, logs: [logAt(delivering, 990n)] };
+    let node = await startNode(chain);
+    const { client, close } = createWebSocketClient({
+      chain: foundry,
+      url: `ws://127.0.0.1:${node.port}`,
+      reconnectDelayMs: 50,
+    });
+    const delivered: string[] = [];
+    const unwatches = [delivering, quiet].map((address) =>
+      getContract({ abi, address, client }).watchEvent.Foo(
+        {},
+        {
+          fromBlock: chain.head - FINALITY_LAG + 1n,
+          pollingInterval: 20,
+          onLogs: (logs) =>
+            delivered.push(...logs.map((l) => `${l.address}@${l.blockNumber}`)),
+        },
+      ),
+    );
+    await vi.waitFor(() => expect(delivered).toEqual([`${delivering}@990`]));
+
+    await node.close();
+    chain.head += 5n * MAX_RANGE;
+    const tip = chain.head;
+    chain.logs.push(
+      logAt(delivering, tip - 2n * FINALITY_LAG), // finalized during the outage
+      logAt(delivering, tip),
+      logAt(quiet, tip),
+    );
+    node = await startNode(chain, node.port);
+    // Expires the block number cached before the outage.
+    await vi.advanceTimersByTimeAsync(CLIENT_POLL_MS);
+
+    await vi.waitFor(
+      () =>
+        expect([...delivered].sort()).toEqual(
+          [
+            `${delivering}@990`,
+            `${delivering}@${tip}`,
+            `${quiet}@${tip}`,
+          ].sort(),
+        ),
+      { timeout: 3_000 },
+    );
+    unwatches.forEach((unwatch) => unwatch());
+    close();
+    await node.close();
+  });
 });

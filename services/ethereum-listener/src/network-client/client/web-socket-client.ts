@@ -48,7 +48,9 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 /**
  * A polling-only public client over one L1 WebSocket that survives outages of
  * any length: at most one connection attempt per `reconnectDelayMs`, one live
- * socket, and contract watchers that resume after their last delivered block.
+ * socket, and contract watchers that resume after their last delivered block,
+ * or after the finalized block when that is later: after a reconnect a watcher
+ * skips its undelivered logs of blocks that are already finalized.
  */
 export const createWebSocketClient = ({
   chain,
@@ -72,7 +74,19 @@ export const createWebSocketClient = ({
   let outage:
     | { since: number; reportedAt: number; unreported: number }
     | undefined;
-  const onReconnect = new Set<() => void>();
+  const onReconnect = new Set<(finalized?: bigint) => void>();
+
+  const notifyReconnect = (finalized?: bigint) => {
+    for (const listener of onReconnect) {
+      try {
+        listener(finalized);
+      } catch (error) {
+        logger.error(
+          `L1 WebSocket reconnect listener failed: ${reasonOf(error)}`,
+        );
+      }
+    }
+  };
 
   /** Counts one failed request towards the outage report. */
   const unavailable = (reason: string) => {
@@ -125,14 +139,16 @@ export const createWebSocketClient = ({
       outage = undefined;
     }
     if (connectedOnce) {
-      for (const listener of onReconnect) {
-        try {
-          listener();
-        } catch (error) {
-          logger.error(
-            `L1 WebSocket reconnect listener failed: ${reasonOf(error)}`,
-          );
-        }
+      notifyReconnect();
+      if (onReconnect.size > 0) {
+        base.getBlock({ blockTag: "finalized" }).then(
+          ({ number }) => notifyReconnect(number),
+          (error: unknown) => {
+            logger.warn(
+              `L1 WebSocket watchers resume after their last delivered block: the finalized block is unreadable (${reasonOf(error)})`,
+            );
+          },
+        );
       }
     }
     connectedOnce = true;
@@ -215,9 +231,12 @@ export const createWebSocketClient = ({
 
   // After a reconnect the server may have dropped the watcher's filter, and
   // viem re-creates a lost filter from the original fromBlock, so every
-  // watcher restarts from the block after the last one it delivered.
+  // watcher restarts from the block after the last one it delivered. Once the
+  // finalized block is read, a watcher that would resume at or below it
+  // restarts after it: one eth_getLogs range across a long outage is refused
+  // on every poll by endpoints that cap the range.
   const watchAcrossReconnects = (parameters: WatchContractEventParameters) => {
-    let lastDelivered: bigint | undefined;
+    let resumeFrom = parameters.fromBlock;
     const start = () =>
       // viem shares one poll loop per observer id, which includes client.uid; a
       // fresh uid keeps a superseded loop's in-flight poll away from these callbacks.
@@ -225,17 +244,14 @@ export const createWebSocketClient = ({
         { ...base, uid: randomUUID() },
         {
           ...parameters,
-          fromBlock:
-            lastDelivered === undefined
-              ? parameters.fromBlock
-              : lastDelivered + 1n,
+          fromBlock: resumeFrom,
           onLogs: (logs) => {
             for (const { blockNumber } of logs) {
               if (
                 blockNumber !== null &&
-                (lastDelivered === undefined || blockNumber > lastDelivered)
+                (resumeFrom === undefined || blockNumber >= resumeFrom)
               ) {
-                lastDelivered = blockNumber;
+                resumeFrom = blockNumber + 1n;
               }
             }
             parameters.onLogs(logs);
@@ -249,7 +265,13 @@ export const createWebSocketClient = ({
         },
       );
     let unwatch = start();
-    const restart = () => {
+    const restart = (finalized?: bigint) => {
+      if (finalized !== undefined) {
+        if (resumeFrom === undefined || finalized < resumeFrom) {
+          return;
+        }
+        resumeFrom = finalized + 1n;
+      }
       unwatch();
       unwatch = start();
     };
