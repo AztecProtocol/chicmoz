@@ -112,6 +112,21 @@ and are decoded with `parseBlock()`.
 - Source verification runs untrusted compiles in isolated jobs
   (`compiler-orchestrator`); payloads can be several MB — keep size guards.
 
+## What goes in public text
+
+This repository is public. The deployment repository (`foundation-iac`) is
+internal.
+
+- Issues, PRs, commits, comments and docs here describe this code: what it
+  does, what changes, how it was tested.
+- They never describe a hosted deployment: what it runs, its hosts, accounts,
+  providers, alarms, logs, incidents or faults. That belongs in the deployment
+  repository, in its issues.
+- The deployment repository may be named, as at the top of this file. Never
+  link to its files, PRs, issues or workflow runs, and never quote its content.
+- A suspected exploitable weakness goes to a private security advisory
+  (Security → Advisories), never to an issue, a PR or a test name.
+
 ## Review checklist
 
 Correctness (async/await, unhandled rejections, races) → security
