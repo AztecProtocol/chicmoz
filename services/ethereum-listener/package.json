@@ -28,6 +28,7 @@
     "@chicmoz/test-harness": "workspace:^",
     "@types/node": "24.19.2",
     "@types/pg": "8.11.8",
+    "@types/ws": "8.5.12",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "bson": "6.2.0",
@@ -37,7 +38,8 @@
     "eslint-plugin-import": "2.29.0",
     "typescript": "5.8.3",
     "vite": "8.3.8",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "ws": "8.23.0"
   },
   "scripts": {
     "prebuild": "rm -rf build; mkdir build",
