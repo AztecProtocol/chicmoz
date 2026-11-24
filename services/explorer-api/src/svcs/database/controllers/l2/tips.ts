@@ -120,6 +120,9 @@ const getBoundaryBlock = async (height: number, rollupVersion: number | null) =>
   return rows[0]?.hash;
 };
 
+const missingBoundaryReason = (bucket: TipBucket, height: number) =>
+  `${bucket} boundary block ${height} is missing`;
+
 const validateBoundary = async (
   bucket: TipBucket,
   tips: ChicmozL2Tips,
@@ -133,7 +136,7 @@ const validateBoundary = async (
       height: tip.number,
       expectedHash: tip.hash,
       observedDbHash: null,
-      reason: `${bucket} boundary block ${tip.number} is missing`,
+      reason: missingBoundaryReason(bucket, tip.number),
     };
   }
   if (boundaryHash !== tip.hash) {
@@ -199,22 +202,35 @@ const resolveBoundaryMismatches = async () => {
     );
 };
 
-export const upsertTips = async (event: L2TipsEvent) => {
-  const tips = chicmozL2TipsSchema.parse(event.tips);
+const findBoundaryMismatch = async (
+  tips: ChicmozL2Tips,
+): Promise<BoundaryValidationResult | null> => {
   const rollupVersion = await getCurrentRollupVersionNumber();
-  let degradedReason: string | null = null;
-  let degradedMismatch: BoundaryValidationResult | null = null;
   for (const bucket of ["finalized", "proven", "checkpointed", "proposed"] as const) {
     const mismatch = await validateBoundary(bucket, tips, rollupVersion);
     if (mismatch) {
-      degradedReason = mismatch.reason;
-      degradedMismatch = mismatch;
-      logger.warn(`L2 tips degraded: ${degradedReason}`);
-      break;
+      return mismatch;
     }
   }
+  return null;
+};
 
-  const values = flattenTips({ ...event, tips }, degradedReason);
+const recordValidation = async (mismatch: BoundaryValidationResult | null) => {
+  if (mismatch) {
+    await recordBoundaryMismatch(mismatch);
+  } else {
+    await resolveBoundaryMismatches();
+  }
+};
+
+export const upsertTips = async (event: L2TipsEvent) => {
+  const tips = chicmozL2TipsSchema.parse(event.tips);
+  const mismatch = await findBoundaryMismatch(tips);
+  if (mismatch) {
+    logger.warn(`L2 tips degraded: ${mismatch.reason}`);
+  }
+
+  const values = flattenTips({ ...event, tips }, mismatch?.reason ?? null);
   await db()
     .insert(l2TipsTable)
     .values(values)
@@ -223,11 +239,50 @@ export const upsertTips = async (event: L2TipsEvent) => {
       set: values,
     });
 
-  if (degradedMismatch) {
-    await recordBoundaryMismatch(degradedMismatch);
-  } else {
-    await resolveBoundaryMismatches();
+  await recordValidation(mismatch);
+};
+
+/**
+ * Validates degraded stored tips again, for when a block is stored: tips and
+ * blocks arrive on separate topics, so tips often name a block that is stored
+ * a moment later. Healthy tips cost one read; an unchanged result writes
+ * nothing, so a mismatch's occurrence count still counts tips events.
+ */
+export const revalidateDegradedTips = async () => {
+  const [row] = await db()
+    .select()
+    .from(l2TipsTable)
+    .where(eq(l2TipsTable.l2NetworkId, L2_NETWORK_ID))
+    .limit(1);
+  if (!row?.degradedReason) {
+    return;
   }
+  const mismatch = await findBoundaryMismatch(toStoredTips(row));
+  const degradedReason = mismatch?.reason ?? null;
+  if (degradedReason === row.degradedReason) {
+    return;
+  }
+  // Tips stored since the read were validated by upsertTips; keep its result.
+  const updated = await db()
+    .update(l2TipsTable)
+    .set({ degradedReason, updatedAt: new Date() })
+    .where(
+      and(
+        eq(l2TipsTable.l2NetworkId, L2_NETWORK_ID),
+        eq(l2TipsTable.observedAt, row.observedAt),
+        eq(l2TipsTable.degradedReason, row.degradedReason),
+      ),
+    )
+    .returning({ l2NetworkId: l2TipsTable.l2NetworkId });
+  if (updated.length === 0) {
+    return;
+  }
+  if (mismatch) {
+    logger.warn(`L2 tips degraded: ${mismatch.reason}`);
+  } else {
+    logger.info(`L2 tips valid again (was: ${row.degradedReason})`);
+  }
+  await recordValidation(mismatch);
 };
 
 export const getRecentBoundaryMismatches = async (
@@ -252,35 +307,59 @@ export const getTips = async (
   return rows[0] ? toStoredTips(rows[0]) : null;
 };
 
+type StatusTipHeights = Record<TipBucket, number>;
+
+/**
+ * The tip heights block statuses derive from, or null while the stored tips
+ * cannot be trusted. A missing proposed boundary block is usually one still on
+ * its way, so heights up to the validated checkpointed tip keep their status
+ * and only those above it are unknown.
+ */
+export const statusTipHeights = (
+  storedTips: StoredL2Tips | null,
+): StatusTipHeights | null => {
+  if (!storedTips) {
+    return null;
+  }
+  const heights = {
+    finalized: storedTips.finalized.block.number,
+    proven: storedTips.proven.block.number,
+    checkpointed: storedTips.checkpointed.block.number,
+    proposed: storedTips.proposed.number,
+  };
+  if (!storedTips.degradedReason) {
+    return heights;
+  }
+  if (
+    storedTips.degradedReason ===
+    missingBoundaryReason("proposed", storedTips.proposed.number)
+  ) {
+    return { ...heights, proposed: heights.checkpointed };
+  }
+  return null;
+};
+
 export const deriveNativeStatus = (
   block: Pick<ChicmozL2Block, "height" | "hash" | "orphan">,
   storedTips: StoredL2Tips | null,
 ): ChicmozL2NativeBlockStatus => {
-  if (!storedTips) {
-    return "unknown";
-  }
-  if (storedTips.degradedReason) {
-    return "unknown";
-  }
-  if (block.orphan) {
+  const tips = statusTipHeights(storedTips);
+  if (!tips || block.orphan) {
     return "unknown";
   }
 
   const height = Number(block.height);
-  if (!Number.isSafeInteger(height) || height > storedTips.proposed.number) {
+  if (!Number.isSafeInteger(height) || height > tips.proposed) {
     return "unknown";
   }
-  if (height <= storedTips.finalized.block.number) {
+  if (height <= tips.finalized) {
     return "finalized";
   }
-  if (height <= storedTips.proven.block.number) {
+  if (height <= tips.proven) {
     return "proven";
   }
-  if (height <= storedTips.checkpointed.block.number) {
+  if (height <= tips.checkpointed) {
     return "checkpointed";
   }
-  if (height <= storedTips.proposed.number) {
-    return "proposed";
-  }
-  return "unknown";
+  return "proposed";
 };

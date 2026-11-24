@@ -89,6 +89,7 @@ const onBlock = async ({
     ),
     source: "block",
   });
+  await controllers.l2.tips.revalidateDegradedTips();
   await storeContracts(b, parsedBlock.hash);
   await pendingTxsHook(parsedBlock.body.txEffects);
 };
