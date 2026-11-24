@@ -148,10 +148,12 @@ export const WS_URL =
     ? import.meta.env.VITE_WS_URL
     : "";
 
+/** This build's version label, or null when the build set none or a blank one. */
 export const VERSION_STRING =
-  typeof import.meta.env.VITE_VERSION_STRING === "string"
-    ? import.meta.env.VITE_VERSION_STRING
-    : "version undefined!";
+  typeof import.meta.env.VITE_VERSION_STRING === "string" &&
+  import.meta.env.VITE_VERSION_STRING.trim().length > 0
+    ? import.meta.env.VITE_VERSION_STRING.trim()
+    : null;
 
 /** Target block cadence for the countdown (seconds). */
 export const BLOCK_TIME_TARGET_SECONDS = 36;
