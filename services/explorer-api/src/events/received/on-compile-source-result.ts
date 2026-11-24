@@ -1,4 +1,7 @@
-import { verifyArtifactPayload } from "@chicmoz-pkg/contract-verification";
+import {
+  type ArtifactVerification,
+  verifyArtifactPayload,
+} from "@chicmoz-pkg/contract-verification";
 import { EventHandler } from "@chicmoz-pkg/message-bus";
 import {
   CompileSourceResultEvent,
@@ -80,77 +83,17 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
       return;
     }
 
+    const registeredClass = await readClassWithArtifact(
+      contractClassId,
+      version,
+    );
+    // Only the artifact check's refusal is reported as is; any other error
+    // takes the outer catch's fixed message.
+    let verification: ArtifactVerification;
     try {
-      const registeredClass = await readClassWithArtifact(
-        contractClassId,
-        version,
-      );
-      const verification = await verifyArtifactPayload(
+      verification = await verifyArtifactPayload(
         { stringifiedArtifactJson: artifactJson },
         registeredClass,
-      );
-      if (!verification.isMatchingClassId) {
-        await db.l2Contract.updateSourceVerificationJobStatus({
-          jobId,
-          status: "FAILED",
-          error: "Compiled artifact does not match the contract class",
-          aztecVersion,
-          failureStage: "ARTIFACT_VERIFICATION",
-          compileOutput,
-        });
-        return;
-      }
-
-      // Construct source URL with the resolved commit hash (or fall back to
-      // gitRef) so the link always points to an immutable revision on GitHub.
-      let sourceCodeUrl = job.githubUrl;
-      const treeRef = commitHash ?? job.gitRef;
-      if (treeRef) {
-        sourceCodeUrl += `/tree/${treeRef}`;
-        if (job.subPath) {
-          const trimmed = job.subPath.replace(/^\/+/, "");
-          sourceCodeUrl += `/${trimmed}`;
-        }
-      }
-
-      // Store source code and URL
-      if (!sourceFiles || sourceFiles.length === 0) {
-        await db.l2Contract.updateSourceVerificationJobStatus({
-          jobId,
-          status: "FAILED",
-          error:
-            "Verification succeeded but no source files were produced (reader may have failed to parse output)",
-          aztecVersion,
-          failureStage: "SOURCE_EXTRACTION",
-          compileOutput,
-        });
-        return;
-      }
-
-      if (!registeredClass.artifactJson) {
-        await storeArtifactIfAbsent(registeredClass, verification);
-      }
-      const { written } = await db.l2Contract.storeVerifiedSource({
-        jobId,
-        contractClassId,
-        version,
-        sourceCode: sourceFiles,
-        sourceCodeUrl,
-        sourceCodeCommitHash: commitHash,
-        aztecVersion,
-      });
-      if (!written) {
-        await db.l2Contract.updateSourceVerificationJobStatus({
-          jobId,
-          status: "FAILED",
-          error: "Source code is already verified for this contract class",
-          aztecVersion,
-        });
-        return;
-      }
-
-      logger.info(
-        `Source verification job ${jobId} completed successfully for contract class ${contractClassId}@${version}`,
       );
     } catch (verifyError) {
       const errorMsg =
@@ -168,7 +111,71 @@ const onCompileSourceResult = async (event: CompileSourceResultEvent) => {
       logger.error(
         `Source verification job ${jobId} verification error: ${errorMsg}`,
       );
+      return;
     }
+    if (!verification.isMatchingClassId) {
+      await db.l2Contract.updateSourceVerificationJobStatus({
+        jobId,
+        status: "FAILED",
+        error: "Compiled artifact does not match the contract class",
+        aztecVersion,
+        failureStage: "ARTIFACT_VERIFICATION",
+        compileOutput,
+      });
+      return;
+    }
+
+    // Construct source URL with the resolved commit hash (or fall back to
+    // gitRef) so the link always points to an immutable revision on GitHub.
+    let sourceCodeUrl = job.githubUrl;
+    const treeRef = commitHash ?? job.gitRef;
+    if (treeRef) {
+      sourceCodeUrl += `/tree/${treeRef}`;
+      if (job.subPath) {
+        const trimmed = job.subPath.replace(/^\/+/, "");
+        sourceCodeUrl += `/${trimmed}`;
+      }
+    }
+
+    // Store source code and URL
+    if (!sourceFiles || sourceFiles.length === 0) {
+      await db.l2Contract.updateSourceVerificationJobStatus({
+        jobId,
+        status: "FAILED",
+        error:
+          "Verification succeeded but no source files were produced (reader may have failed to parse output)",
+        aztecVersion,
+        failureStage: "SOURCE_EXTRACTION",
+        compileOutput,
+      });
+      return;
+    }
+
+    if (!registeredClass.artifactJson) {
+      await storeArtifactIfAbsent(registeredClass, verification);
+    }
+    const { written } = await db.l2Contract.storeVerifiedSource({
+      jobId,
+      contractClassId,
+      version,
+      sourceCode: sourceFiles,
+      sourceCodeUrl,
+      sourceCodeCommitHash: commitHash,
+      aztecVersion,
+    });
+    if (!written) {
+      await db.l2Contract.updateSourceVerificationJobStatus({
+        jobId,
+        status: "FAILED",
+        error: "Source code is already verified for this contract class",
+        aztecVersion,
+      });
+      return;
+    }
+
+    logger.info(
+      `Source verification job ${jobId} completed successfully for contract class ${contractClassId}@${version}`,
+    );
   } catch (outerError) {
     logger.error(
       `Unexpected error processing compile source result for job ${jobId}:`,

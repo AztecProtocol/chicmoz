@@ -226,7 +226,7 @@ describe("source verification results", () => {
     ]).toEqual(before);
   });
 
-  it("a failed finalization stores no source", async () => {
+  it("a failed finalization stores no source and reports an internal failure", async () => {
     const file = "schnorr_hardcoded_account_contract-SchnorrHardcodedAccount";
     const seeded = await seedClass(rawArtifact(file));
     await seedStoredArtifact(seeded, rawArtifact(file));
@@ -254,6 +254,13 @@ describe("source verification results", () => {
       sourceCodeUrl: null,
       sourceCodeCommitHash: null,
     });
-    expect((await readJob(job.jobId)).status).toBe("FAILED");
+    const failed = await readJob(job.jobId);
+    expect(failed).toMatchObject({
+      status: "FAILED",
+      failureStage: "INTERNAL",
+      error: "Internal error processing compilation result",
+    });
+    // The database error names the constraint.
+    expect(JSON.stringify(failed)).not.toContain(constraint);
   });
 });
