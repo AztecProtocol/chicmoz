@@ -218,6 +218,10 @@ const summarizeFailure = (
   return "Internal compilation error";
 };
 
+/** Public output for a failure inside this service; its cause goes only to the log. */
+const internalFailureOutput = (jobId: string): string =>
+  `The compile job failed because of an internal error (job id ${jobId}). Please try again later.`;
+
 const buildCompilerImage = (aztecVersion: string): string => {
   const normalizedAztecVersion = aztecVersion.replace(/^v/, "");
   const lastColonIndex = COMPILER_IMAGE.lastIndexOf(":");
@@ -729,7 +733,10 @@ export const handleCompileRequest = async (
         aztecVersion,
         error: summarizeFailure(failureStage),
         failureStage,
-        compileOutput: trimCompileOutput(message),
+        compileOutput:
+          failureStage === "INTERNAL"
+            ? internalFailureOutput(event.jobId)
+            : trimCompileOutput(message),
       });
     } catch (publishError) {
       logger.error(
@@ -777,9 +784,7 @@ export const handleCompileRequest = async (
         aztecVersion: state.aztecVersion,
         error: summarizeFailure("INTERNAL"),
         failureStage: "INTERNAL",
-        compileOutput: trimCompileOutput(
-          `Failed to create compile job: ${(e as Error).message}`,
-        ),
+        compileOutput: internalFailureOutput(event.jobId),
       });
     } catch (publishError) {
       logger.error(
