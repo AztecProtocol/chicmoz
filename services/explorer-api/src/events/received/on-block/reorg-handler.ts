@@ -17,14 +17,15 @@ export const detectReorg = async (
 };
 
 /**
- * Handles a re-org by marking the existing block and higher blocks as orphaned
- * and storing their transactions as dropped
- * @returns The number of blocks that were orphaned (including the original block)
+ * Handles a re-org by marking the existing block and higher blocks of the
+ * parsed block's rollup version as orphaned and storing their transactions
+ * as dropped
  */
 export const handleReorg = async (
   parsedBlock: ChicmozL2Block,
 ): Promise<void> => {
-  const existingBlock = await getBlock(parsedBlock.height);
+  const rollupVersion = parsedBlock.header.globalVariables.version;
+  const existingBlock = await getBlock(parsedBlock.height, { rollupVersion });
 
   if (!existingBlock) {
     return;
@@ -38,6 +39,7 @@ export const handleReorg = async (
   const totalOrphaned = await handleReorgOrphaning(
     existingBlock.hash,
     parsedBlock.height,
+    rollupVersion,
   );
   logger.warn(
     `Completed re-org handling at height ${parsedBlock.height}. Total orphaned blocks: ${totalOrphaned}`,

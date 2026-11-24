@@ -38,6 +38,13 @@ describe("reads scoped to the current rollup version on a real database", () => 
   let upsertTips: (event: L2TipsEvent) => Promise<void>;
   let storedTips: () => Promise<{ degradedReason?: string; proposed: { number: number } } | null>;
   let current: BuiltBlock[];
+  let old: BuiltBlock[];
+  let store: (height: bigint, version: number) => Promise<BuiltBlock>;
+  let orphanOf: (
+    hash: HexString,
+  ) => Promise<{ hasOrphanedParent: boolean } | "active" | "absent">;
+  let activeCurrentHashes: () => Promise<HexString[]>;
+  let droppedOf: (txHashes: HexString[]) => Promise<HexString[]>;
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
@@ -117,7 +124,7 @@ describe("reads scoped to the current rollup version on a real database", () => 
       },
     });
 
-    const store = async (height: bigint, version: number) => {
+    store = async (height, version) => {
       const block = await buildBlock(height, [freshTxHash()], { version });
       await deliver(blockHandler, {
         block: block.hex,
@@ -128,16 +135,39 @@ describe("reads scoped to the current rollup version on a real database", () => 
     };
     // Stored first, so a lookup at height 1 that ignores the version meets it
     // before the current block.
-    await store(1n, OLD);
+    old = [await store(1n, OLD)];
     current = [await store(1n, CURRENT), await store(2n, CURRENT)];
     const replaced = await store(3n, CURRENT);
     current.push(await store(3n, CURRENT));
     // Old blocks arriving after current ones at the same heights, as a
     // replayed backlog would, are not a reorg of the current chain.
     for (const height of [2n, 3n, 4n, 5n]) {
-      await store(height, OLD);
+      old.push(await store(height, OLD));
     }
     expect((await getBlock(replaced.hash))?.orphan).toBeDefined();
+    orphanOf = async (hash) => {
+      const block = await getBlock(hash);
+      if (!block) {
+        return "absent";
+      }
+      return block.orphan
+        ? { hasOrphanedParent: block.orphan.hasOrphanedParent }
+        : "active";
+    };
+    activeCurrentHashes = async () =>
+      (await getBlocks({ from: undefined, to: undefined })).map((b) => b.hash);
+    const { getDroppedTxByHash } = await import(
+      "../../src/svcs/database/controllers/dropped-tx/get-tx.js"
+    );
+    droppedOf = async (txHashes) => {
+      const dropped: HexString[] = [];
+      for (const txHash of txHashes) {
+        if (await getDroppedTxByHash(txHash)) {
+          dropped.push(txHash);
+        }
+      }
+      return dropped;
+    };
 
     const deposit = (l1ContractAddress: string, n: number, to = RECIPIENT) => ({
       l1ContractAddress,
@@ -248,5 +278,33 @@ describe("reads scoped to the current rollup version on a real database", () => 
     const stored = await storedTips();
     expect(stored?.proposed.number).toBe(Number(block3.height));
     expect(stored?.degradedReason).toBeUndefined();
+  });
+
+  // The two reorg cases change the seed, so they run last.
+  it("orphans only current-version blocks on a reorg of the current chain", async () => {
+    const [, block2, block3] = current;
+    const oldAbove = old.filter((b) => b.height > 2n);
+
+    await store(2n, CURRENT);
+
+    expect(await orphanOf(block2.hash)).toEqual({ hasOrphanedParent: false });
+    expect(await orphanOf(block3.hash)).toEqual({ hasOrphanedParent: true });
+    expect(await Promise.all(oldAbove.map((b) => orphanOf(b.hash)))).toEqual(
+      oldAbove.map(() => "active"),
+    );
+    expect(await droppedOf(oldAbove.flatMap((b) => b.txHashes))).toEqual([]);
+  });
+
+  it("orphans only that version's blocks on a reorg of an older chain", async () => {
+    const activeCurrent = await activeCurrentHashes();
+    const [old1, ...oldAbove] = old;
+
+    await store(1n, OLD);
+
+    expect(await orphanOf(old1.hash)).toEqual({ hasOrphanedParent: false });
+    expect(await Promise.all(oldAbove.map((b) => orphanOf(b.hash)))).toEqual(
+      oldAbove.map(() => ({ hasOrphanedParent: true })),
+    );
+    expect(await activeCurrentHashes()).toEqual(activeCurrent);
   });
 });

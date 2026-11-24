@@ -8,8 +8,8 @@ import {
 } from "./support/explorer-api.js";
 
 // A tx hash is a primary key across the database, and a reorg orphans every
-// active block above its height, so the cases use disjoint txs and ascending,
-// disjoint heights, in file order.
+// active block of its rollup version above its height, so the cases use
+// disjoint txs and ascending, disjoint heights, in file order.
 describe("block conflicts on a real database", () => {
   let api: ExplorerApiForTest;
   let store: (b: BuiltBlock) => Promise<void>;
