@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { type FC } from "react";
+import { VERSION_STRING } from "~/service/constants";
 
 const YEAR = new Date().getFullYear();
 
@@ -23,6 +24,12 @@ export const Footer: FC = () => (
     </div>
     <div className="footer-copy">
       © {YEAR} Aztec-Scan · open-source block explorer for Aztec
+      {VERSION_STRING ? (
+        <>
+          {" · build "}
+          <span className="footer-version">{VERSION_STRING}</span>
+        </>
+      ) : null}
     </div>
   </footer>
 );

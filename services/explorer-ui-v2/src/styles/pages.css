@@ -3690,6 +3690,9 @@
   color: var(--ink-4);
   letter-spacing: 0.06em;
 }
+.footer-version {
+  user-select: all;
+}
 
 @media (max-width: 640px) {
   .footer {
