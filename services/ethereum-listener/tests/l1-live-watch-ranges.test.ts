@@ -315,8 +315,9 @@ describe("live watcher eth_getLogs ranges", () => {
   }, 20_000);
 
   // Catches a restart from the last delivered block, or from the original
-  // fromBlock, after the chain has moved further than one request may span.
-  it("a watcher restarted after an outage resumes after the finalized block", async () => {
+  // fromBlock, after the chain has moved further than one request may span,
+  // and a restart from the finalized block when the watcher is already past it.
+  it("a watcher restarted after an outage resumes after the later of its last delivered block and the finalized block", async () => {
     const abi = parseAbi(["event Foo(uint256 indexed x)"]);
     const [delivering, quiet] = [
       "0x00000000000000000000000000000000000000aa",
@@ -359,6 +360,24 @@ describe("live watcher eth_getLogs ranges", () => {
     );
     await vi.waitFor(() => expect(delivered).toEqual([`${delivering}@990`]));
 
+    // A short outage leaves the finalized block below block 990: the watcher
+    // keeps its position, so a restart from the finalized block would deliver
+    // block 990 twice.
+    await node.close();
+    chain.head += 10n;
+    const blip = chain.head;
+    chain.logs.push(logAt(delivering, blip));
+    node = await startNode(chain, node.port);
+    await vi.advanceTimersByTimeAsync(CLIENT_POLL_MS);
+    await vi.waitFor(
+      () =>
+        expect(delivered).toEqual([
+          `${delivering}@990`,
+          `${delivering}@${blip}`,
+        ]),
+      { timeout: 3_000 },
+    );
+
     await node.close();
     chain.head += 5n * MAX_RANGE;
     const tip = chain.head;
@@ -376,6 +395,7 @@ describe("live watcher eth_getLogs ranges", () => {
         expect([...delivered].sort()).toEqual(
           [
             `${delivering}@990`,
+            `${delivering}@${blip}`,
             `${delivering}@${tip}`,
             `${quiet}@${tip}`,
           ].sort(),
