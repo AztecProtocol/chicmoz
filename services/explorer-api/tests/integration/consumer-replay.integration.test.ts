@@ -74,6 +74,16 @@ const PROPOSAL_8_ENDED = () => ({
   l1LogIndex: 5,
   isFinalized: true,
 });
+// Constructed: no ConfigurationUpdated or GovernanceProposerUpdated log is
+// recorded; each carries what the recorded proposal 8 holds.
+const GOVERNANCE_UPDATE_LOG = () => ({
+  l1BlockNumber: 11969500,
+  l1BlockHash: `0x${"ef".repeat(32)}`,
+  l1BlockTimestamp: 1792680000000,
+  l1TransactionHash: `0x${"12".repeat(32)}`,
+  l1LogIndex: 3,
+  isFinalized: true,
+});
 // Unchecked, as on the bus: the handler alone decides what it accepts.
 const send = async (handler: EventHandler, message: Record<string, unknown>) =>
   deliver(handler, message as ChicmozMessageBusPayload);
@@ -263,6 +273,26 @@ const CASES: ReplayCase[] = [
       { table: s.l1GovernancePayloadRoundsTable },
     ],
     finality: "stored",
+  },
+  {
+    consumer: "governance configuration updated",
+    handler: governance("governanceConfigUpdatedHandler"),
+    message: () => ({
+      configuration: PROPOSED().configuration,
+      ...GOVERNANCE_UPDATE_LOG(),
+    }),
+    tables: (s) => [{ table: s.l1GovernanceConfigurationsTable }],
+    finality: "ignored",
+  },
+  {
+    consumer: "governance proposer updated",
+    handler: governance("governanceProposerUpdatedHandler"),
+    message: () => ({
+      governanceProposerAddress: PROPOSED().governanceProposerAddress,
+      ...GOVERNANCE_UPDATE_LOG(),
+    }),
+    tables: (s) => [{ table: s.l1GovernanceProposerHistoryTable }],
+    finality: "ignored",
   },
 ];
 
