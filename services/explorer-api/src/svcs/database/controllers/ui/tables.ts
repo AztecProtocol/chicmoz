@@ -231,7 +231,11 @@ export const getTxEffectForUiTable = async (
       break;
     case GetTypes.BlockHeight:
       whereQuery = joinQuery.where(
-        and(eq(l2Block.height, args.blockHeight), versionFilter),
+        and(
+          eq(l2Block.height, args.blockHeight),
+          isNull(l2Block.orphan_timestamp),
+          versionFilter,
+        ),
       );
       break;
   }

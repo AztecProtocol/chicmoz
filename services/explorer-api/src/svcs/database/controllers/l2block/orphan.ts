@@ -62,16 +62,19 @@ export const markHigherBlocksAsOrphaned = async (
 };
 
 /**
- * Handle a re-org by marking the specified block and all higher blocks as orphaned
+ * Handle a re-org by marking the specified block and all higher blocks of its
+ * rollup version as orphaned
  * Uses a transaction to ensure all operations are atomic
  *
  * @param originalBlockHash The hash of the block being replaced (original block at the height)
  * @param targetHeight The height at which the re-org occurred
+ * @param rollupVersion The rollup version of the re-orged chain; other versions' chains are left as they are
  * @returns The number of total blocks orphaned (including the original)
  */
 export const handleReorgOrphaning = async (
   originalBlockHash: HexString,
   targetHeight: bigint,
+  rollupVersion: number,
 ): Promise<number> => {
   const now = new Date().getTime();
 
@@ -97,7 +100,11 @@ export const handleReorgOrphaning = async (
       .select({ hash: l2Block.hash })
       .from(l2Block)
       .where(
-        and(gt(l2Block.height, targetHeight), isNull(l2Block.orphan_timestamp)),
+        and(
+          gt(l2Block.height, targetHeight),
+          eq(l2Block.version, rollupVersion),
+          isNull(l2Block.orphan_timestamp),
+        ),
       );
 
     const orphanedChildrenCount = higherBlocks.length;

@@ -27,6 +27,7 @@ import {
   publicDataWrite,
   txEffect,
 } from "../../../database/schema/l2block/index.js";
+import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
 import {
   getPublicCallRequestsByTxHash,
   getPublicCallRequestsByTxHashes,
@@ -142,17 +143,22 @@ const _getTxEffects = async (
       eq(txEffect.txHash, publicDataWritesSubquery.txEffectHash),
     );
 
+  const rollupVersion = await getCurrentRollupVersionNumber();
+  const versionFilter =
+    rollupVersion !== null ? eq(l2Block.version, rollupVersion) : undefined;
+
   let whereQuery;
 
   switch (args.getType) {
     case GetTypes.BlockHeightRange:
       if (args.from ?? args.to) {
         whereQuery = joinQuery
-          .where(generateWhereQuery(args.from, args.to))
+          .where(and(generateWhereQuery(args.from, args.to), versionFilter))
           .orderBy(desc(l2Block.height), desc(txEffect.index))
           .limit(DB_MAX_TX_EFFECTS);
       } else {
         whereQuery = joinQuery
+          .where(versionFilter)
           .orderBy(desc(l2Block.height), desc(txEffect.index))
           .limit(DB_MAX_TX_EFFECTS);
       }
@@ -163,6 +169,7 @@ const _getTxEffects = async (
           and(
             eq(l2Block.height, args.blockHeight),
             eq(txEffect.index, args.txEffectIndex),
+            versionFilter,
           ),
         )
         .limit(1);
