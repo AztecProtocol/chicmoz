@@ -1,5 +1,11 @@
+import {
+  type RegisterJobDefinitionCommandInput,
+  type SubmitJobCommandInput,
+} from "@aws-sdk/client-batch";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { type JobState } from "../../src/svcs/job-manager/backend.js";
 import { createAwsBatchBackend } from "../../src/svcs/job-manager/backends/aws-batch.js";
 import { createK8sBackend } from "../../src/svcs/job-manager/backends/k8s.js";
@@ -82,6 +88,34 @@ const scripts = {
   compileScript: "compile-script",
   readerScript: "reader-script",
 };
+
+/** Answers the Batch calls a launch makes, and `extra` by command name. */
+const stubBatch = (extra: Record<string, unknown> = {}) =>
+  mocks.batchSend.mockImplementation(
+    (command: { constructor: { name: string } }) => {
+      const name = command.constructor.name;
+      const response = {
+        DescribeJobDefinitionsCommand: { jobDefinitions: [] },
+        RegisterJobDefinitionCommand: {
+          jobDefinitionArn: "arn:job-definition",
+        },
+        SubmitJobCommand: { jobId: "batch-job" },
+        ...extra,
+      }[name];
+      return response
+        ? Promise.resolve(response)
+        : Promise.reject(new Error(`unexpected ${name}`));
+    },
+  );
+
+/** Inputs of every `commandName` sent to Batch so far. */
+const sentInputs = <Input>(commandName: string): Input[] =>
+  mocks.batchSend.mock.calls
+    .map(
+      ([command]) => command as { constructor: { name: string }; input: Input },
+    )
+    .filter((command) => command.constructor.name === commandName)
+    .map((command) => command.input);
 
 /** Dotted paths of every string in `value` that contains `needle`. */
 const pathsContaining = (value: unknown, needle: string, at = ""): string[] => {
@@ -187,42 +221,20 @@ describe("job spec", () => {
   });
 
   it("passes the repository inputs to an AWS Batch job only as environment values and tags", async () => {
-    mocks.batchSend.mockImplementation(
-      (command: { constructor: { name: string } }) => {
-        switch (command.constructor.name) {
-          case "DescribeJobDefinitionsCommand":
-            return Promise.resolve({ jobDefinitions: [] });
-          case "RegisterJobDefinitionCommand":
-            return Promise.resolve({ jobDefinitionArn: "arn:job-definition" });
-          case "SubmitJobCommand":
-            return Promise.resolve({ jobId: "batch-job" });
-          default:
-            return Promise.reject(
-              new Error(`unexpected ${command.constructor.name}`),
-            );
-        }
-      },
-    );
+    stubBatch();
     const backend = createAwsBatchBackend();
     await backend.init();
     const state = jobState();
 
     await backend.launch(state, scripts);
 
-    const submits = mocks.batchSend.mock.calls
-      .map(
-        ([command]) =>
-          command as { constructor: { name: string }; input: unknown },
-      )
-      .filter((command) => command.constructor.name === "SubmitJobCommand");
+    const submits = sentInputs<SubmitJobCommandInput>("SubmitJobCommand");
     expect(submits).toHaveLength(1);
-    const { input } = submits[0];
+    const [input] = submits;
     expect(input).toMatchObject({
       jobName: state.backendJobName,
       containerOverrides: {
         command: [
-          "/bin/sh",
-          "-c",
           `set -e\nmkdir -p /output /workspace\n${scripts.compileScript}\n${scripts.readerScript}`,
         ],
         environment: [
@@ -269,34 +281,18 @@ describe("memory kill", () => {
   });
 
   it("reads an AWS Batch memory kill from the container's reason", async () => {
-    mocks.batchSend.mockImplementation(
-      (command: { constructor: { name: string } }) => {
-        switch (command.constructor.name) {
-          case "DescribeJobDefinitionsCommand":
-            return Promise.resolve({ jobDefinitions: [] });
-          case "RegisterJobDefinitionCommand":
-            return Promise.resolve({ jobDefinitionArn: "arn:job-definition" });
-          case "SubmitJobCommand":
-            return Promise.resolve({ jobId: "batch-job" });
-          case "DescribeJobsCommand":
-            return Promise.resolve({
-              jobs: [
-                {
-                  status: "FAILED",
-                  container: {
-                    reason:
-                      "OutOfMemoryError: Container killed due to memory usage",
-                  },
-                },
-              ],
-            });
-          default:
-            return Promise.reject(
-              new Error(`unexpected ${command.constructor.name}`),
-            );
-        }
+    stubBatch({
+      DescribeJobsCommand: {
+        jobs: [
+          {
+            status: "FAILED",
+            container: {
+              reason: "OutOfMemoryError: Container killed due to memory usage",
+            },
+          },
+        ],
       },
-    );
+    });
     const backend = createAwsBatchBackend();
     await backend.init();
     const state = jobState();
@@ -305,3 +301,98 @@ describe("memory kill", () => {
     expect(await backend.readLogs(state)).toMatchObject({ outOfMemory: true });
   });
 });
+
+// The integration harness's Redis image: small, pinned, and has /bin/sh.
+const STAND_IN_BASE_IMAGE =
+  "redis:7.2-alpine@sha256:2f66de68111e64c3927859f158f8e666066dae2b97d9f82770a6f37a5aa1c335";
+
+const docker = (args: string[], input?: string) =>
+  spawnSync("docker", args, { encoding: "utf8", input, timeout: 120_000 });
+
+const dockerAvailable =
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 10_000 }).status ===
+  0;
+
+// GitHub's runners have Docker, so there a missing daemon fails rather than skips.
+describe.skipIf(!dockerAvailable && process.env.GITHUB_ACTIONS !== "true")(
+  "AWS Batch job in an image with the compiler image's entrypoint",
+  () => {
+    const image = `chicmoz-batch-entrypoint-test:${randomUUID()}`;
+    const containers: string[] = [];
+
+    beforeAll(() => {
+      // Docker applies only the last ENTRYPOINT.
+      const entrypoint = readFileSync(
+        new URL(
+          "../../../event-cannon/Dockerfile.compile-contracts",
+          import.meta.url,
+        ),
+        "utf8",
+      )
+        .match(/^ENTRYPOINT\s.*$/gim)
+        ?.at(-1);
+      expect(entrypoint).toBeDefined();
+      const build = docker(
+        ["build", "--quiet", "--tag", image, "-"],
+        `FROM ${STAND_IN_BASE_IMAGE}\n${entrypoint}\n`,
+      );
+      expect(build.status, build.stderr).toBe(0);
+    }, 180_000);
+
+    afterAll(() => {
+      if (containers.length > 0) {
+        docker(["rm", "--force", "--volumes", ...containers]);
+      }
+      docker(["image", "rm", "--force", image]);
+    });
+
+    /** Runs `command` as the container's CMD, which is what Batch does with a job's `command`. */
+    const runAsBatchJob = (command: string[] = []) => {
+      const name = `chicmoz-batch-entrypoint-test-${randomUUID()}`;
+      containers.push(name);
+      const { status, stdout, stderr } = docker([
+        "run",
+        "--rm",
+        "--name",
+        name,
+        "--network",
+        "none",
+        image,
+        ...command,
+      ]);
+      return { status, stdout, stderr };
+    };
+
+    it("runs the job's script and returns its output and exit code", async () => {
+      stubBatch();
+      const backend = createAwsBatchBackend();
+      await backend.init();
+      // A fresh image, so this launch registers its own job definition.
+      const state = {
+        ...jobState(),
+        compilerImage: `contract-compiler:${randomUUID()}`,
+      };
+
+      await backend.launch(state, {
+        compileScript: "echo compile-ran",
+        readerScript: "echo reader-ran && exit 7",
+      });
+
+      const [definition] = sentInputs<RegisterJobDefinitionCommandInput>(
+        "RegisterJobDefinitionCommand",
+      ).filter(
+        (input) => input.containerProperties?.image === state.compilerImage,
+      );
+      const [submit] = sentInputs<SubmitJobCommandInput>(
+        "SubmitJobCommand",
+      ).filter((input) => input.jobName === state.backendJobName);
+      expect({
+        job: runAsBatchJob(submit?.containerOverrides?.command),
+        placeholder: runAsBatchJob(definition?.containerProperties?.command),
+      }).toMatchObject({
+        job: { status: 7, stdout: "compile-ran\nreader-ran\n" },
+        placeholder: { status: 0, stdout: "chicmoz-compiler-placeholder\n" },
+      });
+    }, 60_000);
+  },
+);
