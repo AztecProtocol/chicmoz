@@ -67,6 +67,31 @@ type GetEventsFunction = (
 
 type ContractEventMap = Record<string, GetEventsFunction>;
 
+type StreamPoll = { stream: string; poll: Promise<bigint> };
+
+// Each stream stores its own height, so one stream's failure is logged and
+// recorded without stopping the others.
+const settleStreams = async (
+  streamPolls: StreamPoll[],
+  failures: string[],
+): Promise<bigint[]> => {
+  const results = await Promise.allSettled(streamPolls.map(({ poll }) => poll));
+  return results.flatMap((result, i) => {
+    if (result.status === "fulfilled") {
+      return [result.value];
+    }
+    const { stream } = streamPolls[i];
+    const reason: unknown = result.reason;
+    logger.error(
+      `${stream} finalized poll failed: ${reason instanceof Error ? reason.stack : String(reason)}`,
+    );
+    failures.push(
+      `${stream} (${reason instanceof Error ? reason.message : String(reason)})`,
+    );
+    return [];
+  });
+};
+
 const getGenericContractEventLogs = async ({
   name,
   contract,
@@ -115,14 +140,14 @@ const getGenericContractEventLogs = async ({
   return latestHeight - getMemoryHeight();
 };
 
-const getAllGenericContractEventLogs = async ({
+const getAllGenericContractEventLogs = ({
   contracts,
   latestHeight,
 }: {
   contracts: AztecContracts;
   latestHeight: bigint;
-}) => {
-  const pollers: Promise<bigint>[] = [];
+}): StreamPoll[] => {
+  const pollers: StreamPoll[] = [];
   for (const [name, contract] of Object.entries(contracts) as [
     keyof AztecContracts,
     AztecContract,
@@ -144,18 +169,19 @@ const getAllGenericContractEventLogs = async ({
     );
 
     pollers.push(
-      ...eventNames.map((eventName) =>
-        getGenericContractEventLogs({
+      ...eventNames.map((eventName) => ({
+        stream: `${name} ${eventName}(generic)`,
+        poll: getGenericContractEventLogs({
           name,
           contract,
           eventName,
           latestHeight,
         }),
-      ),
+      })),
     );
   }
 
-  return Promise.all(pollers);
+  return pollers;
 };
 
 const getRollupL2BlockProposedLogs = async ({
@@ -603,131 +629,126 @@ export const getAllContractsEvents = async ({
   latestHeight: bigint;
 }) => {
   const client = getPublicHttpClient();
-  const rollupPollResults: bigint[] = await Promise.all([
-    getRollupL2BlockProposedLogs({
-      client,
-      contracts,
-      toBlock,
-      latestHeight,
-    }),
-    getRollupL2ProofVerifiedLogs({
-      client,
-      contracts,
-      toBlock,
-      latestHeight,
-    }),
-    // NOTE: These events are not used in the current implementation, but are left here for future use. The reason for not using them is that they require our L1-RPC to be a full node (being able to query state at any given block).
-    //getDepositLogs({
-    //  client,
-    //  contracts,
-    //  toBlock,
-    //  latestHeight,
-    //}),
-    //getWithdrawInitiatedLogs({
-    //  client,
-    //  contracts,
-    //  toBlock,
-    //  latestHeight,
-    //}),
-    //getWithdrawFinalisedLogs({
-    //  client,
-    //  contracts,
-    //  toBlock,
-    //  latestHeight,
-    //}),
-    //getSlashedLogs({
-    //  client,
-    //  contracts,
-    //  toBlock,
-    //  latestHeight,
-    //}),
-  ]);
+  const failures: string[] = [];
+  const rollupPollResults = await settleStreams(
+    [
+      {
+        stream: "rollup CheckpointProposed",
+        poll: getRollupL2BlockProposedLogs({
+          client,
+          contracts,
+          toBlock,
+          latestHeight,
+        }),
+      },
+      {
+        stream: "rollup L2ProofVerified",
+        poll: getRollupL2ProofVerifiedLogs({
+          client,
+          contracts,
+          toBlock,
+          latestHeight,
+        }),
+      },
+      // NOTE: These events are not used in the current implementation, but are left here for future use. The reason for not using them is that they require our L1-RPC to be a full node (being able to query state at any given block).
+      //getDepositLogs({
+      //  client,
+      //  contracts,
+      //  toBlock,
+      //  latestHeight,
+      //}),
+      //getWithdrawInitiatedLogs({
+      //  client,
+      //  contracts,
+      //  toBlock,
+      //  latestHeight,
+      //}),
+      //getWithdrawFinalisedLogs({
+      //  client,
+      //  contracts,
+      //  toBlock,
+      //  latestHeight,
+      //}),
+      //getSlashedLogs({
+      //  client,
+      //  contracts,
+      //  toBlock,
+      //  latestHeight,
+      //}),
+    ],
+    failures,
+  );
 
   // Governance structured events (chunked catchup instead of single massive watchEvent sweep)
-  const governancePollResults: bigint[] = await Promise.all([
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "Proposed",
-      latestHeight,
-      callbacksFactory: proposedEventCallbacks,
-    }),
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "VoteCast",
-      latestHeight,
-      callbacksFactory: voteCastEventCallbacks,
-    }),
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "ProposalExecuted",
-      latestHeight,
-      callbacksFactory: proposalExecutedEventCallbacks,
-    }),
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "ProposalDropped",
-      latestHeight,
-      callbacksFactory: proposalDroppedEventCallbacks,
-    }),
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "ConfigurationUpdated",
-      latestHeight,
-      callbacksFactory: configurationUpdatedEventCallbacks,
-    }),
-    getGovernanceStructuredEventLogs({
-      contract: contracts.governance,
-      contractName: "governance",
-      eventName: "GovernanceProposerUpdated",
-      latestHeight,
-      callbacksFactory: governanceProposerUpdatedEventCallbacks,
-    }),
-  ]);
+  const governancePollResults = await settleStreams(
+    (
+      [
+        ["Proposed", proposedEventCallbacks],
+        ["VoteCast", voteCastEventCallbacks],
+        ["ProposalExecuted", proposalExecutedEventCallbacks],
+        ["ProposalDropped", proposalDroppedEventCallbacks],
+        ["ConfigurationUpdated", configurationUpdatedEventCallbacks],
+        ["GovernanceProposerUpdated", governanceProposerUpdatedEventCallbacks],
+      ] as const
+    ).map(([eventName, callbacksFactory]) => ({
+      stream: `governance ${eventName}`,
+      poll: getGovernanceStructuredEventLogs({
+        contract: contracts.governance,
+        contractName: "governance",
+        eventName,
+        latestHeight,
+        callbacksFactory,
+      }),
+    })),
+    failures,
+  );
 
   // GovernanceProposer structured events
-  const governanceProposerPollResults: bigint[] = await Promise.all([
-    getGovernanceProposerStructuredEventLogs({
-      contract: contracts.governanceProposer,
-      contractName: "governanceProposer",
-      eventName: "SignalCast",
-      latestHeight,
-      callbacksFactory: signalCastEventCallbacks,
-    }),
-    getGovernanceProposerStructuredEventLogs({
-      contract: contracts.governanceProposer,
-      contractName: "governanceProposer",
-      eventName: "PayloadSubmittable",
-      latestHeight,
-      callbacksFactory: payloadSubmittableEventCallbacks,
-    }),
-    getGovernanceProposerStructuredEventLogs({
-      contract: contracts.governanceProposer,
-      contractName: "governanceProposer",
-      eventName: "PayloadSubmitted",
-      latestHeight,
-      callbacksFactory: payloadSubmittedEventCallbacks,
-    }),
-  ]);
+  const governanceProposerPollResults = await settleStreams(
+    (
+      [
+        ["SignalCast", signalCastEventCallbacks],
+        ["PayloadSubmittable", payloadSubmittableEventCallbacks],
+        ["PayloadSubmitted", payloadSubmittedEventCallbacks],
+      ] as const
+    ).map(([eventName, callbacksFactory]) => ({
+      stream: `governanceProposer ${eventName}`,
+      poll: getGovernanceProposerStructuredEventLogs({
+        contract: contracts.governanceProposer,
+        contractName: "governanceProposer",
+        eventName,
+        latestHeight,
+        callbacksFactory,
+      }),
+    })),
+    failures,
+  );
 
   // FeeJuicePortal structured events (chunked HTTP backfill mirrors the WS watcher)
-  const feeJuicePortalPollResults: bigint[] = await Promise.all([
-    getFeeJuicePortalDepositLogs({
-      client,
-      contracts,
-      toBlock,
-      latestHeight,
-    }),
-  ]);
+  const feeJuicePortalPollResults = await settleStreams(
+    [
+      {
+        stream: "feeJuicePortal DepositToAztecPublic",
+        poll: getFeeJuicePortalDepositLogs({
+          client,
+          contracts,
+          toBlock,
+          latestHeight,
+        }),
+      },
+    ],
+    failures,
+  );
 
-  const genericPollResults = await getAllGenericContractEventLogs({
-    contracts,
-    latestHeight,
-  });
+  const genericPollResults = await settleStreams(
+    getAllGenericContractEventLogs({ contracts, latestHeight }),
+    failures,
+  );
+
+  // A failed stream kept its stored height, so catch-up must not complete.
+  if (failures.length > 0) {
+    throw new Error(`finalized event polls failed: ${failures.join("; ")}`);
+  }
   return [
     ...rollupPollResults,
     ...governancePollResults,

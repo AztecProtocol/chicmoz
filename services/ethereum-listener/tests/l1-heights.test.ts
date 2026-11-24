@@ -324,6 +324,16 @@ describe("finalized poller heights", () => {
       expect(stored(f).latestFinalizedHeight).toBe(CHUNK_END);
     },
   );
+
+  // Catches a failing stream that keeps the streams polled after it from running.
+  it("a stream whose poll rejects does not hold back the streams polled after it", async () => {
+    seam.chain.set(stream(GOVERNANCE), logsAt(GOVERNANCE, [B2]));
+    seam.chain.set(stream(GENERIC), logsAt(GENERIC, [B1, B3]));
+    seam.failPublish.add(B2);
+    await expect(poll()).rejects.toThrow("publish rejected");
+    expect(seam.published).toEqual([B1, B3]);
+    expect(stored(GENERIC).latestFinalizedHeight).toBe(CHUNK_END);
+  });
 });
 
 describe("live watcher heights", () => {
