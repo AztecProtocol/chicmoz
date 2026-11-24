@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq, and, sql } from "drizzle-orm";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import {
@@ -54,6 +55,32 @@ const requireL1LogPosition = (
     l1TransactionHash: event.l1TransactionHash,
     l1LogIndex: event.l1LogIndex,
   };
+};
+
+/**
+ * A row id that every delivery of one L1 log shares: an RFC 9562 UUIDv8 from
+ * the SHA-256 of its transaction hash and log index. On a table keyed by it,
+ * a redelivery or the log's pending/finalized second copy is a primary key
+ * conflict. Undefined (a random id) when the message lacks either field.
+ */
+const l1LogRowId = ({
+  l1TransactionHash,
+  l1LogIndex,
+}: {
+  l1TransactionHash?: string | null;
+  l1LogIndex?: number | null;
+}) => {
+  if (typeof l1TransactionHash !== "string" || typeof l1LogIndex !== "number") {
+    return undefined;
+  }
+  const bytes = createHash("sha256")
+    .update(`${l1TransactionHash.toLowerCase()}:${l1LogIndex}`)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
 export const storeGovernanceProposed = async (
@@ -305,13 +332,18 @@ export const storeGovernanceSignalCast = async (
       ],
     });
 
-  // Upsert payload round with increment
+  // Recounted from the stored signals, one per log whichever of its copies are
+  // stored, so a redelivery or a log's second copy changes nothing.
+  const signalCount = sql`(select count(distinct (${l1GovernanceSignalsTable.l1TransactionHash}, ${l1GovernanceSignalsTable.l1LogIndex})) from ${l1GovernanceSignalsTable} where ${and(
+    eq(l1GovernanceSignalsTable.payloadAddress, event.payloadAddress),
+    eq(l1GovernanceSignalsTable.round, event.round),
+  )})`;
   await db()
     .insert(l1GovernancePayloadRoundsTable)
     .values({
       payloadAddress: event.payloadAddress,
       round: event.round,
-      signalCount: 1n,
+      signalCount,
     })
     .onConflictDoUpdate({
       target: [
@@ -319,7 +351,7 @@ export const storeGovernanceSignalCast = async (
         l1GovernancePayloadRoundsTable.round,
       ],
       set: {
-        signalCount: sql`${l1GovernancePayloadRoundsTable.signalCount} + 1`,
+        signalCount: sql`excluded.${sql.identifier(l1GovernancePayloadRoundsTable.signalCount.name)}`,
       },
     });
 };
@@ -365,13 +397,17 @@ export const storeGovernanceConfigUpdated = async (
     throw new Error("Missing l1BlockTimestamp");
   }
 
-  await db().insert(l1GovernanceConfigurationsTable).values({
-    configuration: event.configuration,
-    updatedAt: new Date(event.l1BlockTimestamp).getTime(),
-    l1BlockNumber: event.l1BlockNumber,
-    l1BlockHash: event.l1BlockHash,
-    l1BlockTimestamp: event.l1BlockTimestamp,
-  });
+  await db()
+    .insert(l1GovernanceConfigurationsTable)
+    .values({
+      id: l1LogRowId(event),
+      configuration: event.configuration,
+      updatedAt: new Date(event.l1BlockTimestamp).getTime(),
+      l1BlockNumber: event.l1BlockNumber,
+      l1BlockHash: event.l1BlockHash,
+      l1BlockTimestamp: event.l1BlockTimestamp,
+    })
+    .onConflictDoNothing({ target: l1GovernanceConfigurationsTable.id });
 };
 
 export const storeGovernanceProposerUpdated = async (
@@ -381,11 +417,15 @@ export const storeGovernanceProposerUpdated = async (
     throw new Error("Missing l1BlockTimestamp");
   }
 
-  await db().insert(l1GovernanceProposerHistoryTable).values({
-    governanceProposerAddress: event.governanceProposerAddress,
-    updatedAt: new Date(event.l1BlockTimestamp).getTime(),
-    l1BlockNumber: event.l1BlockNumber,
-    l1BlockHash: event.l1BlockHash,
-    l1BlockTimestamp: event.l1BlockTimestamp,
-  });
+  await db()
+    .insert(l1GovernanceProposerHistoryTable)
+    .values({
+      id: l1LogRowId(event),
+      governanceProposerAddress: event.governanceProposerAddress,
+      updatedAt: new Date(event.l1BlockTimestamp).getTime(),
+      l1BlockNumber: event.l1BlockNumber,
+      l1BlockHash: event.l1BlockHash,
+      l1BlockTimestamp: event.l1BlockTimestamp,
+    })
+    .onConflictDoNothing({ target: l1GovernanceProposerHistoryTable.id });
 };
