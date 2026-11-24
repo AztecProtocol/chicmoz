@@ -10,6 +10,7 @@ import { z } from "zod";
 import { L2_NETWORK_ID } from "../../../../../environment.js";
 import { l1GenericContractEventTable } from "../../../schema/l1/generic-contract-event.js";
 import { getL2ChainInfo } from "../../l2/index.js";
+import { oncePerL1Log } from "../once-per-log.js";
 
 const LIMIT = 1000;
 
@@ -24,25 +25,31 @@ async function getCurrentL1ContractAddresses(): Promise<string[] | null> {
   );
 }
 
-export async function get(): Promise<ChicmozL1GenericContractEvent[]> {
+const servedEventsFilter = async () => {
+  const oncePerLog = oncePerL1Log(l1GenericContractEventTable, [
+    "l1TransactionHash",
+    "l1LogIndex",
+    "l1ContractAddress",
+  ]);
   const currentL1ContractAddresses = await getCurrentL1ContractAddresses();
-  const baseQuery = db()
-    .select(getTableColumns(l1GenericContractEventTable))
-    .from(l1GenericContractEventTable);
+  return currentL1ContractAddresses
+    ? and(
+        oncePerLog,
+        inArray(
+          l1GenericContractEventTable.l1ContractAddress,
+          currentL1ContractAddresses,
+        ),
+      )
+    : oncePerLog;
+};
 
-  const res = currentL1ContractAddresses
-    ? await baseQuery
-        .where(
-          inArray(
-            l1GenericContractEventTable.l1ContractAddress,
-            currentL1ContractAddresses,
-          ),
-        )
-        .orderBy(desc(l1GenericContractEventTable.l1BlockNumber))
-        .limit(LIMIT)
-    : await baseQuery
-        .orderBy(desc(l1GenericContractEventTable.l1BlockNumber))
-        .limit(LIMIT);
+export async function get(): Promise<ChicmozL1GenericContractEvent[]> {
+  const res = await db()
+    .select(getTableColumns(l1GenericContractEventTable))
+    .from(l1GenericContractEventTable)
+    .where(await servedEventsFilter())
+    .orderBy(desc(l1GenericContractEventTable.l1BlockNumber))
+    .limit(LIMIT);
 
   return z.array(chicmozL1GenericContractEventSchema).parse(res);
 }
@@ -60,14 +67,6 @@ export async function getHourlyCounts(
   const cutoff = Date.now() - hours * HOUR_MS;
   const hourMs = sql.raw(String(HOUR_MS));
   const bucketExpr = sql<number>`floor(${l1GenericContractEventTable.l1BlockTimestamp}::numeric / ${hourMs})::bigint * ${hourMs}`;
-  const currentL1ContractAddresses = await getCurrentL1ContractAddresses();
-  const cutoffFilter = gte(l1GenericContractEventTable.l1BlockTimestamp, cutoff);
-  const currentContractFilter = currentL1ContractAddresses
-    ? inArray(
-        l1GenericContractEventTable.l1ContractAddress,
-        currentL1ContractAddresses,
-      )
-    : undefined;
 
   const res = await db()
     .select({
@@ -76,9 +75,10 @@ export async function getHourlyCounts(
     })
     .from(l1GenericContractEventTable)
     .where(
-      currentContractFilter
-        ? and(cutoffFilter, currentContractFilter)
-        : cutoffFilter,
+      and(
+        gte(l1GenericContractEventTable.l1BlockTimestamp, cutoff),
+        await servedEventsFilter(),
+      ),
     )
     .groupBy(sql`1`)
     .orderBy(sql`1`);

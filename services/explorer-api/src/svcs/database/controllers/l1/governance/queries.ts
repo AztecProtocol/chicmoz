@@ -12,8 +12,14 @@ import {
   l1GovernanceConfigurationsTable,
   l1GovernanceProposerHistoryTable,
 } from "../../../schema/l1/governance.js";
+import { oncePerL1Log } from "../once-per-log.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+const oncePerVoteLog = () =>
+  oncePerL1Log(l1GovernanceVotesTable, ["l1TransactionHash", "l1LogIndex"]);
+const oncePerSignalLog = () =>
+  oncePerL1Log(l1GovernanceSignalsTable, ["l1TransactionHash", "l1LogIndex"]);
 
 const { forum_link: forumLinkSchema, github_pr: githubPrSchema } =
   governanceProposalMetadataSchema.shape;
@@ -125,7 +131,10 @@ export const getProposalVotes = async (
 ) => {
   const { support, offset = 0, limit = 50 } = params ?? {};
 
-  const conditions = [eq(l1GovernanceVotesTable.proposalId, proposalId)];
+  const conditions = [
+    eq(l1GovernanceVotesTable.proposalId, proposalId),
+    oncePerVoteLog(),
+  ];
   if (support !== undefined) {
     conditions.push(eq(l1GovernanceVotesTable.support, support));
   }
@@ -158,7 +167,7 @@ export const getProposalSignals = async (
   return await db()
     .select()
     .from(l1GovernanceSignalsTable)
-    .where(addressFilter)
+    .where(and(addressFilter, oncePerSignalLog()))
     .orderBy(desc(l1GovernanceSignalsTable.l1BlockNumber))
     .limit(limit)
     .offset(offset);
@@ -176,7 +185,7 @@ export const getSignals = async (params?: {
   const { payloadAddress, round, signaler, offset = 0, limit = 50 } =
     params ?? {};
 
-  const conditions = [];
+  const conditions = [oncePerSignalLog()];
   if (payloadAddress) {
     conditions.push(
       eq(l1GovernanceSignalsTable.payloadAddress, payloadAddress),
@@ -192,7 +201,7 @@ export const getSignals = async (params?: {
   return await db()
     .select()
     .from(l1GovernanceSignalsTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(l1GovernanceSignalsTable.l1BlockNumber))
     .limit(limit)
     .offset(offset);
@@ -202,7 +211,7 @@ export const getSignalsByRound = async (round: bigint) => {
   return await db()
     .select()
     .from(l1GovernanceSignalsTable)
-    .where(eq(l1GovernanceSignalsTable.round, round))
+    .where(and(eq(l1GovernanceSignalsTable.round, round), oncePerSignalLog()))
     .orderBy(desc(l1GovernanceSignalsTable.l1BlockNumber));
 };
 
@@ -210,7 +219,12 @@ export const getSignalsByPayload = async (payloadAddress: string) => {
   return await db()
     .select()
     .from(l1GovernanceSignalsTable)
-    .where(eq(l1GovernanceSignalsTable.payloadAddress, payloadAddress))
+    .where(
+      and(
+        eq(l1GovernanceSignalsTable.payloadAddress, payloadAddress),
+        oncePerSignalLog(),
+      ),
+    )
     .orderBy(desc(l1GovernanceSignalsTable.l1BlockNumber));
 };
 
