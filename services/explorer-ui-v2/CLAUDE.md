@@ -20,7 +20,7 @@ builds one bundle per network with these baked in:
 | `VITE_WS_URL`                                       | WebSocket server (unused on an archived version)                                                                             |
 | `VITE_NETWORK_VERSION`                              | This build's major Aztec version, e.g. `v6`; unset for an unversioned network                                                |
 | `VITE_CHICMOZ_ALL_UI_URLS`                          | Every deployment, comma-separated `Network\|URL[\|version[\|status]]`; status is `canonical` (default), `live` or `archived` |
-| `VITE_VERSION_STRING`                               | Shown in the footer/health views                                                                                             |
+| `VITE_VERSION_STRING`                               | Build label shown in the footer, e.g. `prod-<12 hex>`; unset or blank shows none                                             |
 | `VITE_DISCORD_URL`, `VITE_GITHUB_URL`, `VITE_X_URL` | Social links                                                                                                                 |
 
 Each major Aztec version of a network is its own deployment (own backend
