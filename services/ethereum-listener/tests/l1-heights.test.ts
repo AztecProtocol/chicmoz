@@ -41,6 +41,8 @@ const seam = vi.hoisted(() => {
     /** L1 block number of every event the bus accepted. */
     published: [] as bigint[],
     failPublish: new Set<bigint>(),
+    /** Blocks whose getBlock rejects. */
+    failRead: new Set<bigint>(),
     rows: new Map<string, unknown>(),
   };
 });
@@ -50,7 +52,9 @@ vi.mock("viem", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   createPublicClient: () => ({
     getBlock: ({ blockNumber }: { blockNumber: bigint }) =>
-      Promise.resolve({ timestamp: 1_700_000_000n + blockNumber * 12n }),
+      seam.failRead.has(blockNumber)
+        ? Promise.reject(new Error("L1 read failed"))
+        : Promise.resolve({ timestamp: 1_700_000_000n + blockNumber * 12n }),
     readContract: ({ functionName }: { functionName: string }) =>
       functionName in seam.contractReads
         ? Promise.resolve(seam.contractReads[functionName])
@@ -192,7 +196,7 @@ let contracts: AztecContracts;
 // One representative per way a callback handles a failing log; the other
 // event types of a family share its callback shape and its tracker calls.
 const ROLLUP = {
-  family: "rollup L2ProofVerified (catches per log)",
+  family: "rollup L2ProofVerified (skips an invalid log)",
   contract: "rollup" as const,
   eventName: "L2ProofVerified",
   template: proofVerified,
@@ -233,6 +237,21 @@ const GENERIC = {
     }),
 };
 type Family = typeof ROLLUP | typeof GOVERNANCE | typeof GENERIC;
+
+// How the middle log of [B1, X, B3] fails, and at which block.
+const PUBLISH = {
+  kind: "publish",
+  at: B2,
+  failing: seam.failPublish,
+  message: "publish rejected",
+};
+// Block timestamps are cached for the module, so the read fails at a block no other case reads.
+const L1_READ = {
+  kind: "L1 read",
+  at: B2 + 1n,
+  failing: seam.failRead,
+  message: "L1 read failed",
+};
 
 // The generic dedupe is module-level, so every log gets a fresh logIndex.
 let nextLogIndex = 0;
@@ -282,6 +301,7 @@ beforeEach(() => {
   seam.watches.clear();
   seam.published.splice(0);
   seam.failPublish.clear();
+  seam.failRead.clear();
   for (const f of [ROLLUP, GOVERNANCE, GENERIC]) {
     seam.rows.set(heightKey(f), {
       latestPendingHeight: H0,
@@ -310,20 +330,35 @@ describe("finalized poller heights", () => {
     },
   );
 
-  // Catches a failed publish that leaves its log outside every later poll's range.
-  it.each([GOVERNANCE, GENERIC])(
-    "$family: the next poll re-reads and delivers a log whose publish failed",
-    async (f) => {
-      seam.chain.set(stream(f), logsAt(f, [B1, B2, B3]));
-      seam.failPublish.add(B2);
-      await expect(poll()).rejects.toThrow("publish rejected");
-      expect(stored(f).latestFinalizedHeight).toBeLessThan(B2);
-      seam.failPublish.clear();
+  // Catches a failed publish or L1 read that leaves its log outside every later poll's range.
+  it.each([
+    { f: ROLLUP, failure: PUBLISH },
+    { f: ROLLUP, failure: L1_READ },
+    { f: GOVERNANCE, failure: PUBLISH },
+    { f: GENERIC, failure: PUBLISH },
+  ])(
+    "$f.family: the next poll re-reads and delivers a log whose $failure.kind failed",
+    async ({ f, failure }) => {
+      seam.chain.set(stream(f), logsAt(f, [B1, failure.at, B3]));
+      failure.failing.add(failure.at);
+      await expect(poll()).rejects.toThrow(failure.message);
+      expect(stored(f).latestFinalizedHeight).toBeLessThan(failure.at);
+      failure.failing.clear();
       await poll();
-      expect([...new Set(seam.published)]).toEqual([B1, B2, B3]);
+      expect([...new Set(seam.published)]).toEqual([B1, failure.at, B3]);
       expect(stored(f).latestFinalizedHeight).toBe(CHUNK_END);
     },
   );
+
+  // Catches an invalid log, which fails on every read, holding its stream back for good.
+  it("rollup: a log that fails its schema is skipped and the stored height still advances", async () => {
+    const [first, invalid, last] = logsAt(ROLLUP, [B1, B2, B3]);
+    // No args: the schema's bigint coercion throws a TypeError, not a ZodError.
+    seam.chain.set(stream(ROLLUP), [first, { ...invalid, args: {} }, last]);
+    await poll();
+    expect(seam.published).toEqual([B1, B3]);
+    expect(stored(ROLLUP).latestFinalizedHeight).toBe(CHUNK_END);
+  });
 
   // Catches a failing stream that keeps the streams polled after it from running.
   it("a stream whose poll rejects does not hold back the streams polled after it", async () => {
