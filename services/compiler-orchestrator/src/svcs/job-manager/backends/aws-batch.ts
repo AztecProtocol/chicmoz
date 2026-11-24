@@ -318,12 +318,19 @@ const readLogStream = async (logStreamName: string): Promise<string> => {
   return messages.join("\n");
 };
 
+// Batch's documented container reason for a memory kill.
+const ranOutOfMemory = (handle?: BatchJobHandle): boolean =>
+  handle?.containerReason?.startsWith("OutOfMemoryError") === true;
+
 const readLogs = async (state: JobState): Promise<JobLogs> => {
   try {
     const described = await describeJob(state);
     const handle = described?.handle;
     if (!handle?.logStreamName) {
-      return { diagnostics: handle?.statusReason };
+      return {
+        diagnostics: handle?.statusReason,
+        outOfMemory: ranOutOfMemory(handle),
+      };
     }
 
     const fullLog = await readLogStream(handle.logStreamName);
@@ -346,6 +353,7 @@ const readLogs = async (state: JobState): Promise<JobLogs> => {
       compileLog: compileLog.trim() || undefined,
       readerLog,
       diagnostics: diagnostics || undefined,
+      outOfMemory: ranOutOfMemory(handle),
     };
   } catch (error) {
     logger.warn(

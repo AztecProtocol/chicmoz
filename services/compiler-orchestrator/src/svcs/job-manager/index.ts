@@ -105,7 +105,8 @@ const detectFailureStage = ({
   podStatusOutput?: string;
   fallbackStage?: SourceVerificationFailureStage;
 }): SourceVerificationFailureStage => {
-  const combinedOutput = [compileLog, readerLog, podStatusOutput, reason]
+  const jobOutput = [compileLog, readerLog].filter(Boolean).join("\n");
+  const combinedOutput = [jobOutput, podStatusOutput, reason]
     .filter(Boolean)
     .join("\n");
 
@@ -114,20 +115,22 @@ const detectFailureStage = ({
   }
 
   if (
-    /ErrImagePull|ImagePullBackOff|InvalidImageName|Back-off pulling image|Failed to pull image|pull access denied|manifest unknown|no such image|failed to resolve reference/i.test(
+    /ErrImagePull|ImagePullBackOff|InvalidImageName|Back-off pulling image|Failed to pull image|pull access denied|manifest unknown|no such image|failed to resolve reference|CannotPullContainerError/i.test(
       combinedOutput,
     )
   ) {
     return "IMAGE_RESOLUTION";
   }
 
-  if (/Invalid git ref|Invalid sub-path/i.test(combinedOutput)) {
+  // Backend text names the job's containers and image, so the stages below
+  // are read from the job's own output only.
+  if (/Invalid git ref|Invalid sub-path/i.test(jobOutput)) {
     return "INPUT_VALIDATION";
   }
 
   if (
     /Selected artifact is not transpiled|Compiled artifact is still not transpiled|Transpiler doesn't know how to process|thread '\s*<unnamed>' panicked at .*transpile/i.test(
-      combinedOutput,
+      jobOutput,
     )
   ) {
     return "TRANSPILATION";
@@ -135,7 +138,7 @@ const detectFailureStage = ({
 
   if (
     /No compiled artifact found after compile|No compiled artifact found after workspace compile|NO_ARTIFACT_FOUND|Could not parse artifact from job pod logs/i.test(
-      combinedOutput,
+      jobOutput,
     )
   ) {
     return "ARTIFACT_DISCOVERY";
@@ -143,7 +146,7 @@ const detectFailureStage = ({
 
   if (
     /pathspec|reference is not a tree|did not match any file\(s\) known to git|can't cd to/i.test(
-      combinedOutput,
+      jobOutput,
     )
   ) {
     return "CHECKOUT";
@@ -151,7 +154,7 @@ const detectFailureStage = ({
 
   if (
     /fatal: repository|repository .* not found|Could not resolve host|unable to access|Authentication failed/i.test(
-      combinedOutput,
+      jobOutput,
     )
   ) {
     return "CLONE";
@@ -176,7 +179,7 @@ const detectFailureStage = ({
 
   if (
     /Compiling contract|Running compile command|bb exited with code|nargo|compile/i.test(
-      combinedOutput,
+      jobOutput,
     )
   ) {
     return "COMPILE";
@@ -217,6 +220,10 @@ const summarizeFailure = (
 
   return "Internal compilation error";
 };
+
+/** Public output for a failure inside this service; its cause goes only to the log. */
+const internalFailureOutput = (jobId: string): string =>
+  `The compile job failed because of an internal error (job id ${jobId}). Please try again later.`;
 
 const buildCompilerImage = (aztecVersion: string): string => {
   const normalizedAztecVersion = aztecVersion.replace(/^v/, "");
@@ -407,17 +414,37 @@ const resolveCompileInputs = async (
 const buildCompileOutput = ({
   compileLog,
   readerLog,
-  podStatusOutput,
-}: JobLogs & { podStatusOutput?: string }): string | undefined => {
+}: JobLogs): string | undefined => {
   const sections = [
     compileLog ? `=== compiler log ===\n${compileLog.trim()}` : undefined,
     readerLog ? `=== reader log ===\n${readerLog.trim()}` : undefined,
-    podStatusOutput
-      ? `=== pod status ===\n${podStatusOutput.trim()}`
-      : undefined,
   ].filter(Boolean);
 
   return trimCompileOutput(sections.join("\n\n"));
+};
+
+const OUT_OF_MEMORY_LINE = "The compile job ran out of memory.";
+
+/**
+ * A failed job's public output: its own logs, else the stage's fixed text
+ * when the backend reported only diagnostics, which are never published.
+ */
+const buildFailedJobOutput = (
+  state: JobState,
+  logs: JobLogs,
+  failureStage: SourceVerificationFailureStage,
+): string | undefined => {
+  let output = buildCompileOutput(logs);
+  if (!output && logs.diagnostics) {
+    output =
+      failureStage === "INTERNAL"
+        ? internalFailureOutput(state.jobId)
+        : summarizeFailure(failureStage);
+  }
+  if (!logs.outOfMemory) {
+    return output;
+  }
+  return output ? `${output}\n\n${OUT_OF_MEMORY_LINE}` : OUT_OF_MEMORY_LINE;
 };
 
 const sourceRecordSchema = z.object({
@@ -566,7 +593,9 @@ const handleJobFailure = async (state: JobState): Promise<void> => {
         ? ("clone_failed" as const)
         : ("compilation_failed" as const);
 
-  logger.warn(`Job failed: ${state.backendJobName}, reason: ${reason}`);
+  logger.warn(
+    `Job failed: jobId=${state.jobId} backendJobName=${state.backendJobName} reason=${reason} diagnostics=${logs.diagnostics ?? "(none)"}`,
+  );
 
   try {
     await publishMessage("COMPILE_SOURCE_RESULT_EVENT", {
@@ -577,10 +606,7 @@ const handleJobFailure = async (state: JobState): Promise<void> => {
       aztecVersion: state.aztecVersion,
       error: summarizeFailure(failureStage),
       failureStage,
-      compileOutput: buildCompileOutput({
-        ...logs,
-        podStatusOutput: logs.diagnostics,
-      }),
+      compileOutput: buildFailedJobOutput(state, logs, failureStage),
     });
   } catch (e) {
     logger.error(
@@ -729,7 +755,10 @@ export const handleCompileRequest = async (
         aztecVersion,
         error: summarizeFailure(failureStage),
         failureStage,
-        compileOutput: trimCompileOutput(message),
+        compileOutput:
+          failureStage === "INTERNAL"
+            ? internalFailureOutput(event.jobId)
+            : trimCompileOutput(message),
       });
     } catch (publishError) {
       logger.error(
@@ -777,9 +806,7 @@ export const handleCompileRequest = async (
         aztecVersion: state.aztecVersion,
         error: summarizeFailure("INTERNAL"),
         failureStage: "INTERNAL",
-        compileOutput: trimCompileOutput(
-          `Failed to create compile job: ${(e as Error).message}`,
-        ),
+        compileOutput: internalFailureOutput(event.jobId),
       });
     } catch (publishError) {
       logger.error(

@@ -11,7 +11,13 @@ const mocks = vi.hoisted(() => {
   process.env.AWS_BATCH_JOB_QUEUE = "compile-queue";
   process.env.AWS_BATCH_EXECUTION_ROLE_ARN =
     "arn:aws:iam::000000000000:role/compile";
-  return { createNamespacedJob: vi.fn(), batchSend: vi.fn() };
+  return {
+    createNamespacedJob: vi.fn(),
+    listNamespacedPod: vi.fn(),
+    readNamespacedPod: vi.fn(),
+    readNamespacedPodLog: vi.fn(),
+    batchSend: vi.fn(),
+  };
 });
 
 vi.mock("../../src/logger.js", () => ({
@@ -23,7 +29,12 @@ vi.mock("@kubernetes/client-node", () => ({
   KubeConfig: class {
     loadFromDefault = vi.fn();
     makeApiClient() {
-      return { createNamespacedJob: mocks.createNamespacedJob };
+      return {
+        createNamespacedJob: mocks.createNamespacedJob,
+        listNamespacedPod: mocks.listNamespacedPod,
+        readNamespacedPod: mocks.readNamespacedPod,
+        readNamespacedPodLog: mocks.readNamespacedPodLog,
+      };
     }
   },
 }));
@@ -233,5 +244,64 @@ describe("job spec", () => {
     expect(pathsContaining(input, subPath)).toEqual([
       "containerOverrides.environment.4.value",
     ]);
+  });
+});
+
+describe("memory kill", () => {
+  it("reads a Kubernetes memory kill from a container's terminated reason", async () => {
+    mocks.listNamespacedPod.mockResolvedValue({
+      items: [{ metadata: { name: "compile-pod" } }],
+    });
+    mocks.readNamespacedPodLog.mockResolvedValue("");
+    mocks.readNamespacedPod.mockResolvedValue({
+      status: {
+        initContainerStatuses: [
+          { state: { terminated: { reason: "OOMKilled" } } },
+        ],
+      },
+    });
+    const backend = createK8sBackend();
+    await backend.init();
+
+    expect(await backend.readLogs(jobState())).toMatchObject({
+      outOfMemory: true,
+    });
+  });
+
+  it("reads an AWS Batch memory kill from the container's reason", async () => {
+    mocks.batchSend.mockImplementation(
+      (command: { constructor: { name: string } }) => {
+        switch (command.constructor.name) {
+          case "DescribeJobDefinitionsCommand":
+            return Promise.resolve({ jobDefinitions: [] });
+          case "RegisterJobDefinitionCommand":
+            return Promise.resolve({ jobDefinitionArn: "arn:job-definition" });
+          case "SubmitJobCommand":
+            return Promise.resolve({ jobId: "batch-job" });
+          case "DescribeJobsCommand":
+            return Promise.resolve({
+              jobs: [
+                {
+                  status: "FAILED",
+                  container: {
+                    reason:
+                      "OutOfMemoryError: Container killed due to memory usage",
+                  },
+                },
+              ],
+            });
+          default:
+            return Promise.reject(
+              new Error(`unexpected ${command.constructor.name}`),
+            );
+        }
+      },
+    );
+    const backend = createAwsBatchBackend();
+    await backend.init();
+    const state = jobState();
+    await backend.launch(state, scripts);
+
+    expect(await backend.readLogs(state)).toMatchObject({ outOfMemory: true });
   });
 });

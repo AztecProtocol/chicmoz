@@ -40,13 +40,12 @@ const mocks = vi.hoisted(() => ({
     getConfigStr: vi.fn(),
   },
   execFile: vi.fn(),
+  logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
   publishMessage: vi.fn(),
   startSubscribe: vi.fn(),
 }));
 
-vi.mock("../../src/logger.js", () => ({
-  logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
-}));
+vi.mock("../../src/logger.js", () => ({ logger: mocks.logger }));
 vi.mock("../../src/svcs/job-manager/backends/k8s.js", () => ({
   createK8sBackend: () => mocks.backend,
 }));
@@ -94,6 +93,11 @@ const publishedResults = () =>
     expect(topic).toBe("COMPILE_SOURCE_RESULT_EVENT");
     return payload as Record<string, unknown>;
   });
+
+const loggedLines = () =>
+  Object.values(mocks.logger).flatMap((log) =>
+    log.mock.calls.map((args) => args.map(String).join(" ")),
+  );
 
 /**
  * Starts a job, lets the backend report it finished with `logs`, and returns
@@ -188,6 +192,7 @@ afterEach(async () => {
   await jobManager?.jobManagerService.shutdown();
   jobManager = undefined;
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.resetAllMocks();
   // The job manager keeps its active jobs in module state.
   vi.resetModules();
@@ -284,21 +289,67 @@ describe("compile request handler", () => {
     ]);
   });
 
-  it("publishes a failed result when the backend cannot start the job", async () => {
-    mocks.backend.launch.mockRejectedValue(
-      new Error("jobs.batch is forbidden"),
+  const MARKER = "synthetic-internal-marker";
+
+  it.each([
+    {
+      failure: "the backend cannot start the job",
+      fail: () =>
+        mocks.backend.launch.mockRejectedValue(new Error(`launch ${MARKER}`)),
+      aztecVersion: "v6.1.0",
+    },
+    {
+      failure: "the job's inputs cannot be prepared",
+      fail: () => vi.stubEnv("TMPDIR", `/nonexistent-${MARKER}`),
+      aztecVersion: undefined,
+    },
+  ])(
+    "publishes a fixed message and logs the cause once when $failure",
+    async ({ fail, aztecVersion }) => {
+      fail();
+      const handler = await subscribedHandler();
+      const event = request();
+
+      await expect(handler.cb(event)).resolves.toBeUndefined();
+
+      const results = publishedResults();
+      expect(results).toEqual([
+        expect.objectContaining({
+          jobId: event.jobId,
+          status: "compilation_failed",
+          error: "Internal compilation error",
+          failureStage: "INTERNAL",
+          aztecVersion,
+        }),
+      ]);
+      expect(results[0].compileOutput).toContain(event.jobId);
+      expect(JSON.stringify(results[0])).not.toContain(MARKER);
+      const causeLines = loggedLines().filter((line) => line.includes(MARKER));
+      expect(causeLines).toHaveLength(1);
+      expect(causeLines[0]).toContain(event.jobId);
+    },
+  );
+
+  it("publishes git's own output when the clone fails", async () => {
+    const gitOutput =
+      "Command failed: git clone\nfatal: repository 'https://github.com/example/aztec-token/' not found";
+    mocks.execFile.mockImplementation(
+      (
+        _file: string,
+        _args: string[],
+        _options: unknown,
+        callback: GitCallback,
+      ) => callback(new Error(gitOutput)),
     );
     const handler = await subscribedHandler();
-    const event = request();
 
-    await expect(handler.cb(event)).resolves.toBeUndefined();
+    await handler.cb(request());
 
     expect(publishedResults()).toEqual([
       expect.objectContaining({
-        jobId: event.jobId,
-        status: "compilation_failed",
-        failureStage: "INTERNAL",
-        aztecVersion: "v6.1.0",
+        status: "clone_failed",
+        failureStage: "CLONE",
+        compileOutput: `Failed to clone repository: ${gitOutput}`,
       }),
     ]);
   });
@@ -317,6 +368,76 @@ describe("compile request handler", () => {
       error: "Compilation job timed out",
     });
   });
+
+  const DIAGNOSTICS_MARKER = "synthetic-diagnostics-marker";
+
+  const expectDiagnosticsLoggedOnly = (result: Record<string, unknown>) => {
+    expect(JSON.stringify(result)).not.toContain(DIAGNOSTICS_MARKER);
+    const lines = loggedLines().filter((line) =>
+      line.includes(DIAGNOSTICS_MARKER),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(String(result.jobId));
+  };
+
+  it.each([
+    { killedForMemory: false, suffix: "" },
+    {
+      killedForMemory: true,
+      suffix: "\n\nThe compile job ran out of memory.",
+    },
+  ])(
+    "publishes a failed job's own logs, not its diagnostics (killed for memory: $killedForMemory)",
+    async ({ killedForMemory, suffix }) => {
+      mocks.backend.getFailureReason.mockResolvedValue("unknown failure");
+      const compileLog = "===STAGE:COMPILE===\nCompiling contract...";
+
+      const result = await finishJob(
+        {
+          compileLog,
+          diagnostics: `Error\n${DIAGNOSTICS_MARKER}`,
+          ...(killedForMemory ? { outOfMemory: true } : {}),
+        },
+        "failed",
+      );
+
+      expect(result).toMatchObject({
+        status: "compilation_failed",
+        failureStage: "COMPILE",
+        error: "Compilation failed",
+        compileOutput: `=== compiler log ===\n${compileLog}${suffix}`,
+      });
+      expectDiagnosticsLoggedOnly(result);
+    },
+  );
+
+  it.each([
+    {
+      diagnostics: `containers with incomplete status: [compiler]\n${DIAGNOSTICS_MARKER}`,
+      failureStage: "INTERNAL",
+      error: "Internal compilation error",
+    },
+    {
+      diagnostics: `CannotPullContainerError: ${DIAGNOSTICS_MARKER}`,
+      failureStage: "IMAGE_RESOLUTION",
+      error: "Compiler image resolution failed",
+    },
+  ])(
+    "publishes the fixed $failureStage text for a failed job with only diagnostics",
+    async ({ diagnostics, failureStage, error }) => {
+      mocks.backend.getFailureReason.mockResolvedValue("unknown failure");
+
+      const result = await finishJob({ diagnostics }, "failed");
+
+      expect(result).toMatchObject({ failureStage, error });
+      if (failureStage === "INTERNAL") {
+        expect(result.compileOutput).toContain(String(result.jobId));
+      } else {
+        expect(result.compileOutput).toBe(error);
+      }
+      expectDiagnosticsLoggedOnly(result);
+    },
+  );
 });
 
 describe("job output reader", () => {
