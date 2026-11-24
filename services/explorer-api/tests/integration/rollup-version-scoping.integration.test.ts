@@ -24,6 +24,9 @@ const READS = [
   "blocks search by height",
   "UI blocks table",
   "UI tx effects table",
+  "latest tx effects",
+  "tx effects of a height",
+  "tx effect at a height and index",
   "fee juice deposits",
   "fee juice deposits of a recipient",
   "L1 contract events",
@@ -168,6 +171,9 @@ describe("reads scoped to the current rollup version on a real database", () => 
       }
       return dropped;
     };
+    const txEffects = await import(
+      "../../src/svcs/database/controllers/l2TxEffect/get-tx-effect.js"
+    );
 
     const deposit = (l1ContractAddress: string, n: number, to = RECIPIENT) => ({
       l1ContractAddress,
@@ -228,6 +234,28 @@ describe("reads scoped to the current rollup version on a real database", () => 
         read: async () =>
           (await ui.getTxEffectForUiTable({ getType: 0 })).map((t) => t.txHash),
         expected: txs(current),
+      },
+      // Orphans stay in, flagged isOrphaned.
+      "latest tx effects": {
+        read: async () =>
+          (await txEffects.getLatestTxEffects()).map((t) => t.txHash),
+        expected: txs([...current, replaced]),
+      },
+      "tx effects of a height": {
+        read: async () =>
+          (await txEffects.getTxEffectsByBlockHeight(2n)).map((t) => t.txHash),
+        expected: txs(current.slice(1, 2)),
+      },
+      "tx effect at a height and index": {
+        read: async () =>
+          Promise.all(
+            [1n, 4n].map(
+              async (height) =>
+                (await txEffects.getTxEffectByBlockHeightAndIndex(height, 0))
+                  ?.txHash ?? "none",
+            ),
+          ),
+        expected: [...txs(current.slice(0, 1)), "none"],
       },
       "fee juice deposits": {
         read: async () =>
