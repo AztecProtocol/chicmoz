@@ -6,6 +6,7 @@ import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
 } from "./support/explorer-api.js";
+import { governanceSignalCast as SIGNAL } from "./support/fixtures.js";
 import { producerFrameData } from "./support/recorded-blocks.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -16,18 +17,6 @@ const l1Frame = (name: string, eventType: string) =>
   >;
 const VOTE = l1Frame("governance-vote-cast", "L1_GOVERNANCE_VOTE_CAST_EVENT");
 const EVENT = l1Frame("rollup-validator-queued", "L1_GENERIC_CONTRACT_EVENT");
-// Constructed: no SignalCast log is recorded. A signal for the payload of the
-// recorded governance proposal 8.
-const SIGNAL = {
-  payloadAddress: "0x5e9d4e98a9258951fcbbe644d6cbf122845f93be",
-  round: 7n,
-  signaler: "0x01c7d4ca153748d2377968fef22894cb162e9480",
-  l1BlockNumber: 11969300n,
-  l1BlockHash: `0x${"ab".repeat(32)}`,
-  l1BlockTimestamp: 1792669200000,
-  l1TransactionHash: `0x${"cd".repeat(32)}`,
-  l1LogIndex: 5,
-};
 // Constructed: the recorded event without its log position, in an earlier
 // hour. Delivered once, pending only: without a position its copies are not
 // recognised as one log.
@@ -44,6 +33,7 @@ const READS = [
   "signals",
   "signals of a round",
   "signals of a payload",
+  "signal count of the payload's round",
   "L1 contract events",
   "L1 contract events per hour",
   "L1 contract events without a log position",
@@ -123,6 +113,13 @@ describe("an L1 log is read once, the finalized copy once it is stored", () => {
         read: async () =>
           finality(await queries.getSignalsByPayload(SIGNAL.payloadAddress)),
         ...listed,
+      },
+      "signal count of the payload's round": {
+        read: async () => [
+          (await queries.getPayloadRound(SIGNAL.payloadAddress, SIGNAL.round))
+            ?.signalCount,
+        ],
+        ...counted(1n),
       },
       "L1 contract events": {
         read: async () =>

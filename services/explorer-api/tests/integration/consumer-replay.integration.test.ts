@@ -12,6 +12,7 @@ import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
 } from "./support/explorer-api.js";
+import { governanceSignalCast } from "./support/fixtures.js";
 import {
   producerFrameData,
   recordedFrameData,
@@ -252,6 +253,16 @@ const CASES: ReplayCase[] = [
     seed: seedProposal,
     tables: (s) => [{ table: s.l1GovernanceProposalsTable }],
     finality: "ignored",
+  },
+  {
+    consumer: "governance signal cast",
+    handler: governance("governanceSignalCastHandler"),
+    message: () => governanceSignalCast,
+    tables: (s) => [
+      { table: s.l1GovernanceSignalsTable },
+      { table: s.l1GovernancePayloadRoundsTable },
+    ],
+    finality: "stored",
   },
 ];
 

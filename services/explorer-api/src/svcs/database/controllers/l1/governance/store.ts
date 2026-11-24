@@ -305,13 +305,18 @@ export const storeGovernanceSignalCast = async (
       ],
     });
 
-  // Upsert payload round with increment
+  // Recounted from the stored signals, one per log whichever of its copies are
+  // stored, so a redelivery or a log's second copy changes nothing.
+  const signalCount = sql`(select count(distinct (${l1GovernanceSignalsTable.l1TransactionHash}, ${l1GovernanceSignalsTable.l1LogIndex})) from ${l1GovernanceSignalsTable} where ${and(
+    eq(l1GovernanceSignalsTable.payloadAddress, event.payloadAddress),
+    eq(l1GovernanceSignalsTable.round, event.round),
+  )})`;
   await db()
     .insert(l1GovernancePayloadRoundsTable)
     .values({
       payloadAddress: event.payloadAddress,
       round: event.round,
-      signalCount: 1n,
+      signalCount,
     })
     .onConflictDoUpdate({
       target: [
@@ -319,7 +324,7 @@ export const storeGovernanceSignalCast = async (
         l1GovernancePayloadRoundsTable.round,
       ],
       set: {
-        signalCount: sql`${l1GovernancePayloadRoundsTable.signalCount} + 1`,
+        signalCount: sql`excluded.${sql.identifier(l1GovernancePayloadRoundsTable.signalCount.name)}`,
       },
     });
 };
