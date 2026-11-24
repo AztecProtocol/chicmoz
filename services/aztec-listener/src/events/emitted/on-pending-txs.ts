@@ -153,9 +153,12 @@ const extractGasSettings = (tx: Tx) => {
   };
 };
 
+/** Returns the number of stored txs read, or undefined if that read failed. */
 export const onPendingTxs = async (pendingTxs: Tx[]) => {
+  let storedTxCount: number | undefined;
   try {
     const storedTxs = await txsController.getTxs();
+    storedTxCount = storedTxs.length;
 
     const currentPendingTxs: ChicmozL2PendingTx[] = await Promise.all(
       pendingTxs.map((tx) => {
@@ -280,4 +283,5 @@ export const onPendingTxs = async (pendingTxs: Tx[]) => {
   } catch (error) {
     logger.error("Error handling pending txs:", error);
   }
+  return storedTxCount;
 };

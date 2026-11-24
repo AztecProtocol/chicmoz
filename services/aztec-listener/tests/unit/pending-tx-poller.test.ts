@@ -183,7 +183,7 @@ describe("onPendingTxs Function", () => {
     mockTxsController.storeOrUpdate.mockResolvedValue(undefined);
 
     // Execute with empty mempool
-    await onPendingTxs([]);
+    expect(await onPendingTxs([])).toBe(storedTxs.length);
 
     // Verify: Only old transaction marked as suspected_dropped (beyond grace period)
     expect(mockTxsController.storeOrUpdate).toHaveBeenCalledWith(
@@ -238,11 +238,12 @@ describe("onPendingTxs Function", () => {
       new Error("Database connection failed"),
     );
 
-    await onPendingTxs([
+    const storedTxCount = await onPendingTxs([
       // @ts-expect-error - Mock object doesn't implement full Tx interface
       createMockAztecTx("test-tx")
     ]);
 
+    expect(storedTxCount).toBeUndefined();
     expect(mockTxsController.storeOrUpdate).not.toHaveBeenCalled();
     expect(mockMessageBus.publishMessage).not.toHaveBeenCalled();
   });
