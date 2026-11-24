@@ -19,7 +19,10 @@ export type JobScripts = {
 export type JobLogs = {
   compileLog?: string;
   readerLog?: string;
+  /** The backend's own status text: read for the failure stage and logged, never published. */
   diagnostics?: string;
+  /** The backend's structured record says a container of the job was killed for memory. */
+  outOfMemory?: boolean;
 };
 
 /**

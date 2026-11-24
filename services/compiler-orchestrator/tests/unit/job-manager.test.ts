@@ -368,6 +368,76 @@ describe("compile request handler", () => {
       error: "Compilation job timed out",
     });
   });
+
+  const DIAGNOSTICS_MARKER = "synthetic-diagnostics-marker";
+
+  const expectDiagnosticsLoggedOnly = (result: Record<string, unknown>) => {
+    expect(JSON.stringify(result)).not.toContain(DIAGNOSTICS_MARKER);
+    const lines = loggedLines().filter((line) =>
+      line.includes(DIAGNOSTICS_MARKER),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(String(result.jobId));
+  };
+
+  it.each([
+    { killedForMemory: false, suffix: "" },
+    {
+      killedForMemory: true,
+      suffix: "\n\nThe compile job ran out of memory.",
+    },
+  ])(
+    "publishes a failed job's own logs, not its diagnostics (killed for memory: $killedForMemory)",
+    async ({ killedForMemory, suffix }) => {
+      mocks.backend.getFailureReason.mockResolvedValue("unknown failure");
+      const compileLog = "===STAGE:COMPILE===\nCompiling contract...";
+
+      const result = await finishJob(
+        {
+          compileLog,
+          diagnostics: `Error\n${DIAGNOSTICS_MARKER}`,
+          ...(killedForMemory ? { outOfMemory: true } : {}),
+        },
+        "failed",
+      );
+
+      expect(result).toMatchObject({
+        status: "compilation_failed",
+        failureStage: "COMPILE",
+        error: "Compilation failed",
+        compileOutput: `=== compiler log ===\n${compileLog}${suffix}`,
+      });
+      expectDiagnosticsLoggedOnly(result);
+    },
+  );
+
+  it.each([
+    {
+      diagnostics: `containers with incomplete status: [compiler]\n${DIAGNOSTICS_MARKER}`,
+      failureStage: "INTERNAL",
+      error: "Internal compilation error",
+    },
+    {
+      diagnostics: `CannotPullContainerError: ${DIAGNOSTICS_MARKER}`,
+      failureStage: "IMAGE_RESOLUTION",
+      error: "Compiler image resolution failed",
+    },
+  ])(
+    "publishes the fixed $failureStage text for a failed job with only diagnostics",
+    async ({ diagnostics, failureStage, error }) => {
+      mocks.backend.getFailureReason.mockResolvedValue("unknown failure");
+
+      const result = await finishJob({ diagnostics }, "failed");
+
+      expect(result).toMatchObject({ failureStage, error });
+      if (failureStage === "INTERNAL") {
+        expect(result.compileOutput).toContain(String(result.jobId));
+      } else {
+        expect(result.compileOutput).toBe(error);
+      }
+      expectDiagnosticsLoggedOnly(result);
+    },
+  );
 });
 
 describe("job output reader", () => {

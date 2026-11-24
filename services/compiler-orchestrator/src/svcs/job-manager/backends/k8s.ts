@@ -223,7 +223,7 @@ const readJobLogs = async (state: JobState): Promise<JobLogs> => {
 
 const getPodFailureDiagnostics = async (
   state: JobState,
-): Promise<string | undefined> => {
+): Promise<Pick<JobLogs, "diagnostics" | "outOfMemory">> => {
   try {
     const podName = await getJobPodName(state);
     const pod = await coreApi.readNamespacedPod({
@@ -231,10 +231,16 @@ const getPodFailureDiagnostics = async (
       namespace: K8S_NAMESPACE,
     });
 
-    const statusMessages = [
+    const containerStatuses = [
       ...(pod.status?.initContainerStatuses ?? []),
       ...(pod.status?.containerStatuses ?? []),
-    ].flatMap((containerStatus) =>
+    ];
+    const outOfMemory = containerStatuses.some(
+      (containerStatus) =>
+        containerStatus.state?.terminated?.reason === "OOMKilled" ||
+        containerStatus.lastState?.terminated?.reason === "OOMKilled",
+    );
+    const statusMessages = containerStatuses.flatMap((containerStatus) =>
       [
         containerStatus.state?.waiting?.reason,
         containerStatus.state?.waiting?.message,
@@ -252,12 +258,12 @@ const getPodFailureDiagnostics = async (
     const diagnostics = [...statusMessages, ...conditionMessages]
       .join("\n")
       .trim();
-    return diagnostics || undefined;
+    return { diagnostics: diagnostics || undefined, outOfMemory };
   } catch (error) {
     logger.warn(
       `Failed to read pod diagnostics for jobId=${state.jobId}: ${(error as Error).message}`,
     );
-    return undefined;
+    return {};
   }
 };
 
@@ -403,8 +409,8 @@ export const createK8sBackend = (): CompileBackend => ({
   checkStatus: (state: JobState) => checkJobStatus(state),
   readLogs: async (state: JobState): Promise<JobLogs> => {
     const logs = await readJobLogs(state);
-    const diagnostics = await getPodFailureDiagnostics(state);
-    return { ...logs, diagnostics };
+    const podStatus = await getPodFailureDiagnostics(state);
+    return { ...logs, ...podStatus };
   },
   getFailureReason: (state: JobState) => getJobFailureReason(state),
   recoverActiveJobs: () => recoverActiveJobsFromK8s(),
