@@ -179,7 +179,9 @@ const recorded = (name: string) =>
   loadFixture("testnet", "l1-log", name).data.log;
 const proofVerified = recorded("proof-verified-33608");
 
-const H0 = 12_200_000n; // stored before each test, above the rollup's genesis
+// Stored before each test, above the rollup's genesis; also the finalized
+// block when a live watcher starts, so it resumes after the stored height.
+const H0 = 12_200_000n;
 const TIP = H0 + 800n; // finalized tip: the first poll reads one 500-block chunk
 const CHUNK_END = H0 + 501n;
 const [B1, B2, B3] = [H0 + 100n, H0 + 200n, H0 + 300n];
@@ -194,7 +196,7 @@ const ROLLUP = {
   contract: "rollup" as const,
   eventName: "L2ProofVerified",
   template: proofVerified,
-  watch: () => watchRollupL2ProofVerified({ contracts, latestHeight: TIP }),
+  watch: () => watchRollupL2ProofVerified({ contracts, latestHeight: H0 }),
 };
 const GOVERNANCE = {
   family: "governance GovernanceProposerUpdated (batch throws)",
@@ -214,7 +216,7 @@ const GOVERNANCE = {
       contract: contracts.governance,
       contractName: "governance",
       eventName: "GovernanceProposerUpdated",
-      latestHeight: TIP,
+      latestHeight: H0,
       callbacksFactory: governanceProposerUpdatedEventCallbacks,
     }),
 };
@@ -227,7 +229,7 @@ const GENERIC = {
     watchContractEventsGeneric({
       name: "rollup",
       contract: contracts.rollup,
-      latestHeight: TIP,
+      latestHeight: H0,
     }),
 };
 type Family = typeof ROLLUP | typeof GOVERNANCE | typeof GENERIC;
