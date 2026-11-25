@@ -110,13 +110,15 @@ export const L2_BLOCK_RANGE_REQUEST_QUEUE_HIGH_WATER = z.coerce
   .default(5)
   .parse(process.env.L2_BLOCK_RANGE_REQUEST_QUEUE_HIGH_WATER);
 
+const HOUR_MS = 60 * 60 * 1000;
+
 export const DROPPED_TX_VERIFICATION_INTERVAL_MS = z.coerce
   .number()
-  .default(1000 * 60 * 60 * 5) // 5 minutes
+  .default(5 * HOUR_MS)
   .parse(process.env.DROPPED_TX_VERIFICATION_INTERVAL_MS);
 export const DROPPED_TX_AGE_THRESHOLD_MS = z.coerce
   .number()
-  .default(1000 * 60 * 60 * 5) // 5 minutes
+  .default(5 * HOUR_MS)
   .parse(process.env.DROPPED_TX_AGE_THRESHOLD_MS);
 export const DROPPED_TX_BLOCK_LOOKBACK = z.coerce
   .number()
