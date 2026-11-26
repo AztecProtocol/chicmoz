@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => {
       set: Record<string, unknown>;
     }>,
     inserted: [] as Array<Record<string, unknown>>,
+    insertStatements: 0,
     deleted: [] as unknown[],
     updates: [] as Array<Record<string, unknown>>,
     updateTargets: [] as unknown[][],
@@ -98,18 +99,25 @@ const mocks = vi.hoisted(() => {
         },
       }),
     }),
-    insert: () => ({
-      values: (values: Record<string, unknown>) => ({
-        onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => {
-          state.upserts.push({ values, set });
-          return Promise.resolve();
-        },
-        onConflictDoNothing: () => {
-          state.inserted.push(values);
-          return Promise.resolve();
-        },
-      }),
-    }),
+    insert: () => {
+      state.insertStatements++;
+      return {
+        values: (
+          values: Record<string, unknown> | Record<string, unknown>[],
+        ) => ({
+          onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => {
+            for (const row of [values].flat()) {
+              state.upserts.push({ values: row, set });
+            }
+            return Promise.resolve();
+          },
+          onConflictDoNothing: () => {
+            state.inserted.push(...[values].flat());
+            return Promise.resolve();
+          },
+        }),
+      };
+    },
     update: () => ({
       set: (values: Record<string, unknown>) => ({
         where: (condition: unknown) => {
@@ -178,11 +186,13 @@ const {
   buildTipBoundaryRepairRequest,
   coverageOf,
   gapRowMaxWidth,
+  recordRepairHeights,
   requestableGapFilter,
   splitRange,
 } = await import(
   "../../src/svcs/database/controllers/l2block/missing-ranges.js"
 );
+const { getDb } = await import("@chicmoz-pkg/postgres-helper");
 const { l2BlockRangeRequest } = await import(
   "../../src/events/emitted/index.js"
 );
@@ -225,6 +235,7 @@ beforeEach(() => {
     presentHeights: heights(1, TIP),
     upserts: [],
     inserted: [],
+    insertStatements: 0,
     deleted: [],
     updates: [],
     updateTargets: [],
@@ -640,5 +651,22 @@ describe("buildTipBoundaryRepairRequest", () => {
     ];
 
     await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
+  });
+});
+
+describe("recordRepairHeights", () => {
+  it("records its heights in one statement, once each", async () => {
+    await recordRepairHeights(getDb(), [5n, 6n, 5n]);
+
+    expect(mocks.state.insertStatements).toBe(1);
+    expect(
+      mocks.state.upserts.map(({ values }) => [
+        values.reason,
+        values.fromHeight,
+      ]),
+    ).toEqual([
+      ["reorg_repair", 5],
+      ["reorg_repair", 6],
+    ]);
   });
 });

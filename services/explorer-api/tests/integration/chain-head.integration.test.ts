@@ -206,6 +206,22 @@ describe("the canonical chain on a real database", () => {
         });
         await producer.disconnect();
         await handled;
+        // Read once the broker holds the commit: a member lost before it
+        // would have the message delivered again.
+        const committedBy = Date.now() + 30_000;
+        for (;;) {
+          const offsets = await admin.fetchOffsets({
+            groupId,
+            topics: [topic],
+          });
+          if (offsets[0]?.partitions[0]?.offset === "1") {
+            break;
+          }
+          if (Date.now() > committedBy) {
+            throw new Error(`group ${groupId} never committed the message`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         // Leaving the group below rebalances it too.
         return { ...outcome };
       } finally {
@@ -622,7 +638,7 @@ describe("the canonical chain on a real database", () => {
       ]);
     }, 300_000);
 
-    it("throws, changing nothing, on more canonical blocks above a tip than the bound", async () => {
+    it("throws, changing nothing, on more canonical blocks above a tip than the bound, and heartbeats through demoting exactly the bound", async () => {
       const version = freshVersion();
       const from = 200_000n;
       await bareChain({ version, from: from + 1n, count: walkBound + 1 });
@@ -633,6 +649,19 @@ describe("the canonical chain on a real database", () => {
       );
       expect(await reads.stateOf(block.hash)).toBe("absent");
       expect(await reads.chainOf(version)).toHaveLength(walkBound + 1);
+
+      // No walk to heartbeat in: one replaced block, the bound above the tip.
+      const replacing = await buildBlock(from + 1n, [freshTxHash()], {
+        version,
+      });
+      let beats = 0;
+      await orderedWith(orderedEvent(replacing), () => {
+        beats++;
+        return Promise.resolve();
+      });
+
+      expect(await reads.chainOf(version)).toEqual(heads([replacing]));
+      expect(beats).toBeGreaterThan(0);
     }, 300_000);
 
     it("rethrows a chain lock wait over 10 s", async () => {

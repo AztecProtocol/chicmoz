@@ -92,42 +92,54 @@ const upsertOpenGaps = async ({
   resetOnReopen?: boolean;
   executor?: ReturnType<typeof db>;
 }) => {
-  for (const range of ranges) {
-    const values = {
-      id: gapId({ ...range, reason }),
-      l2NetworkId: L2_NETWORK_ID,
-      fromHeight: range.from,
-      toHeight: range.to,
-      reason,
-      statusHint: range.statusHint,
-      status: "open" as const,
-      lastSeenAt: new Date(),
-      fulfilledAt: null,
-      lastError: null,
-    };
-
-    await executor
-      .insert(l2OpenGapTable)
-      .values(values)
-      .onConflictDoUpdate({
-        target: l2OpenGapTable.id,
-        set: {
-          status: "open",
-          lastSeenAt: values.lastSeenAt,
-          statusHint: values.statusHint,
-          fulfilledAt: null,
-          lastError: null,
-          // A row reopened after being fulfilled is a new gap: its earlier
-          // requests say nothing about it, so its backoff starts over.
-          ...(resetOnReopen
-            ? {
-                requestCount: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then 0 else ${l2OpenGapTable.requestCount} end`,
-                lastRequestedAt: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then null else ${l2OpenGapTable.lastRequestedAt} end`,
-              }
-            : {}),
-        },
-      });
+  const lastSeenAt = new Date();
+  // One row per id: a statement cannot update the same row twice.
+  const rows = [
+    ...new Map(
+      ranges.map((range) => {
+        const id = gapId({ ...range, reason });
+        return [
+          id,
+          {
+            id,
+            l2NetworkId: L2_NETWORK_ID,
+            fromHeight: range.from,
+            toHeight: range.to,
+            reason,
+            statusHint: range.statusHint,
+            status: "open" as const,
+            lastSeenAt,
+            fulfilledAt: null,
+            lastError: null,
+          },
+        ] as const;
+      }),
+    ).values(),
+  ];
+  if (rows.length === 0) {
+    return;
   }
+  await executor
+    .insert(l2OpenGapTable)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: l2OpenGapTable.id,
+      set: {
+        status: "open",
+        lastSeenAt,
+        statusHint: sql`excluded.status_hint`,
+        fulfilledAt: null,
+        lastError: null,
+        // A row reopened after being fulfilled is a new gap: its earlier
+        // requests say nothing about it, so its backoff starts over.
+        ...(resetOnReopen
+          ? {
+              requestCount: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then 0 else ${l2OpenGapTable.requestCount} end`,
+              lastRequestedAt: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then null else ${l2OpenGapTable.lastRequestedAt} end`,
+            }
+          : {}),
+      },
+    });
 };
 
 // Backoff after a gap's Nth request: interval * 2^min(N, 8), capped at 1h.

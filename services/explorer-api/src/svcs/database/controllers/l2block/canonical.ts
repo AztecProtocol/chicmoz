@@ -106,12 +106,20 @@ class TxConflict extends Error {
   }
 }
 
-const chunks = <T>(items: T[]): T[][] => {
-  const parts: T[][] = [];
+/**
+ * Runs `write` over `items` in statements of at most ROWS_PER_STATEMENT rows,
+ * heartbeating before each: KafkaJS sends at most one heartbeat per interval,
+ * so the calls cost nothing in between.
+ */
+const inStatements = async <T>(
+  change: Change,
+  items: T[],
+  write: (part: T[]) => Promise<void>,
+) => {
   for (let i = 0; i < items.length; i += ROWS_PER_STATEMENT) {
-    parts.push(items.slice(i, i + ROWS_PER_STATEMENT));
+    await change.heartbeat();
+    await write(items.slice(i, i + ROWS_PER_STATEMENT));
   }
-  return parts;
 };
 
 const step = async (change: Change) => {
@@ -217,17 +225,17 @@ const txOwners = async (dbTx: DbTx, txHashes: HexString[]) =>
         }),
       );
 
-const ownedTxs = async (dbTx: DbTx, blockHashes: HexString[]) => {
+const ownedTxs = async (change: Change, blockHashes: HexString[]) => {
   const owned: { txHash: HexString; birth: number }[] = [];
-  for (const part of chunks(blockHashes)) {
+  await inStatements(change, blockHashes, async (part) => {
     owned.push(
-      ...(await dbTx
+      ...(await change.dbTx
         .select({ txHash: txEffect.txHash, birth: txEffect.txBirthTimestamp })
         .from(txEffect)
         .innerJoin(body, eq(txEffect.bodyId, body.id))
         .where(inArray(body.blockHash, part))),
     );
-  }
+  });
   return owned;
 };
 
@@ -235,14 +243,14 @@ const demote = async (change: Change, blocks: { hash: HexString }[]) => {
   const hashes = blocks
     .map((b) => b.hash)
     .filter((hash) => !change.demoted.has(hash));
-  for (const part of chunks(hashes)) {
+  await inStatements(change, hashes, async (part) => {
     const rows = await change.dbTx
       .update(l2Block)
       .set({ orphan_timestamp: change.now, orphan_hasOrphanedParent: false })
       .where(and(inArray(l2Block.hash, part), isNull(l2Block.orphan_timestamp)))
       .returning({ hash: l2Block.hash, height: l2Block.height });
     rows.forEach((row) => change.demoted.set(row.hash, row.height));
-  }
+  });
 };
 
 const promote = async (
@@ -502,19 +510,19 @@ const recordReorg = async (change: Change) => {
       observedAt: new Date(change.now),
     })
     .returning({ id: l2ReorgTable.id });
-  for (const part of chunks(blocks)) {
+  await inStatements(change, blocks, async (part) => {
     await change.dbTx
       .insert(l2ReorgBlockTable)
       .values(part.map((b) => ({ reorgId: record.id, ...b })));
-  }
+  });
   logger.warn(
     `L2 reorg at height ${root.height}: ${blocks.length} block(s) left the chain, the lowest ${root.hash}`,
   );
 };
 
 const markDemotedTxsDropped = async (change: Change) => {
-  const orphaned = await ownedTxs(change.dbTx, [...change.demoted.keys()]);
-  for (const part of chunks(orphaned)) {
+  const orphaned = await ownedTxs(change, [...change.demoted.keys()]);
+  await inStatements(change, orphaned, async (part) => {
     await change.dbTx
       .insert(droppedTx)
       .values(
@@ -526,12 +534,12 @@ const markDemotedTxsDropped = async (change: Change) => {
         })),
       )
       .onConflictDoNothing();
-  }
+  });
 };
 
 /** A record is revived once every block it lists is stored and canonical again. */
 const reviveRecords = async (change: Change) => {
-  for (const part of chunks([...change.promoted.keys()])) {
+  await inStatements(change, [...change.promoted.keys()], async (part) => {
     await change.dbTx
       .update(l2ReorgTable)
       .set({ revivedAt: new Date(change.now) })
@@ -549,7 +557,7 @@ const reviveRecords = async (change: Change) => {
           sql`NOT EXISTS (SELECT 1 FROM ${l2ReorgBlockTable} LEFT JOIN ${l2Block} ON ${l2Block.hash} = ${l2ReorgBlockTable.hash} WHERE ${l2ReorgBlockTable.reorgId} = ${l2ReorgTable.id} AND (${l2Block.hash} IS NULL OR ${l2Block.orphan_timestamp} IS NOT NULL))`,
         ),
       );
-  }
+  });
 };
 
 const setHasOrphanedParent = async (
@@ -557,14 +565,14 @@ const setHasOrphanedParent = async (
   hashes: HexString[],
   value: boolean,
 ) => {
-  for (const part of chunks(hashes)) {
+  await inStatements(change, hashes, async (part) => {
     await change.dbTx
       .update(l2Block)
       .set({ orphan_hasOrphanedParent: value })
       .where(
         and(inArray(l2Block.hash, part), isNotNull(l2Block.orphan_timestamp)),
       );
-  }
+  });
 };
 
 /**
@@ -576,7 +584,7 @@ const refreshOrphanFlags = async (change: Change) => {
   const parent = alias(l2Block, "parent");
   const parentArchive = alias(archive, "parent_archive");
   const deadParent: HexString[] = [];
-  for (const part of chunks([...change.demoted.keys()])) {
+  await inStatements(change, [...change.demoted.keys()], async (part) => {
     const rows = await change.dbTx
       .selectDistinct({ hash: l2Block.hash })
       .from(l2Block)
@@ -595,14 +603,14 @@ const refreshOrphanFlags = async (change: Change) => {
         and(inArray(l2Block.hash, part), isNotNull(parent.orphan_timestamp)),
       );
     deadParent.push(...rows.map((r) => r.hash));
-  }
+  });
 
   const child = alias(l2Block, "child");
   const childHeader = alias(header, "child_header");
   const childLastArchive = alias(lastArchive, "child_last_archive");
   const moved = [...change.demoted.keys(), ...change.promoted.keys()];
   const liveParent: HexString[] = [];
-  for (const part of chunks(moved)) {
+  await inStatements(change, moved, async (part) => {
     const rows = await change.dbTx
       .selectDistinct({
         hash: child.hash,
@@ -628,7 +636,7 @@ const refreshOrphanFlags = async (change: Change) => {
         row.hash,
       );
     }
-  }
+  });
   await setHasOrphanedParent(change, deadParent, true);
   await setHasOrphanedParent(change, liveParent, false);
 };
@@ -640,20 +648,19 @@ const settle = async (change: Change, attached: ChicmozL2Block | undefined) => {
   }
   await markDemotedTxsDropped(change);
   const mined = new Set(
-    (await ownedTxs(change.dbTx, [...change.promoted.keys()])).map(
-      (t) => t.txHash,
-    ),
+    (await ownedTxs(change, [...change.promoted.keys()])).map((t) => t.txHash),
   );
   attached?.body.txEffects.forEach((e) => mined.add(e.txHash));
-  for (const part of chunks([...mined])) {
-    await removePendingAndDroppedTx(change.dbTx, part);
-  }
+  await inStatements(change, [...mined], (part) =>
+    removePendingAndDroppedTx(change.dbTx, part),
+  );
   await reviveRecords(change);
   await refreshOrphanFlags(change);
-  await recordRepairHeights(change.dbTx, [
-    ...change.walked.values(),
-    ...change.repairs,
-  ]);
+  await inStatements(
+    change,
+    [...new Set([...change.walked.values(), ...change.repairs])],
+    (part) => recordRepairHeights(change.dbTx, part),
+  );
 };
 
 const ownerSummary = (owners: TxOwner[]) =>
