@@ -1,5 +1,8 @@
 import { AztecNode, createAztecNodeClient } from "@aztec-labs/aztec.js/node";
-import { defaultFetch } from "@aztec-labs/foundation/json-rpc/client";
+import {
+  type JsonRpcFetch,
+  defaultFetch,
+} from "@aztec-labs/foundation/json-rpc/client";
 import { AZTEC_RPC_URLS } from "../../../environment.js";
 import { onL2RpcNodeError } from "../../../events/emitted/index.js";
 import { logger } from "../../../logger.js";
@@ -77,27 +80,24 @@ const rewriteAztecNamespaceToNode = (
   return rewriteSingleRequest(body);
 };
 
-const fetchWithV5NodeNamespaceFallback: typeof defaultFetch = async (
-  host,
-  body,
-  extraHeaders,
-  noRetry,
-) => {
-  const response = await defaultFetch(host, body, extraHeaders, noRetry);
-  if (!isMethodNotFound(response.response)) {
-    return response;
-  }
+export const withV5NodeNamespaceFallback =
+  (send: JsonRpcFetch): JsonRpcFetch =>
+  async (host, body, extraHeaders, noRetry) => {
+    const response = await send(host, body, extraHeaders, noRetry);
+    if (!isMethodNotFound(response.response)) {
+      return response;
+    }
 
-  const rewrittenBody = rewriteAztecNamespaceToNode(body);
-  if (!rewrittenBody) {
-    return response;
-  }
+    const rewrittenBody = rewriteAztecNamespaceToNode(body);
+    if (!rewrittenBody) {
+      return response;
+    }
 
-  logger.warn(
-    "Aztec RPC node rejected aztec_* namespace; retrying request with node_* namespace",
-  );
-  return await defaultFetch(host, rewrittenBody, extraHeaders, noRetry);
-};
+    logger.warn(
+      "Aztec RPC node rejected aztec_* namespace; retrying request with node_* namespace",
+    );
+    return await send(host, rewrittenBody, extraHeaders, noRetry);
+  };
 
 const resetPools = () => {
   logger.info(
@@ -118,7 +118,7 @@ export const initPool = () => {
       name: node.name,
       url: node.url,
       instance: createAztecNodeClient(node.url, {
-        fetch: fetchWithV5NodeNamespaceFallback,
+        fetch: withV5NodeNamespaceFallback(defaultFetch),
       }),
     };
   });
@@ -146,6 +146,8 @@ export const getRpcNode = (): RpcNode => {
 export const getNodeUrls = (): string[] => {
   return onlinePool.map((node) => node.url);
 };
+
+export const getOnlineRpcNodes = (): RpcNode[] => [...onlinePool];
 
 export const checkValidatorStats = async () => {
   for (const node of onlinePool) {
