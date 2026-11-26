@@ -70,6 +70,7 @@ export type StickySourceConfig = {
 type PassBounds = { finalized: L2BlockId; floor: number | undefined };
 /** `proposed` is the tip the election's probe showed. */
 type Pin = { node: RpcNode; bounds: PassBounds; proposed: L2BlockId };
+type Bench = { until: number } | { tip: L2BlockId };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
 type Fault = {
@@ -198,19 +199,21 @@ const blockDataFault = async (query: BlockQuery, header: BlockHeader) => {
 /**
  * The block stream's source. `elect()` picks one node before each pass, and
  * every read of that pass goes to it. A failed response check or a walk-back
- * past the bound sets the node aside for five minutes. A failed read, a
- * rejected snapshot, the prefix rule or an empty range benches it until its
- * tip changes or no other node is eligible.
+ * past the bound sets the node aside for five minutes. A failed read, a tips
+ * or range read answered with nothing, or a rejected snapshot benches it for
+ * five minutes; the prefix rule, an empty range or no block at a height its
+ * snapshot covers bench it until its tip changes. Benched nodes are all back
+ * once no eligible node is outside the bench.
  */
 export class StickySource implements L2BlockStreamSource {
   /** The store as the stream must read it: its hash lookups count against the walk bound. */
   readonly localData: L2BlockStreamLocalDataProvider;
   private pin: Pin | undefined;
-  // Benched nodes, with the tip each showed in the probe that elected it. They
-  // sit out while another eligible node exists, so neither a node that keeps
-  // failing nor tied shorter copies can take every turn. A member is back once
-  // its probe shows another tip, and all are once no eligible node is outside.
-  private readonly benched = new Map<string, L2BlockId>();
+  // Benched nodes sit out while another eligible node exists, so neither a
+  // node that keeps failing nor tied shorter copies can take every turn. A
+  // failure's cooldown ignores the tip, which can advance while every read
+  // fails; the other entries hold the tip of the probe that elected the node.
+  private readonly benched = new Map<string, Bench>();
   private readonly setAsideUntil = new Map<string, number>();
   private readonly finalizedMatches = new Map<string, L2BlockId>();
   private readonly electionFaults = new Map<string, Fault["kind"]>();
@@ -219,7 +222,7 @@ export class StickySource implements L2BlockStreamSource {
   private latestTips: L2Tips | undefined;
   private latestError: Error | undefined;
   private floorLifted = false;
-  private floorWait: { since: number; alertedAt?: number } | undefined;
+  private noEligible: { since: number; alertedAt?: number } | undefined;
   private readonly nodes: () => RpcNode[];
   private readonly openReader: OpenElectionReader;
   private readonly now: () => number;
@@ -284,8 +287,13 @@ export class StickySource implements L2BlockStreamSource {
       (p): p is Candidate => p.eligible && p.tips !== undefined,
     );
     for (const { node, tips } of eligible) {
-      const benchedAt = this.benched.get(node.url);
-      if (benchedAt !== undefined && !sameBlock(benchedAt, tips.proposed)) {
+      const bench = this.benched.get(node.url);
+      if (
+        bench !== undefined &&
+        ("until" in bench
+          ? bench.until <= now
+          : !sameBlock(bench.tip, tips.proposed))
+      ) {
         this.benched.delete(node.url);
       }
     }
@@ -299,7 +307,14 @@ export class StickySource implements L2BlockStreamSource {
       this.noteNoEligibleNode(stored.finalized.block.number, bounds.floor, now);
       return undefined;
     }
-    this.floorWait = undefined;
+    if (this.noEligible !== undefined) {
+      logger.warn(
+        `The block stream has an eligible node again, after ${Math.round(
+          (now - this.noEligible.since) / 1000,
+        )}s without one`,
+      );
+      this.noEligible = undefined;
+    }
 
     // An L1 reorg can remove a proof from every honest node, hence the fallback.
     let preferred = eligible.filter(
@@ -335,7 +350,7 @@ export class StickySource implements L2BlockStreamSource {
   /** The pass ended on the prefix rule: unpins the node and benches it. */
   endPassOnPrefix(): void {
     if (this.pin !== undefined) {
-      this.bench(this.pin);
+      this.bench(this.pin, "new tip");
     }
   }
 
@@ -360,7 +375,7 @@ export class StickySource implements L2BlockStreamSource {
       if (fault !== undefined) {
         const message = `Node ${pin.node.name} ${fault.reason}; the block stream skips this pass`;
         logger.warn(message);
-        this.bench(pin);
+        this.bench(pin, "cooldown");
         throw new AbortError(message);
       }
       this.latestTips = tips;
@@ -375,6 +390,11 @@ export class StickySource implements L2BlockStreamSource {
         query,
       ]);
       if (response === undefined) {
+        const tip = this.latestTips?.proposed.number;
+        if ("number" in query && tip !== undefined && query.number <= tip) {
+          // A height its snapshot covers: the stream aborts the pass, as on an empty range.
+          this.bench(pin, "new tip");
+        }
         return undefined;
       }
       await this.check(pin.node, blockDataFault(query, response.header));
@@ -412,7 +432,7 @@ export class StickySource implements L2BlockStreamSource {
       if (responses.length === 0 && tip !== undefined && query.from <= tip) {
         // An honest node that pruned after its tips were read answers so, and
         // the stream aborts the pass on an empty range.
-        this.bench(pin);
+        this.bench(pin, "new tip");
         return [];
       }
       const blocks = responses.map(
@@ -463,9 +483,16 @@ export class StickySource implements L2BlockStreamSource {
             } s`,
           ),
       );
+      // The RPC client resolves a null answer to undefined, whatever the
+      // method's type; only a block lookup may answer nothing.
+      if (result === undefined && fnName !== "getBlock") {
+        throw new Error(
+          `Node ${pin.node.name} answered ${String(fnName)} with nothing`,
+        );
+      }
       return { pin, result };
     } catch (e) {
-      this.bench(pin);
+      this.bench(pin, "cooldown");
       throw e;
     }
   }
@@ -519,8 +546,13 @@ export class StickySource implements L2BlockStreamSource {
     );
   }
 
-  private bench(pin: Pin) {
-    this.benched.set(pin.node.url, pin.proposed);
+  private bench(pin: Pin, until: "cooldown" | "new tip") {
+    this.benched.set(
+      pin.node.url,
+      until === "cooldown"
+        ? { until: this.now() + SET_ASIDE_MS }
+        : { tip: pin.proposed },
+    );
     if (this.pin === pin) {
       this.pin = undefined;
     }
@@ -628,24 +660,27 @@ export class StickySource implements L2BlockStreamSource {
     return this.floorLifted ? undefined : floor;
   }
 
+  // Warns on entering the state, not on each pass; the first start's wait
+  // under the floor also alerts on a timer.
   private noteNoEligibleNode(
     finalized: number,
     floor: number | undefined,
     now: number,
   ) {
-    if (floor === undefined) {
-      logger.warn(
-        `No node is eligible to drive the block stream from finalized block ${finalized}; skipping this pass`,
-      );
-      return;
-    }
-    this.floorWait ??= { since: now };
-    const message = `No eligible node is at or above the old listener's proven height ${floor}; the block stream waits`;
-    const { since, alertedAt } = this.floorWait;
-    if (now - (alertedAt ?? since) >= this.config.waitAlertMs) {
+    const entering = this.noEligible === undefined;
+    this.noEligible ??= { since: now };
+    const message =
+      floor === undefined
+        ? `No node is eligible to drive the block stream from finalized block ${finalized}; the block stream waits`
+        : `No eligible node is at or above the old listener's proven height ${floor}; the block stream waits`;
+    const { since, alertedAt } = this.noEligible;
+    if (
+      floor !== undefined &&
+      now - (alertedAt ?? since) >= this.config.waitAlertMs
+    ) {
       logger.error(`${message} (${Math.round((now - since) / 1000)}s so far)`);
-      this.floorWait.alertedAt = now;
-    } else {
+      this.noEligible.alertedAt = now;
+    } else if (entering) {
       logger.warn(message);
     }
   }

@@ -96,10 +96,13 @@ class FakeNode {
   headerReads = 0;
   readonly calls: string[] = [];
   /** Answers the pass's tips reads only; the election's probe still sees `tips()`. */
-  chainTipsOverride?: () => L2Tips;
+  chainTipsOverride?: () => L2Tips | undefined;
   /** Answers the election's probe only. */
   probeTipsOverride?: () => L2Tips;
-  getBlocksOverride?: (from: number, limit: number) => Promise<BlockResponse[]>;
+  getBlocksOverride?: (
+    from: number,
+    limit: number,
+  ) => Promise<BlockResponse[] | undefined>;
   getBlockOverride?: (
     param: BlockParameter,
   ) => Promise<BlockResponse | undefined>;
@@ -138,7 +141,11 @@ class FakeNode {
 
   getChainTips() {
     this.calls.push("getChainTips");
-    return Promise.resolve(this.chainTipsOverride?.() ?? this.tips());
+    return Promise.resolve(
+      this.chainTipsOverride === undefined
+        ? this.tips()
+        : this.chainTipsOverride(),
+    );
   }
 
   getBlock(param: BlockParameter): Promise<BlockResponse | undefined> {
@@ -160,7 +167,7 @@ class FakeNode {
     return respond(this.chain.blocks[height], false);
   }
 
-  getBlocks(from: number, limit: number): Promise<BlockResponse[]> {
+  getBlocks(from: number, limit: number): Promise<BlockResponse[] | undefined> {
     this.calls.push("getBlocks");
     if (this.getBlocksOverride !== undefined) {
       return this.getBlocksOverride(from, limit);
@@ -229,7 +236,7 @@ beforeAll(async () => {
   const block0 = await emptyBlock(0);
   genesis = await block0.hash();
   base = { blocks: [block0], hashes: [genesis.toString()] };
-  main = await grow(base, 12);
+  main = await grow(base, 20);
 });
 
 beforeEach(() => {
@@ -329,16 +336,28 @@ const serve = async (reply: (res: ServerResponse, ids: number[]) => void) => {
   };
 };
 
-const fallbackWarnings = () =>
-  logger.warn.mock.calls.filter(([message]) =>
-    String(message).includes("behind on proofs"),
-  ).length;
+const logged = (log: typeof logger.warn, text: string) =>
+  log.mock.calls.filter(([message]) => String(message).includes(text)).length;
+
+const fallbackWarnings = () => logged(logger.warn, "behind on proofs");
 
 /** A node whose pass leaves the store finalized at block 4 of `main`. */
 const finalizedAtFour = () => {
   const node = new FakeNode("honest", prefix(main, 6));
   node.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
   return node;
+};
+
+/** `x` at block 12 and `y` at block 6, both online, after a pass on `y`. */
+const xAheadOfStore = async () => {
+  const x = new FakeNode("x", prefix(main, 12));
+  x.tiers = { checkpointed: 12, proven: 4, finalized: 4 };
+  const y = new FakeNode("y", prefix(main, 6));
+  y.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
+  const run = setup({ nodes: [x, y], online: [y] });
+  await run.pass();
+  run.world.online = [x, y];
+  return { x, y, ...run };
 };
 
 describe("StickySource election", () => {
@@ -460,7 +479,7 @@ describe("StickySource election", () => {
     expect(fallbackWarnings()).toBe(1);
   });
 
-  it("waits at the first start while every node is below the old listener's proven height, and alerts while it waits", async () => {
+  it("waits at the first start while every node is below the old listener's proven height, warning once and alerting while it waits", async () => {
     const a = new FakeNode("a", prefix(main, 7));
     const b = new FakeNode("b", prefix(main, 9));
     let stored = false;
@@ -477,6 +496,7 @@ describe("StickySource election", () => {
     clock.now += 1_000;
     expect(await source.elect()).toBeUndefined();
     expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logged(logger.warn, "the block stream waits")).toBe(1);
 
     b.chain = prefix(main, 10);
     expect(await source.elect()).toBe(b.rpc);
@@ -618,6 +638,22 @@ describe("StickySource election", () => {
     expect(aboutX(logger.warn)).toHaveLength(2);
     expect(aboutX(logger.info)).toHaveLength(1);
   });
+
+  it("warns once on finding no eligible node, and once on finding one again", async () => {
+    const x = finalizedAtFour();
+    const { source, pass } = setup({ nodes: [x] });
+    await pass();
+
+    x.tiers = { checkpointed: 6, proven: 3, finalized: 3 };
+    expect(await source.elect()).toBeUndefined();
+    expect(await source.elect()).toBeUndefined();
+    x.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
+    expect(await source.elect()).toBe(x.rpc);
+    expect(await source.elect()).toBe(x.rpc);
+
+    expect(logged(logger.warn, "No node is eligible")).toBe(1);
+    expect(logged(logger.warn, "eligible node again")).toBe(1);
+  });
 });
 
 describe("StickySource passes", () => {
@@ -702,7 +738,7 @@ describe("StickySource passes", () => {
     expect(await store.getL2Tips()).toEqual(synced);
   });
 
-  it("follows the node with the replacing block within three passes while two tied nodes have only a shorter copy", async () => {
+  it("follows the node with the replacing block within three passes while two tied nodes have only a shorter copy, and lets a tied node back once its tip changes", async () => {
     const a = new FakeNode("a", prefix(main, 6));
     const b = new FakeNode("b", prefix(main, 6));
     const c = new FakeNode("c", prefix(main, 6));
@@ -736,6 +772,9 @@ describe("StickySource passes", () => {
       number: 5,
       hash: c.chain.hashes[5],
     });
+
+    a.chain = await grow(c.chain, 8);
+    expect(await pass(stream)).toBe(a.rpc);
   });
 
   it.each([
@@ -751,6 +790,20 @@ describe("StickySource passes", () => {
       },
     },
     {
+      failure: "answers a block range with nothing",
+      fail: (x: FakeNode, run: Pass) => {
+        x.getBlocksOverride = () => Promise.resolve(undefined);
+        return run();
+      },
+    },
+    {
+      failure: "answers its tips with nothing",
+      fail: (x: FakeNode, run: Pass) => {
+        x.chainTipsOverride = () => undefined;
+        return run();
+      },
+    },
+    {
       failure: "sends a snapshot the checks reject",
       fail: (x: FakeNode, run: Pass) => {
         x.chainTipsOverride = () =>
@@ -759,29 +812,71 @@ describe("StickySource passes", () => {
       },
     },
   ])(
-    "elects a healthy node within two passes while the node ahead $failure on every pass, and lets a benched node back once its tip changes",
+    "keeps a node ahead that $failure on every pass out until its cooldown ends, its tip advancing meanwhile, and follows a healthy node",
     async ({ fail }) => {
-      const x = new FakeNode("x", prefix(main, 12));
-      x.tiers = { checkpointed: 12, proven: 4, finalized: 4 };
-      const y = new FakeNode("y", prefix(main, 6));
-      y.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
-      const { store, world, pass } = setup({ nodes: [x, y], online: [y] });
-      await pass();
-      world.online = [x, y];
-      y.chain = prefix(main, 8);
+      const { x, y, store, clock, pass } = await xAheadOfStore();
+      const advance = () => {
+        x.chain = prefix(main, x.tip + 1);
+        y.chain = prefix(main, y.tip + 1);
+      };
 
       expect(await fail(x, pass)).toBe(x.rpc);
+      advance();
+      expect(await pass()).toBe(y.rpc);
+      clock.now += 5 * 60_000 - 1;
+      advance();
       expect(await pass()).toBe(y.rpc);
       expect((await store.getL2Tips()).proposed.number).toBe(8);
 
-      // Tips ahead of the blocks it serves.
-      y.chain = prefix(main, 10);
-      y.getBlocksOverride = () => Promise.resolve([]);
+      clock.now += 1;
+      advance();
+      expect(await fail(x, pass)).toBe(x.rpc);
+      advance();
       expect(await pass()).toBe(y.rpc);
-      y.chain = prefix(main, 11);
-      y.getBlocksOverride = undefined;
+      expect((await store.getL2Tips()).proposed.number).toBe(10);
+    },
+  );
+
+  it("lets a node benched on a failed read back once its cooldown ends, its tip unchanged", async () => {
+    const { x, y, store, clock, pass } = await xAheadOfStore();
+    x.getBlocksOverride = () => Promise.reject(new Error("internal error"));
+    expect(await pass()).toBe(x.rpc);
+    x.getBlocksOverride = undefined;
+    expect(await pass()).toBe(y.rpc);
+
+    clock.now += 5 * 60_000;
+    expect(await pass()).toBe(x.rpc);
+    expect((await store.getL2Tips()).proposed.number).toBe(12);
+  });
+
+  it.each([
+    {
+      gap: "has no block at the block stream's head",
+      open: (x: FakeNode) => {
+        x.getBlockOverride = () => Promise.resolve(undefined);
+      },
+    },
+    {
+      gap: "sends an empty range below its tip",
+      open: (x: FakeNode) => {
+        x.getBlocksOverride = () => Promise.resolve([]);
+      },
+    },
+  ])(
+    "benches a node ahead that $gap until its tip changes, and follows a healthy node meanwhile",
+    async ({ open }) => {
+      const { x, y, store, pass } = await xAheadOfStore();
+      y.chain = prefix(main, 8);
+      open(x);
+      expect(await pass()).toBe(x.rpc);
       expect(await pass()).toBe(y.rpc);
-      expect((await store.getL2Tips()).proposed.number).toBe(11);
+      expect((await store.getL2Tips()).proposed.number).toBe(8);
+
+      x.getBlockOverride = undefined;
+      x.getBlocksOverride = undefined;
+      x.chain = prefix(main, 13);
+      expect(await pass()).toBe(x.rpc);
+      expect((await store.getL2Tips()).proposed.number).toBe(13);
     },
   );
 
