@@ -26,7 +26,7 @@ Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose
 
 ## In CI
 
-`.github/workflows/network-smoke.yml` runs it and the scripted mode, as two jobs, on pull requests that change what they build or start, nightly, and on demand, and reports both in `network-smoke-status`. It is not a required check. On failure, CI keeps whatever run logs, marks and harness logs exist, for 7 days.
+`.github/workflows/network-smoke.yml` runs it, the scripted mode and the prune mode, as three jobs, on pull requests that change what they build or start, nightly, and on demand, and reports all three in `network-smoke-status`. It is not a required check. On failure, CI keeps whatever run logs, marks and harness logs exist, for 7 days.
 
 ## What it checks
 
