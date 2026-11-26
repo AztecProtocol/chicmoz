@@ -26,9 +26,9 @@ export interface MBOptions {
 // past the session timeout (30 s by default) awaits it while it works, never
 // after it returns, and lets a rejection propagate, so the message is
 // redelivered. Only a call that reaches the broker can learn of a rebalance:
-// calls inside one heartbeat interval (3 s by default) resolve locally or share
-// the request in flight. A resolved call never proves that this member still
-// owns the partition.
+// within one heartbeat interval (3 s by default) after a successful heartbeat,
+// calls resolve locally, and concurrent calls share the request in flight. A
+// resolved call never proves that this member still owns the partition.
 export type Heartbeat = EachMessagePayload["heartbeat"];
 
 type TopicCallback = (event: object, heartbeat: Heartbeat) => Promise<void>;
@@ -327,9 +327,6 @@ export class MessageBus {
 
   async disconnect() {
     this.#shutdown = true;
-    // A connect still in flight would otherwise open the producer after it is
-    // closed here.
-    await this.#producerConnectingPromise?.catch(() => undefined);
     await this.#producer?.disconnect();
     for (const consumer of Object.values(this.#consumers)) {
       await consumer?.consumer.disconnect();
