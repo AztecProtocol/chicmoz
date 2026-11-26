@@ -27,42 +27,6 @@ export async function lowerProcessedProvenBlockHeight(height: number) {
     .where(eq(heightsTable.networkId, L2_NETWORK_ID));
 }
 
-export async function storeChainProposedBlockHeight(height: number) {
-  await db()
-    .update(heightsTable)
-    .set({ chainProposedBlockHeight: height })
-    .where(eq(heightsTable.networkId, L2_NETWORK_ID));
-}
-
-export async function storeChainProvenBlockHeight(height: number) {
-  await db()
-    .update(heightsTable)
-    .set({ chainProvenBlockHeight: height })
-    .where(eq(heightsTable.networkId, L2_NETWORK_ID));
-}
-
-export async function storeBlockHeights({
-  processedProposedBlockHeight,
-  chainProposedBlockHeight,
-  processedProvenBlockHeight,
-  chainProvenBlockHeight,
-}: {
-  processedProposedBlockHeight: number;
-  chainProposedBlockHeight: number;
-  processedProvenBlockHeight: number;
-  chainProvenBlockHeight: number;
-}) {
-  await db()
-    .update(heightsTable)
-    .set({
-      processedProposedBlockHeight,
-      chainProposedBlockHeight,
-      processedProvenBlockHeight,
-      chainProvenBlockHeight,
-    })
-    .where(eq(heightsTable.networkId, L2_NETWORK_ID));
-}
-
 export async function ensureInitializedBlockHeights() {
   await db()
     .insert(heightsTable)
