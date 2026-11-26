@@ -1,16 +1,7 @@
 import { type Heartbeat } from "@chicmoz-pkg/message-bus";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import { type ChicmozL2Block, type HexString } from "@chicmoz-pkg/types";
-import {
-  and,
-  asc,
-  eq,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { L2_NETWORK_ID } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
@@ -403,8 +394,8 @@ const storeIfAbsent = async (
     hash: block.hash,
     height: block.height,
     version: change.version,
-    archiveRoot: block.archive.root ,
-    lastArchiveRoot: block.header.lastArchive.root ,
+    archiveRoot: block.archive.root,
+    lastArchiveRoot: block.header.lastArchive.root,
   };
   const [existing] = await change.dbTx
     .select({
@@ -460,10 +451,12 @@ const attachTxs = async (
 ) => {
   const effects = block.body.txEffects;
   const owners = new Map(
-    (await txOwners(change.dbTx, effects.map((e) => e.txHash))).map((o) => [
-      o.txHash,
-      o,
-    ]),
+    (
+      await txOwners(
+        change.dbTx,
+        effects.map((e) => e.txHash),
+      )
+    ).map((o) => [o.txHash, o]),
   );
   if (canonical) {
     const conflicts = [...owners.values()].filter(
@@ -568,7 +561,9 @@ const setHasOrphanedParent = async (
     await change.dbTx
       .update(l2Block)
       .set({ orphan_hasOrphanedParent: value })
-      .where(and(inArray(l2Block.hash, part), isNotNull(l2Block.orphan_timestamp)));
+      .where(
+        and(inArray(l2Block.hash, part), isNotNull(l2Block.orphan_timestamp)),
+      );
   }
 };
 
@@ -596,7 +591,9 @@ const refreshOrphanFlags = async (change: Change) => {
           eq(parent.version, l2Block.version),
         ),
       )
-      .where(and(inArray(l2Block.hash, part), isNotNull(parent.orphan_timestamp)));
+      .where(
+        and(inArray(l2Block.hash, part), isNotNull(parent.orphan_timestamp)),
+      );
     deadParent.push(...rows.map((r) => r.hash));
   }
 
@@ -623,7 +620,9 @@ const refreshOrphanFlags = async (change: Change) => {
           eq(child.version, l2Block.version),
         ),
       )
-      .where(and(inArray(l2Block.hash, part), isNotNull(child.orphan_timestamp)));
+      .where(
+        and(inArray(l2Block.hash, part), isNotNull(child.orphan_timestamp)),
+      );
     for (const row of rows) {
       (row.parentOrphanTimestamp === null ? liveParent : deadParent).push(
         row.hash,
@@ -659,9 +658,7 @@ const settle = async (change: Change, attached: ChicmozL2Block | undefined) => {
 
 const ownerSummary = (owners: TxOwner[]) =>
   owners
-    .map(
-      (o) => `${o.txHash} in active block ${o.height} (${o.blockHash})`,
-    )
+    .map((o) => `${o.txHash} in active block ${o.height} (${o.blockHash})`)
     .join(", ");
 
 /**

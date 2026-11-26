@@ -71,7 +71,10 @@ describe("a replaced block that stays stored on a real database", () => {
     isDropped = async (txHash) => (await getDroppedTxByHash(txHash)) !== null;
     const at = (block: BuiltBlock) => ({
       block: { number: Number(block.height), hash: block.hash },
-      checkpoint: { number: Number(block.height), hash: word(Number(block.height)) },
+      checkpoint: {
+        number: Number(block.height),
+        hash: word(Number(block.height)),
+      },
     });
     storeTips = ({ proposed, finalized, proven, checkpointed }) =>
       deliver(l2TipsHandler, {
@@ -101,8 +104,12 @@ describe("a replaced block that stays stored on a real database", () => {
   it("keeps the replacing chain's stored blocks active when its block at the replaced height arrives after them", async () => {
     const replaced = await buildBlock(100n, [freshTxHash()]);
     const replacing = await buildBlock(100n, [freshTxHash()]);
-    const child = await buildBlock(101n, [freshTxHash()], { parent: replacing });
-    const grandchild = await buildBlock(102n, [freshTxHash()], { parent: child });
+    const child = await buildBlock(101n, [freshTxHash()], {
+      parent: replacing,
+    });
+    const grandchild = await buildBlock(102n, [freshTxHash()], {
+      parent: child,
+    });
     await store(replaced);
     await store(child);
     await store(grandchild);
@@ -129,36 +136,41 @@ describe("a replaced block that stays stored on a real database", () => {
     expect(await isDropped(t)).toBe(false);
   });
 
-  it.fails("still requests a replaced height after the next tips validate at other heights", async () => {
-    const chain: BuiltBlock[] = [];
-    for (let height = 400n; height <= 403n; height++) {
-      chain.push(
-        await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
-      );
-    }
-    const [finalized, proven, checkpointed, replaced] = chain;
-    for (const block of chain) {
-      await store(block);
-    }
-    const replacing = await buildBlock(403n, [freshTxHash()], {
-      parent: checkpointed,
-    });
-    const next = await buildBlock(404n, [freshTxHash()], { parent: replacing });
-    const tipsAt = (proposed: BuiltBlock) =>
-      storeTips({
-        proposed: { number: Number(proposed.height), hash: proposed.hash },
-        finalized,
-        proven,
-        checkpointed,
+  it.fails(
+    "still requests a replaced height after the next tips validate at other heights",
+    async () => {
+      const chain: BuiltBlock[] = [];
+      for (let height = 400n; height <= 403n; height++) {
+        chain.push(
+          await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
+        );
+      }
+      const [finalized, proven, checkpointed, replaced] = chain;
+      for (const block of chain) {
+        await store(block);
+      }
+      const replacing = await buildBlock(403n, [freshTxHash()], {
+        parent: checkpointed,
       });
+      const next = await buildBlock(404n, [freshTxHash()], {
+        parent: replacing,
+      });
+      const tipsAt = (proposed: BuiltBlock) =>
+        storeTips({
+          proposed: { number: Number(proposed.height), hash: proposed.hash },
+          finalized,
+          proven,
+          checkpointed,
+        });
 
-    await tipsAt(replacing);
-    expect(await repairRequestCovers(403)).toBe(true);
+      await tipsAt(replacing);
+      expect(await repairRequestCovers(403)).toBe(true);
 
-    await store(next);
-    await tipsAt(next);
+      await store(next);
+      await tipsAt(next);
 
-    expect(await canonicalHash(403n)).toBe(replaced.hash);
-    expect(await repairRequestCovers(403)).toBe(true);
-  });
+      expect(await canonicalHash(403n)).toBe(replaced.hash);
+      expect(await repairRequestCovers(403)).toBe(true);
+    },
+  );
 });

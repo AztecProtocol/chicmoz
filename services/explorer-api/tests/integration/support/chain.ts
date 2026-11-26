@@ -6,7 +6,10 @@ export type Head = { height: bigint; hash: HexString };
 export const heads = (blocks: BuiltBlock[]): Head[] =>
   blocks.map(({ height, hash }) => ({ height, hash }));
 
-export type BlockState = "canonical" | "absent" | { hasOrphanedParent: boolean };
+export type BlockState =
+  | "canonical"
+  | "absent"
+  | { hasOrphanedParent: boolean };
 
 export type ReorgRecord = { active: boolean; blocks: HexString[] };
 
@@ -46,7 +49,9 @@ export const loadChainReads = async () => {
     db
       .select({ height: l2Block.height, hash: l2Block.hash })
       .from(l2Block)
-      .where(and(eq(l2Block.version, version), isNull(l2Block.orphan_timestamp)))
+      .where(
+        and(eq(l2Block.version, version), isNull(l2Block.orphan_timestamp)),
+      )
       .orderBy(asc(l2Block.height));
 
   const stateOf = async (hash: HexString): Promise<BlockState> => {
@@ -92,7 +97,10 @@ export const loadChainReads = async () => {
         hash: l2ReorgBlockTable.hash,
       })
       .from(l2ReorgTable)
-      .innerJoin(l2ReorgBlockTable, eq(l2ReorgBlockTable.reorgId, l2ReorgTable.id))
+      .innerJoin(
+        l2ReorgBlockTable,
+        eq(l2ReorgBlockTable.reorgId, l2ReorgTable.id),
+      )
       .where(eq(l2ReorgTable.rollupVersion, version))
       .orderBy(
         asc(l2ReorgTable.id),

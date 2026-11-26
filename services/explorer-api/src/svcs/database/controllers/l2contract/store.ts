@@ -39,9 +39,7 @@ export const storeContractInstanceUpdated = async (
   instance: ChicmozL2ContractInstanceUpdatedEvent,
   executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  await executor
-    .insert(l2ContractInstanceUpdate)
-    .values({ ...instance });
+  await executor.insert(l2ContractInstanceUpdate).values({ ...instance });
 };
 
 export const storeContractInstanceVerifiedDeploymentArguments = async (
@@ -65,11 +63,9 @@ export const storeContractClass = async (
   contractClass: ChicmozL2ContractClassRegisteredEvent,
   executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  await executor
-    .insert(l2ContractClassRegistered)
-    .values({
-      ...contractClass,
-    });
+  await executor.insert(l2ContractClassRegistered).values({
+    ...contractClass,
+  });
 };
 
 export type BlockContracts = {

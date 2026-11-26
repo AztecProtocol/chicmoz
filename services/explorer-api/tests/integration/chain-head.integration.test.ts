@@ -30,7 +30,10 @@ describe("the canonical chain on a real database", () => {
   let reads: Awaited<ReturnType<typeof loadChainReads>>;
   let ordered: (b: BuiltBlock, tip?: number) => Promise<void>;
   let catchup: (b: BuiltBlock, options?: { final?: true }) => Promise<void>;
-  let orderedWith: (event: NewBlockEvent, heartbeat: Heartbeat) => Promise<void>;
+  let orderedWith: (
+    event: NewBlockEvent,
+    heartbeat: Heartbeat,
+  ) => Promise<void>;
   let ignoredUnordered: (b: BuiltBlock) => Promise<void>;
   let setOrphaned: (blocks: BuiltBlock[], orphaned: boolean) => Promise<void>;
   let bareChain: (chain: {
@@ -145,7 +148,11 @@ describe("the canonical chain on a real database", () => {
         settle = (error) => (error === undefined ? resolve() : reject(error));
       });
       const members = [0, 1].map(() =>
-        kafka.consumer({ groupId, sessionTimeout: 6_000, heartbeatInterval: 1_000 }),
+        kafka.consumer({
+          groupId,
+          sessionTimeout: 6_000,
+          heartbeatInterval: 1_000,
+        }),
       );
       try {
         for (const member of members) {
@@ -161,7 +168,9 @@ describe("the canonical chain on a real database", () => {
               outcome.deliveries++;
               try {
                 await blockHandler.cb(
-                  BSON.deserialize(message.value ?? Buffer.alloc(0)) as NewBlockEvent,
+                  BSON.deserialize(
+                    message.value ?? Buffer.alloc(0),
+                  ) as NewBlockEvent,
                   () => {
                     outcome.beats++;
                     return heartbeat();
@@ -268,7 +277,9 @@ describe("the canonical chain on a real database", () => {
       }
     };
     const active = async () =>
-      (await reads.recordsOf(version)).filter((r) => r.active).map((r) => r.blocks);
+      (await reads.recordsOf(version))
+        .filter((r) => r.active)
+        .map((r) => r.blocks);
     await pass();
     expect(await reads.chainOf(version)).toEqual(heads([a[0], ...b]));
     expect(await active()).toEqual([[a[1], a[2], a[3]].map((x) => x.hash)]);
@@ -395,9 +406,15 @@ describe("the canonical chain on a real database", () => {
     const kept = freshTxHash();
     const shared = freshTxHash();
     const a0 = await buildBlock(7_000n, [freshTxHash()], { version });
-    const a1 = await buildBlock(7_001n, [kept, shared], { version, parent: a0 });
+    const a1 = await buildBlock(7_001n, [kept, shared], {
+      version,
+      parent: a0,
+    });
     const b1 = await buildBlock(7_001n, [shared], { version, parent: a0 });
-    const a2 = await buildBlock(7_002n, [freshTxHash()], { version, parent: a1 });
+    const a2 = await buildBlock(7_002n, [freshTxHash()], {
+      version,
+      parent: a1,
+    });
     await ordered(a0);
     await ordered(a1);
     await ordered(b1);
@@ -472,15 +489,24 @@ describe("the canonical chain on a real database", () => {
     const version = freshVersion();
     const [x, y] = [freshTxHash(), freshTxHash()];
     const a5 = await buildBlock(10_005n, [freshTxHash()], { version });
-    const a6 = await buildBlock(10_006n, [freshTxHash()], { version, parent: a5 });
-    const a7 = await buildBlock(10_007n, [freshTxHash()], { version, parent: a6 });
+    const a6 = await buildBlock(10_006n, [freshTxHash()], {
+      version,
+      parent: a5,
+    });
+    const a7 = await buildBlock(10_007n, [freshTxHash()], {
+      version,
+      parent: a6,
+    });
     const a8 = await buildBlock(10_008n, [x, y], { version, parent: a7 });
     for (const block of [a5, a6, a8]) {
       await ordered(block);
     }
     const b6 = await buildBlock(10_006n, [x], { version, parent: a5 });
     const b7 = await buildBlock(10_007n, [y], { version, parent: b6 });
-    const b8 = await buildBlock(10_008n, [freshTxHash()], { version, parent: b7 });
+    const b8 = await buildBlock(10_008n, [freshTxHash()], {
+      version,
+      parent: b7,
+    });
 
     for (const block of [b6, b7, b8]) {
       await ordered(block, 10_008);
@@ -496,7 +522,10 @@ describe("the canonical chain on a real database", () => {
   it("treats a parent lookup that finds two blocks as a missing parent", async () => {
     const version = freshVersion();
     const [p] = await buildChain(11_000n, 1, { version });
-    const twin = await buildBlock(11_001n, [freshTxHash()], { version, parent: p });
+    const twin = await buildBlock(11_001n, [freshTxHash()], {
+      version,
+      parent: p,
+    });
     const other = await buildBlock(11_001n, [freshTxHash()], {
       version,
       parent: p,
@@ -565,7 +594,12 @@ describe("the canonical chain on a real database", () => {
       const from = 100_000n;
       const [base] = await buildChain(from, 1, { version });
       await ordered(base);
-      await bareChain({ version, from: from + 1n, count: walkBound + 2, parent: base });
+      await bareChain({
+        version,
+        from: from + 1n,
+        count: walkBound + 2,
+        parent: base,
+      });
       const replacing = await buildBlock(from + 1n, [freshTxHash()], {
         version,
         parent: base,
