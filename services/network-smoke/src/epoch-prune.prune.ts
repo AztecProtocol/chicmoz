@@ -1,0 +1,425 @@
+import { setTimeout as sleep } from "node:timers/promises";
+import { BlockNumber } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { TxHash } from "@aztec-labs/aztec.js/tx";
+import { chicmozL2BlockLightSchema } from "@chicmoz-pkg/types";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { readEndpoints } from "./endpoints.js";
+import {
+  type BlockRef,
+  explorerReads,
+  served,
+  settle,
+} from "./explorer-reads.js";
+import {
+  type ChainWatch,
+  type ForcedPrune,
+  forceEpochPrune,
+  readNodeChain,
+  watchChain,
+} from "./force-prune.js";
+import { type Sender, openSender } from "./send-tx.js";
+import { type WsClient, type WsFrame, connectWs } from "./ws-client.js";
+
+const endpoints = readEndpoints();
+const node = createAztecNodeClient(endpoints.aztecNodeUrl);
+const api = explorerReads(endpoints.explorerApiUrl);
+
+// Longer than the API's 5 s block cache.
+const SETTLE_GAP_MS = 6_000;
+const SETTLE_TIMEOUT_MS = 90_000;
+// A listener pass that read the node just before the prune may publish
+// just after it.
+const PREFIX_GRACE_MS = 3_000;
+// 15 of the listener's block polls, and longer than its tips cadence (a 5 s
+// poll and the 5 s heartbeat set here), so today's tips timer shows.
+const PREFIX_WAIT_MS = 15_000;
+
+const t0 = Date.now();
+const log = (line: string) =>
+  process.stdout.write(
+    `[prune +${((Date.now() - t0) / 1000).toFixed(1)}s] ${line}\n`,
+  );
+
+type Deployed = { txHash: string; address: string };
+type Receipt = { status: string; blockNumber?: number; blockHash?: string };
+
+const range = (from: number, to: number) =>
+  Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+
+const receiptOf = async (txHash: string): Promise<Receipt> => {
+  const r = await node.getTxReceipt(TxHash.fromString(txHash));
+  return {
+    status: String(r.status),
+    blockNumber:
+      r.blockNumber === undefined ? undefined : Number(r.blockNumber),
+    blockHash: r.blockHash?.toString().toLowerCase(),
+  };
+};
+
+/** Each tx's receipt once it is in a block of the node's current chain. */
+const minedOnChain = async (txs: Deployed[]) => {
+  const receipts = new Map<string, Receipt>();
+  await vi.waitFor(
+    async () => {
+      const chain = await readNodeChain(node);
+      for (const { txHash } of txs) {
+        const r = await receiptOf(txHash);
+        expect(
+          r.blockNumber !== undefined &&
+            chain.get(r.blockNumber) === r.blockHash,
+          `tx ${txHash} in a block of the node's chain: ${JSON.stringify(r)}`,
+        ).toBe(true);
+        receipts.set(txHash, r);
+      }
+    },
+    { timeout: 90_000, interval: 500 },
+  );
+  return receipts;
+};
+
+const blockOf = (r: Receipt): BlockRef => ({
+  height: r.blockNumber ?? -1,
+  hash: r.blockHash ?? "",
+});
+
+const deadOf = (prune: ForcedPrune): BlockRef[] =>
+  prune.removed.map((height) => ({
+    height,
+    hash: prune.before.get(height) ?? "",
+  }));
+
+/** Waits until the API serves `hashes` at `heights` as canonical. */
+const apiHolds = (heights: number[], hashes: Map<number, string>) =>
+  vi.waitFor(
+    async () =>
+      expect(
+        await Promise.all(heights.map(api.blockAt)),
+        `the API at ${heights.join(",")}`,
+      ).toEqual(
+        heights.map((height) =>
+          served({ height, hash: hashes.get(height) ?? "" }, false),
+        ),
+      ),
+    { timeout: 60_000, interval: 1_000 },
+  );
+
+/**
+ * Each scenario starts from an API that agrees with the node up to the
+ * proven base, so it judges its own prune, not what an earlier one left.
+ */
+const baseHeld = (base: Map<number, string>) =>
+  apiHolds([...base.keys()], base);
+
+/** The node's block at each height, or a 404 above its tip. */
+const expectedChain = (heights: number[], chain: Map<number, string>) =>
+  heights.map((height) => {
+    const hash = chain.get(height);
+    return hash === undefined
+      ? { status: 404 }
+      : served({ height, hash }, false);
+  });
+
+const outcome = async ({
+  heights,
+  txs,
+  dead,
+}: {
+  heights: number[];
+  txs: Deployed[];
+  dead: BlockRef[];
+}) => ({
+  latestHeight: await api.latestHeight(),
+  chain: await Promise.all(heights.map(api.blockAt)),
+  reorgs: await api.reorgs(),
+  txs: await Promise.all(
+    txs.map(async ({ txHash, address }) => ({
+      txHash,
+      dropped: await api.dropped(txHash),
+      effect: await api.txEffect(txHash),
+      contract: await api.contractInstance(address),
+    })),
+  ),
+  dead: await Promise.all(dead.map((b) => api.blockAt(b.hash))),
+});
+
+type Outcome = Awaited<ReturnType<typeof outcome>>;
+
+const settled = async (args: Parameters<typeof outcome>[0]) => {
+  const { value, settled: done } = await settle(() => outcome(args), {
+    gapMs: SETTLE_GAP_MS,
+    timeoutMs: SETTLE_TIMEOUT_MS,
+  });
+  if (!done) {
+    log(`the API was still changing after ${SETTLE_TIMEOUT_MS / 1000} s`);
+  }
+  return value;
+};
+
+const summary = (prune: ForcedPrune) => ({
+  target: prune.target,
+  doomed: prune.doomed,
+  removed: prune.removed,
+  timings: prune.timings,
+});
+
+let sender: Sender;
+let watch: ChainWatch;
+let ws: WsClient;
+
+beforeAll(async () => {
+  ws = await connectWs(endpoints.wsUrl);
+  sender = await openSender(node);
+  await sender.publishAccountClass();
+  log("account class published");
+  watch = watchChain(node, log);
+});
+
+afterAll(async () => {
+  await watch?.stop();
+  await sender?.stop();
+  ws?.close();
+});
+
+describe("a prune of blocks with txs, which the node mines again at once in a replacing block", () => {
+  let genesisArchive: string;
+  let firstParent: unknown;
+  let prune: ForcedPrune;
+  let txs: Deployed[] = [];
+  let after: Map<string, Receipt>;
+  let chain: Map<number, string>;
+  let heights: number[];
+  let seen: Outcome;
+
+  beforeAll(async () => {
+    log("replaced at once: start");
+    // From the node: the local network's genesis is not the SDK's constant.
+    const genesis = await node.getBlock(BlockNumber(0));
+    if (!genesis) {
+      throw new Error("the node does not serve block 0");
+    }
+    genesisArchive = genesis.archive.root.toString().toLowerCase();
+    let before = new Map<string, Receipt>();
+    prune = await forceEpochPrune({
+      node,
+      nodeUrl: endpoints.aztecNodeUrl,
+      anvilUrl: endpoints.anvilUrl,
+      watch,
+      log,
+      sendTxs: async () => {
+        txs = [await sender.deploy(), await sender.deploy()];
+        before = await minedOnChain(txs);
+      },
+      emptyBlocks: 1,
+      afterProve: baseHeld,
+      expectReplacement: true,
+      // The prune tests something only once the API holds what it removes,
+      // the account contracts included.
+      beforeTrigger: async (doomed, hashes) => {
+        await apiHolds(range(1, Math.max(...doomed)), hashes);
+        await vi.waitFor(
+          async () =>
+            expect(
+              await Promise.all(
+                txs.map((t) => api.contractInstance(t.address)),
+              ),
+              "the account contracts before the prune",
+            ).toEqual(
+              txs.map((t) => ({
+                hash: before.get(t.txHash)?.blockHash,
+                orphaned: false,
+              })),
+            ),
+          { timeout: 30_000, interval: 1_000 },
+        );
+      },
+    });
+    after = await minedOnChain(txs);
+    const unmoved = txs.filter(
+      ({ txHash }) =>
+        after.get(txHash)?.blockHash === before.get(txHash)?.blockHash,
+    );
+    if (unmoved.length > 0) {
+      throw new Error(
+        `the node kept ${unmoved.map((t) => t.txHash).join(",")} in its dead block`,
+      );
+    }
+    heights = range(1, Math.max(...prune.before.keys()) + 1);
+    seen = await settled({ heights, txs, dead: deadOf(prune) });
+    const first = await api.get("/l2/blocks/1");
+    firstParent =
+      first.status === 200
+        ? chicmozL2BlockLightSchema
+            .parse(first.body)
+            .header.lastArchive.root.toLowerCase()
+        : { status: first.status };
+    chain = await readNodeChain(node);
+    log(
+      `replaced at once: end ${JSON.stringify({
+        genesis: genesis.hash.toString(),
+        ...summary(prune),
+        receipts: txs.map(({ txHash }) => ({
+          txHash,
+          before: before.get(txHash),
+          after: after.get(txHash),
+        })),
+        nodeChain: Object.fromEntries(chain),
+        seen,
+      })}`,
+    );
+  });
+
+  it("serves the node's chain from its genesis as canonical, and nothing above the node's tip", () => {
+    expect
+      .soft(seen.latestHeight, "latest height")
+      .toBe(Math.max(...chain.keys()));
+    expect
+      .soft(seen.chain, "the canonical block at each height")
+      .toEqual(expectedChain(heights, chain));
+    expect.soft(firstParent, "block 1's parent archive").toBe(genesisArchive);
+  });
+
+  it("lists one reorg: the removed blocks, from the first removed height", () => {
+    expect(seen.reorgs).toEqual([
+      {
+        height: prune.removed[0],
+        nbrOfOrphanedBlocks: prune.removed.length,
+        orphanedBlockHash: prune.before.get(prune.removed[0]),
+      },
+    ]);
+  });
+
+  it("keeps each moved tx mined, not dropped, with its effect and its account contract on the node's block", () => {
+    for (const tx of seen.txs) {
+      const block = served(
+        blockOf(after.get(tx.txHash) ?? { status: "" }),
+        false,
+      );
+      expect
+        .soft(tx.dropped, `${tx.txHash}: dropped-tx lookup`)
+        .toEqual({ status: 404 });
+      expect.soft(tx.effect, `${tx.txHash}: tx effect`).toEqual(block);
+      expect
+        .soft(tx.contract, `${tx.txHash}: its account contract`)
+        .toEqual({ hash: block.hash, orphaned: false });
+    }
+  });
+
+  it("serves each dead block by its hash, as orphaned", () => {
+    expect(seen.dead).toEqual(deadOf(prune).map((b) => served(b, true)));
+  });
+});
+
+describe("a prune of empty blocks, which leaves the node on the shorter chain until a tx comes", () => {
+  let prune: ForcedPrune;
+  let dead: BlockRef[];
+  let quiet: WsFrame[];
+  let kept: { start: unknown; end: unknown };
+  let receipt: Receipt;
+  let chain: Map<number, string>;
+  let heights: number[];
+  let seen: Outcome;
+
+  beforeAll(async () => {
+    log("shorter chain: start");
+    prune = await forceEpochPrune({
+      node,
+      nodeUrl: endpoints.aztecNodeUrl,
+      anvilUrl: endpoints.anvilUrl,
+      watch,
+      log,
+      sendTxs: () => Promise.resolve(),
+      emptyBlocks: 2,
+      afterProve: baseHeld,
+      expectReplacement: false,
+      beforeTrigger: (doomed, hashes) => apiHolds(doomed, hashes),
+    });
+    dead = deadOf(prune);
+    const view = async () => ({
+      latestHeight: await api.latestHeight(),
+      dead: await Promise.all(prune.doomed.map(api.blockAt)),
+      reorgs: await api.reorgs(),
+    });
+    await sleep(PREFIX_GRACE_MS);
+    const from = Date.now();
+    const start = await view();
+    await sleep(PREFIX_WAIT_MS);
+    const end = await view();
+    const to = Date.now();
+    const moved = watch.events.filter((e) => e.at >= from);
+    const tip = Number((await node.getChainTips()).proposed.number);
+    if (moved.length > 0 || tip !== prune.target) {
+      throw new Error(
+        `the node left the shorter chain during the wait: tip ${tip}, ${JSON.stringify(moved)}`,
+      );
+    }
+    quiet = ws.frames.filter((f) => f.at >= from && f.at <= to);
+    kept = { start, end };
+
+    const tx = await sender.deploy();
+    receipt = (await minedOnChain([tx])).get(tx.txHash) ?? { status: "" };
+    heights = range(prune.target + 1, Math.max(...prune.before.keys()) + 1);
+    seen = await settled({ heights, txs: [tx], dead });
+    chain = await readNodeChain(node);
+    log(
+      `shorter chain: end ${JSON.stringify({
+        ...summary(prune),
+        waitMs: to - from,
+        quiet,
+        kept,
+        receipt,
+        nodeChain: Object.fromEntries(chain),
+        seen,
+      })}`,
+    );
+  });
+
+  it("publishes no block and no tips while the node sits on the shorter chain", () => {
+    expect
+      .soft(
+        quiet.filter((f) => f.kind === "block"),
+        "block frames",
+      )
+      .toEqual([]);
+    expect
+      .soft(
+        quiet.filter((f) => f.kind === "l2Tips"),
+        "tips frames",
+      )
+      .toEqual([]);
+  });
+
+  it("keeps the dead blocks canonical while it waits", () => {
+    expect
+      .soft(kept.start, "at the start of the wait")
+      .toMatchObject({ dead: dead.map((b) => served(b, false)) });
+    expect.soft(kept.end, "at its end").toEqual(kept.start);
+  });
+
+  it("applies the prune once the node builds at the first pruned height", () => {
+    expect
+      .soft(receipt.blockNumber, "the new tx's block")
+      .toBe(prune.removed[0]);
+    expect
+      .soft(seen.chain, "the canonical block above the target")
+      .toEqual(expectedChain(heights, chain));
+    const deadHashes = new Set(dead.map((b) => b.hash));
+    expect
+      .soft(
+        Array.isArray(seen.reorgs)
+          ? seen.reorgs.filter((r) => deadHashes.has(r.orphanedBlockHash))
+          : seen.reorgs,
+        "reorgs rooted in the dead blocks",
+      )
+      .toEqual([
+        {
+          height: prune.removed[0],
+          nbrOfOrphanedBlocks: prune.removed.length,
+          orphanedBlockHash: prune.before.get(prune.removed[0]),
+        },
+      ]);
+    expect
+      .soft(seen.dead, "the dead blocks by hash")
+      .toEqual(dead.map((b) => served(b, true)));
+  });
+});

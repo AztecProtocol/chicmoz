@@ -8,6 +8,7 @@ End-to-end smoke run of the explorer backend against a real Aztec 6.0.0 local ne
 yarn build                                      # the four services, the harness and this package
 yarn smoke                                      # one run: set up, assert, tear down; exit code is the verdict
 yarn smoke:scripted                             # one run against a scripted node that prunes (see below)
+yarn smoke:prune                                # one run in which the local network prunes (see below)
 yarn workspace @chicmoz/network-smoke down <run> # clean up a run whose runner was killed (SIGKILL)
 yarn harness ls | down <id>                     # compose projects, as for integration tests
 ```
@@ -50,6 +51,17 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 
 `logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
 
+## Prune mode
+
+`yarn smoke:prune` starts the same services, toolchain and isolation as `yarn smoke`, with the block topic on 3 partitions, but runs the local network through `toolchain/local-network.mjs`: `createLocalNetwork` with the epoch auto-settle off, which the stock CLI cannot turn off. There the proven and finalized tips move only on `aztecDebug_prove`. Node runs a copy of the launcher from the run directory, whose `node_modules` links to the installed toolchain's.
+
+`src/force-prune.ts` has the node prune: it proves every checkpoint, builds the doomed blocks, then warps L1 past their epoch's proof window with `RollupCheatCodes.advanceToEpoch`, and the node's archiver removes them. The test (`src/epoch-prune.prune.ts`) plays two scenarios on one network, reading every depth and hash from the run, since tx packing changes them:
+
+1. **Replaced at once.** The doomed blocks hold two account deployments, which the node mines again at once in a replacing block. Through REST: the canonical chain is the node's, starting from the node's genesis (not the SDK's constant), with nothing above its tip; one reorg, rooted at the first removed height, counting the removed blocks; each tx not dropped, its effect and its account contract on the node's new block; each dead block served by its hash, as orphaned.
+2. **A shorter chain.** The doomed blocks are empty, so the node sits on the shorter chain. For 15 s the websocket publisher relays no block and no tips from the listener, and the API keeps the dead blocks canonical. Then one tx makes the node build at the first pruned height, and the API applies the prune: the node's chain above the target, one reorg rooted at the first dead block, the dead blocks orphaned.
+
+Each scenario starts once the API agrees with the node up to the proven base, so it judges its own prune. The deployments publish their account instances, which an account deployment skips by default, after one deployment publishes the account class: without that the explorer stores no contract to check.
+
 ## compare-chain
 
 `scripts/compare-chain.ts` checks, read-only, that an explorer API's canonical chain is a node's. Node 24 runs it directly:
@@ -77,8 +89,8 @@ Each check prints one JSON line, with the first mismatch and the count; a one-sh
 - **The local network is not a live network.**
   - The automine sequencer builds one block per checkpoint, only when transactions arrive, and warps L1 time to each slot.
   - The proven tip moves by a storage write, so no `L2ProofVerified` event is emitted and nothing proof-related is checked.
-  - There are no multi-block checkpoints and no reorgs.
-- **Interfaces.** anvil binds `127.0.0.1`. The node's RPC and admin ports, explorer-api and the websocket publisher have no host option and listen on all interfaces. The admin API keeps authentication on with a random key hash generated per run, and the network holds only the public test accounts. Run it on a host whose network you trust.
+  - There are no multi-block checkpoints. The only reorgs are the epoch prunes `yarn smoke:prune` forces, by warping L1 time, not by an L1 reorg.
+- **Interfaces.** anvil and the prune mode's launcher bind `127.0.0.1`; the launcher serves no admin API. The stock node's RPC and admin ports, explorer-api and the websocket publisher have no host option and listen on all interfaces. The admin API keeps authentication on with a random key hash generated per run, and the network holds only the public test accounts. Run it on a host whose network you trust.
 - **Kills and supply chain.**
   - A SIGKILL of the runner leaves its processes and project for `down <run>`. A kill during the harness's `up()` leaves a labelled project for `yarn harness down`. A kill during the first toolchain install can leave `npm ci` running and an `aztec-*.tmp-<run>` directory in the toolchain dir.
   - `yarn npm audit` does not cover the toolchain's npm tree.

@@ -23,7 +23,12 @@ import {
   type ScriptedEndpoints,
 } from "./endpoints.js";
 import { createTopic } from "./kafka.js";
-import { L1_CHAIN_ID, startAnvil, startAztecNode } from "./network.js";
+import {
+  L1_CHAIN_ID,
+  startAnvil,
+  startAztecNode,
+  startLocalNetwork,
+} from "./network.js";
 import { releasePorts } from "./port-registry.js";
 import { claimRunPorts } from "./ports.js";
 import { createProcessGroups, startTimeOf } from "./processes.js";
@@ -43,7 +48,14 @@ const CLI = fileURLToPath(new URL("./cli.js", import.meta.url));
 // Per-test timeouts bound each test; this bounds Vitest itself.
 const SUITE_TIMEOUT_MS = 15 * 60_000;
 
-export type Mode = "network" | "scripted";
+export type Mode = "network" | "scripted" | "prune";
+
+const ALL_SERVICES = [
+  "explorer-api",
+  "ethereum-listener",
+  "aztec-listener",
+  "websocket-event-publisher",
+] as const satisfies readonly ServiceName[];
 
 // A scenario judges what the blocks alone do to the explorer, so the API's
 // repair loop, whose first pass comes 2 min after it starts, stays out.
@@ -51,35 +63,44 @@ const NO_REPAIR = {
   "explorer-api": { L2_BLOCK_RECONCILIATION_INTERVAL_MS: String(3_600_000) },
 };
 
-const MODES: Record<
-  Mode,
-  {
-    services: readonly ServiceName[];
-    vitestConfig: string;
-    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
-  }
-> = {
-  network: {
-    services: [
-      "explorer-api",
-      "ethereum-listener",
-      "aztec-listener",
-      "websocket-event-publisher",
-    ],
-    vitestConfig: "vitest.smoke.config.ts",
-  },
-  // The scripted node has no L1, and the scenario reads only the REST API.
-  scripted: {
-    services: ["explorer-api", "aztec-listener"],
-    vitestConfig: "vitest.scripted.config.ts",
-    extraEnv: NO_REPAIR,
-  },
-};
-
 // Kafka keeps order only within a partition, so a run on several shows
 // whether blocks still reach the API in order.
 const BLOCK_PARTITIONS = 3;
 const BLOCK_TOPIC: keyof L2_MESSAGES = "NEW_BLOCK_EVENT";
+
+const MODES: Record<
+  Mode,
+  {
+    /** `stock`: `aztec start --local-network`; `launcher`: the same network with epoch auto-settle off. */
+    node: "stock" | "launcher" | "scripted";
+    services: readonly ServiceName[];
+    vitestConfig: string;
+    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
+    blockPartitions?: number;
+  }
+> = {
+  network: {
+    node: "stock",
+    services: ALL_SERVICES,
+    vitestConfig: "vitest.smoke.config.ts",
+  },
+  // The scripted node has no L1, and the scenario reads only the REST API.
+  scripted: {
+    node: "scripted",
+    services: ["explorer-api", "aztec-listener"],
+    vitestConfig: "vitest.scripted.config.ts",
+    extraEnv: NO_REPAIR,
+    blockPartitions: BLOCK_PARTITIONS,
+  },
+  // The websocket publisher relays what the listener publishes.
+  prune: {
+    node: "launcher",
+    services: ALL_SERVICES,
+    vitestConfig: "vitest.prune.config.ts",
+    extraEnv: NO_REPAIR,
+    blockPartitions: BLOCK_PARTITIONS,
+  },
+};
 
 export const RUN_ID_PATTERN = /^ns[0-9a-f]{10}$/;
 
@@ -106,13 +127,15 @@ const tail = (file: string, lines = 20) => {
 /**
  * The run owner. Vitest only asserts: its CLI exits on SIGINT before its own
  * async hooks could tear anything down. `network` runs a real local network;
- * `scripted` runs the scripted node in its place (`scripted-node.ts`).
+ * `prune` runs it with epoch auto-settle off, so a scenario can have it
+ * prune; `scripted` runs the scripted node in its place (`scripted-node.ts`).
  */
 export const run = async (mode: Mode): Promise<number> => {
   if (platform() !== "linux") {
     throw new Error("the network smoke run needs Linux (/proc)");
   }
-  const { services, vitestConfig, extraEnv } = MODES[mode];
+  const { node, services, vitestConfig, extraEnv, blockPartitions } =
+    MODES[mode];
   const missing = missingBuilds(services);
   if (missing.length > 0) {
     throw new Error(`run \`yarn build\` first; missing ${missing.join(", ")}`);
@@ -250,7 +273,7 @@ export const run = async (mode: Mode): Promise<number> => {
     const nodeTmp = createTmpDir(tmp.node);
     const walletTmp = createTmpDir(tmp.wallet);
     let toolchain: Toolchain | undefined;
-    if (mode === "network") {
+    if (node !== "scripted") {
       toolchain = await track(
         prepareToolchain({
           toolchainDir: config.toolchainDir,
@@ -296,15 +319,15 @@ export const run = async (mode: Mode): Promise<number> => {
         abort.signal.throwIfAborted();
         await prepareDatabases(started, services, abort.signal);
         mark("migrated");
-        if (mode === "scripted") {
+        if (blockPartitions !== undefined) {
           abort.signal.throwIfAborted();
           // generateL2TopicName's name, under this run's namespace.
           const topic = withKafkaNamespace(
             `${SMOKE_NETWORK}__${BLOCK_TOPIC}`,
             runId,
           );
-          await createTopic(started, topic, BLOCK_PARTITIONS);
-          mark(`${topic} has ${BLOCK_PARTITIONS} partitions`);
+          await createTopic(started, topic, blockPartitions);
+          mark(`${topic} has ${blockPartitions} partitions`);
         }
         return started;
       })(),
@@ -318,7 +341,13 @@ export const run = async (mode: Mode): Promise<number> => {
       );
       mark("anvil ready");
       abort.signal.throwIfAborted();
-      startAztecNode(groups, tools, ports, runDir, nodeTmp);
+      (node === "launcher" ? startLocalNetwork : startAztecNode)(
+        groups,
+        tools,
+        ports,
+        runDir,
+        nodeTmp,
+      );
       await waitUntil(
         "aztec node",
         async () => (await rpc(aztecNodeUrl, "node_getBlockNumber")) !== null,
@@ -366,7 +395,7 @@ export const run = async (mode: Mode): Promise<number> => {
       stack: infraStack,
       ports,
       runId,
-      anvilUrl: mode === "network" ? anvilUrl : undefined,
+      anvilUrl: node === "scripted" ? undefined : anvilUrl,
       extraEnv,
       aztecNodeUrl,
     });
@@ -394,9 +423,9 @@ export const run = async (mode: Mode): Promise<number> => {
       consumerLogs: [...services],
     };
     const endpoints: Endpoints | ScriptedEndpoints =
-      mode === "network"
-        ? { ...common, anvilUrl, wsUrl: `ws://127.0.0.1:${ports.ws}` }
-        : { ...common, controlUrl };
+      node === "scripted"
+        ? { ...common, controlUrl }
+        : { ...common, anvilUrl, wsUrl: `ws://127.0.0.1:${ports.ws}` };
     const vitestBin = join(
       dirname(createRequire(import.meta.url).resolve("vitest/package.json")),
       "vitest.mjs",

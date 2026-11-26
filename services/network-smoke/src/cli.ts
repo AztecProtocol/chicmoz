@@ -84,8 +84,12 @@ const main = async () => {
     process.exitCode = await run("network");
     return;
   }
-  if (command === "run" && args.length === 1 && args[0] === "scripted") {
-    process.exitCode = await run("scripted");
+  if (
+    command === "run" &&
+    args.length === 1 &&
+    (args[0] === "scripted" || args[0] === "prune")
+  ) {
+    process.exitCode = await run(args[0]);
     return;
   }
   if (command === "down" && args.length === 1) {
@@ -106,7 +110,7 @@ const main = async () => {
     return;
   }
   throw new Error(
-    "usage: cli.js run [scripted] | cli.js down <run id> | cli.js scripted-node <rpc port> <control port>",
+    "usage: cli.js run [scripted | prune] | cli.js down <run id> | cli.js scripted-node <rpc port> <control port>",
   );
 };
 

@@ -28,7 +28,13 @@ const ENTRY = join(
 );
 const REGISTRY = "https://registry.npmjs.org/";
 
-export type Toolchain = { aztecEntry: string; anvil: string; forge: string };
+export type Toolchain = {
+  aztecEntry: string;
+  /** The installed tree's `node_modules`, shared by every run: read only. */
+  nodeModules: string;
+  anvil: string;
+  forge: string;
+};
 
 type LockEntry = { integrity?: string; resolved?: string; link?: boolean };
 
@@ -74,7 +80,7 @@ const installAztec = async (
     .slice(0, 12);
   const dir = join(toolchainDir, `aztec-${hash}`);
   if (existsSync(join(dir, ENTRY))) {
-    return join(dir, ENTRY);
+    return dir;
   }
   const tmp = `${dir}.tmp-${runId}`;
   mkdirSync(tmp, { recursive: true });
@@ -105,7 +111,7 @@ const installAztec = async (
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
-  return join(dir, ENTRY);
+  return dir;
 };
 
 const findBinary = (name: string, binDir?: string) => {
@@ -159,8 +165,13 @@ export const prepareToolchain = async ({
   runId: string;
   log: string;
 }): Promise<Toolchain> => {
-  const aztecEntry = installAztec(toolchainDir, runId, log);
+  const aztec = installAztec(toolchainDir, runId, log);
   const foundry = pinnedFoundry(foundryBinDir);
-  await settleAll([aztecEntry, foundry]);
-  return { aztecEntry: await aztecEntry, ...(await foundry) };
+  await settleAll([aztec, foundry]);
+  const dir = await aztec;
+  return {
+    aztecEntry: join(dir, ENTRY),
+    nodeModules: join(dir, "node_modules"),
+    ...(await foundry),
+  };
 };

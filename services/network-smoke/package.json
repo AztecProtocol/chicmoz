@@ -14,12 +14,14 @@
     "test-once": "vitest run --dir src",
     "smoke": "node build/cli.js run",
     "smoke:scripted": "node build/cli.js run scripted",
+    "smoke:prune": "node build/cli.js run prune",
     "down": "node build/cli.js down"
   },
   "dependencies": {
     "@aztec-foundation/l1-artifacts": "6.0.0",
     "@aztec-labs/accounts": "6.0.0",
     "@aztec-labs/aztec.js": "6.0.0",
+    "@aztec-labs/ethereum": "6.0.0",
     "@aztec-labs/foundation": "6.0.0",
     "@aztec-labs/stdlib": "6.0.0",
     "@aztec-labs/wallets": "6.0.0",

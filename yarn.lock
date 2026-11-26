@@ -1788,6 +1788,7 @@ __metadata:
     "@aztec-foundation/l1-artifacts": "npm:6.0.0"
     "@aztec-labs/accounts": "npm:6.0.0"
     "@aztec-labs/aztec.js": "npm:6.0.0"
+    "@aztec-labs/ethereum": "npm:6.0.0"
     "@aztec-labs/foundation": "npm:6.0.0"
     "@aztec-labs/stdlib": "npm:6.0.0"
     "@aztec-labs/wallets": "npm:6.0.0"
