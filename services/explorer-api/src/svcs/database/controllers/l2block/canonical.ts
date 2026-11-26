@@ -36,7 +36,7 @@ import { store, writeTxEffect } from "./store.js";
 //
 // Ordered blocks are the listener's chain, sent in order: each is canonical
 // at its height and nothing canonical stays above its tip. Catch-up blocks
-// only fill empty heights and never demote anything.
+// only fill empty heights below the canonical head and never demote anything.
 
 /** Walks stop after this many steps; more canonical blocks than this above a tip is corrupted state. */
 export const WALK_BOUND = 10_000;
@@ -410,7 +410,8 @@ const demoteAbove = async (change: Change, ceiling: bigint) => {
   await demote(change, above);
 };
 
-type Link = { walked: ChainBlock[] } | "excludes" | "undecided";
+// `head`: no canonical block above, so nothing to descend from.
+type Link = { walked: ChainBlock[] } | "excludes" | "undecided" | "head";
 
 /**
  * Whether the lowest canonical block above an empty height descends from
@@ -431,7 +432,7 @@ const linkFromAbove = async (
     .orderBy(asc(l2Block.height))
     .limit(1);
   if (!lowest) {
-    return "undecided";
+    return "head";
   }
   const walked: ChainBlock[] = [];
   let child = toChainBlock(lowest);
@@ -818,10 +819,10 @@ export const applyOrderedBlock = (
 };
 
 /**
- * A catch-up block never demotes anything. It joins only at an empty
- * height: when the lowest canonical block above descends from it, or, with
- * `final` (at or below the serving node's own finalized tip), when the
- * canonical block below, if any, is its parent.
+ * A catch-up block never demotes anything. It joins only at an empty height
+ * below the canonical head: when the lowest canonical block above descends
+ * from it, or, with `final` (at or below the serving node's own finalized
+ * tip), when the canonical block below, if any, is its parent.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
@@ -836,6 +837,9 @@ export const applyCatchupBlock = (
       return false;
     }
     const link = await linkFromAbove(change, stored);
+    if (link === "head") {
+      return false;
+    }
     if (link === "excludes") {
       if (final) {
         logger.warn(

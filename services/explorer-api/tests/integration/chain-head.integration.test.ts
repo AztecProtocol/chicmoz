@@ -399,6 +399,16 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.ownerOf(c[1].txHashes[0])).toBe(c[1].hash);
   });
 
+  it("keeps a final catch-up block above the canonical head off the chain", async () => {
+    const version = freshVersion();
+    const [head, above] = await buildChain(16_000n, 2, { version });
+    await ordered(head);
+
+    await catchup(above, { final: true });
+
+    expect(await reads.chainOf(version)).toEqual(heads([head]));
+  });
+
   it("fills history from block 1 with final catch-up blocks, each only on the canonical block below as its parent", async () => {
     const version = freshVersion();
     const c = await buildChain(1n, 6, { version });
