@@ -17,6 +17,10 @@ export type NewBlockEvent = {
   blockNumber: number;
   statusHint: L2BlockStatusHint;
   block?: string;
+  // Only on blocks the hash-following listener sends in chain order. `tip` is
+  // the proposed tip of the pass that sent the block: every canonical block
+  // above it is dead.
+  ordered?: { tip: number };
 };
 
 export type PendingTxsEvent = {
@@ -43,6 +47,8 @@ export type ContractInstanceBalanceEvent = {
 export type CatchupBlockEvent = NewBlockEvent & {
   requestId?: string;
   catchupReason?: "startup" | "cadence" | "manual" | "eternal" | "reorg_repair";
+  // At or below the serving node's own finalized tip, read before the block.
+  final?: true;
 };
 
 export type L2TipsEvent = {
