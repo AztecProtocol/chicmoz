@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { brokerReads } from "./broker.js";
 import { readScriptedEndpoints } from "./endpoints.js";
 import {
   byRoot,
@@ -180,9 +181,33 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
       ...prune.final.filter((b) => b.height < prune.dead[0].height),
       ...prune.dead,
     ];
+    const deadHolder = prune.dead.find(
+      (b) => b.height === prune.movedTx.deadHeight,
+    );
     await stepThrough(prune, async () => {
-      // The prune tests something only once the API holds what it removes.
+      // The prune tests something only once the API holds what it removes,
+      // the moved tx and its contract on their dead block included: on the
+      // replacing block alone they would pass as a first insert.
       await apiHolds(old, "blocks 1-10 before the prune");
+      await vi.waitFor(
+        async () =>
+          expect(
+            {
+              txEffect: await api.txEffect(prune.movedTx.hash),
+              contractInstance: await api.contractInstance(
+                script.contractAddress,
+              ),
+            },
+            "the moved tx and its contract before the prune",
+          ).toEqual({
+            txEffect: deadHolder && served(deadHolder, false),
+            contractInstance: {
+              hash: deadHolder?.hash.toLowerCase(),
+              orphaned: false,
+            },
+          }),
+        { timeout: 30_000, interval: 1_000 },
+      );
       checkerBefore = await compareChain("sample");
     });
     seen = await settled(
@@ -306,5 +331,25 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
 
   it("serves each dead block by its hash, as orphaned", () => {
     expect(seen.dead).toEqual(prune.dead.map((b) => served(b, true)));
+  });
+});
+
+describe("the block topic, after both prunes", () => {
+  // Spaced steps reach the API in order from any partition; only a single
+  // partition holds the records in the order they were sent.
+  it("holds every block record in one of its partitions", async () => {
+    const broker = brokerReads(endpoints.broker);
+    try {
+      const partitions = await broker.recordsPerPartition(
+        endpoints.broker.blockTopic,
+      );
+      expect(partitions.length, "partitions").toBeGreaterThan(1);
+      expect(
+        partitions.filter((p) => p.records > 0),
+        "partitions holding records",
+      ).toHaveLength(1);
+    } finally {
+      await broker.close();
+    }
   });
 });

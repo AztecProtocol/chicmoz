@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { brokerAccessSchema } from "./broker.js";
 
 /** The run owner hands this to the Vitest process as one JSON env var. */
 export const ENDPOINTS_ENV = "NETWORK_SMOKE_ENDPOINTS";
@@ -10,6 +11,8 @@ const commonSchema = z.object({
   explorerApiUrl: z.string().url(),
   /** Log files (without `.log`) of the services that consume Kafka. */
   consumerLogs: z.array(z.string()),
+  /** The run's broker, with the harness's local credentials. */
+  broker: brokerAccessSchema,
 });
 
 export const endpointsSchema = commonSchema.extend({

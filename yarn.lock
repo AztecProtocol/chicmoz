@@ -1802,6 +1802,7 @@ __metadata:
     eslint: "npm:8.53.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-import: "npm:2.29.0"
+    kafkajs: "npm:2.2.4"
     typescript: "npm:5.8.3"
     viem: "npm:2.20.0"
     vite: "npm:8.3.8"

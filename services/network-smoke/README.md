@@ -56,6 +56,8 @@ That prune's replacing block is there at once. Then the script prunes the other 
 3. The moved tx is not dropped, and its effect is on 13″.
 4. Each dead block is served by its hash, as orphaned.
 
+Before each prune the test waits until the API holds the blocks it removes, with the moved tx's effect (and in the first, its contract) on its dead block, so neither can pass as a first insert. After both, the broker must hold every block record in one of the topic's 3 partitions: steps 2 s apart reach the API in order from any partition, so only a single partition shows the order is kept.
+
 `logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
 
 ## Prune mode

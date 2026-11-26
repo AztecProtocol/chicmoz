@@ -153,6 +153,11 @@ export const run = async (mode: Mode): Promise<number> => {
   }
   const config = readConfig();
   const runId = `ns${randomBytes(5).toString("hex")}`;
+  // generateL2TopicName's name, under this run's namespace.
+  const blockTopic = withKafkaNamespace(
+    `${SMOKE_NETWORK}__${BLOCK_TOPIC}`,
+    runId,
+  );
   const runDir = join(config.dir, runId);
   const logDir = join(runDir, "logs");
   mkdirSync(logDir, { recursive: true });
@@ -337,13 +342,8 @@ export const run = async (mode: Mode): Promise<number> => {
         mark("migrated");
         if (blockPartitions !== undefined) {
           abort.signal.throwIfAborted();
-          // generateL2TopicName's name, under this run's namespace.
-          const topic = withKafkaNamespace(
-            `${SMOKE_NETWORK}__${BLOCK_TOPIC}`,
-            runId,
-          );
-          await createTopic(started, topic, blockPartitions);
-          mark(`${topic} has ${blockPartitions} partitions`);
+          await createTopic(started, blockTopic, blockPartitions);
+          mark(`${blockTopic} has ${blockPartitions} partitions`);
         }
         return started;
       })(),
@@ -446,6 +446,12 @@ export const run = async (mode: Mode): Promise<number> => {
       aztecNodeUrl,
       explorerApiUrl,
       consumerLogs: [...services],
+      broker: {
+        brokers: infraStack.env.KAFKA_CONNECTION,
+        username: infraStack.env.KAFKA_SASL_USERNAME,
+        password: infraStack.env.KAFKA_SASL_PASSWORD,
+        blockTopic,
+      },
     };
     const endpoints: Endpoints | PruneEndpoints | ScriptedEndpoints =
       node === "scripted"
