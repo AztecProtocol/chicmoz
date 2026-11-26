@@ -96,7 +96,6 @@ const MODES: Record<
     extraEnv: NO_REPAIR,
     blockPartitions: BLOCK_PARTITIONS,
   },
-  // The websocket publisher relays what the listener publishes.
   prune: {
     node: "launcher",
     services: ALL_SERVICES,

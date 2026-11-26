@@ -101,10 +101,9 @@ export const startAztecNode = (
 
 /**
  * The local network with epoch auto-settle off (`toolchain/local-network.mjs`).
- * The launcher is copied, not linked, into the run directory: Node resolves
- * a linked entry from its real path, where the toolchain's packages are not.
- * Its imports then resolve through the run's link to the toolchain's
- * node_modules, so nothing is written into the shared toolchain directory.
+ * The launcher is copied into the run directory, beside a link to the
+ * toolchain's node_modules: linked, Node would resolve its imports from its
+ * real path, where those packages are not.
  */
 export const startLocalNetwork = (
   groups: ProcessGroups,

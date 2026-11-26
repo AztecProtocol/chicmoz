@@ -6,10 +6,8 @@
 // 200 ms, so nothing stays unproven long enough to be pruned. Here the proven
 // and finalized tips move only on `aztecDebug_prove`.
 //
-// Plain JavaScript, because none of these packages is a workspace dependency:
-// Node runs a copy from the run directory, whose node_modules links to the
-// installed toolchain. Unlike the CLI it serves no admin API, which nothing
-// here uses, and binds 127.0.0.1.
+// Plain JavaScript: none of these packages is a workspace dependency. Unlike
+// the CLI it serves no admin API and binds 127.0.0.1.
 import { BarretenbergSync } from "@aztec-foundation/bb.js";
 import { createLocalNetwork } from "@aztec-labs/aztec";
 import { registerAztecNodeRpcHandlers } from "@aztec-labs/aztec-node";
