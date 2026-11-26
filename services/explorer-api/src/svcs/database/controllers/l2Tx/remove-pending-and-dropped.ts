@@ -1,3 +1,4 @@
+import { type Heartbeat } from "@chicmoz-pkg/message-bus";
 import { type HexString } from "@chicmoz-pkg/types";
 import { eq, inArray } from "drizzle-orm";
 import { logger } from "../../../../logger.js";
@@ -14,6 +15,7 @@ import { type DbTx } from "../utils.js";
 export const removePendingAndDroppedTx = async (
   dbTx: DbTx,
   txHashes: HexString[],
+  heartbeat: Heartbeat,
 ): Promise<void> => {
   if (txHashes.length === 0) {
     return;
@@ -29,6 +31,7 @@ export const removePendingAndDroppedTx = async (
     });
   for (const pendingTx of pending) {
     logger.info(`🕐🔥 deleted pending tx ${pendingTx.txHash}`);
+    await heartbeat();
     await dbTx
       .update(txEffect)
       .set({

@@ -727,7 +727,7 @@ const settle = async (
     block.body.txEffects.forEach((e) => mined.add(e.txHash));
   }
   await inStatements(change, [...mined], (part) =>
-    removePendingAndDroppedTx(change.dbTx, part),
+    removePendingAndDroppedTx(change.dbTx, part, change.heartbeat),
   );
   await reviveRecords(change);
   await refreshOrphanFlags(change, created && !canonical ? [block.hash] : []);
@@ -769,7 +769,7 @@ const apply = async (
       const canonical = await decide(change, stored);
       await attachTxs(change, stored, block, { canonical });
       if (canonical) {
-        await storeBlockContracts(dbTx, contracts);
+        await storeBlockContracts(dbTx, contracts, heartbeat);
       }
       await settle(change, block, { canonical, created: stored.created });
       logger.info(

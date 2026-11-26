@@ -1,3 +1,4 @@
+import { type Heartbeat } from "@chicmoz-pkg/message-bus";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import {
   ChicmozL2ContractInstanceUpdatedEvent,
@@ -77,11 +78,13 @@ export type BlockContracts = {
 /**
  * Stores a block's contract rows inside its transaction, each in a savepoint:
  * a row that fails (a duplicate, or an instance whose class was never
- * stored) is logged and skipped without aborting the block.
+ * stored) is logged and skipped without aborting the block; a failed
+ * heartbeat, taken before each row, aborts it.
  */
 export const storeBlockContracts = async (
   dbTx: DbTx,
   { classes, instancesDeployed, instancesUpdated }: BlockContracts,
+  heartbeat: Heartbeat,
 ): Promise<void> => {
   const each = async <T>(
     rows: T[],
@@ -89,6 +92,7 @@ export const storeBlockContracts = async (
     write: (row: T, executor: DbTx) => Promise<void>,
   ) => {
     for (const row of rows) {
+      await heartbeat();
       try {
         await dbTx.transaction((savepoint) => write(row, savepoint));
       } catch (e) {

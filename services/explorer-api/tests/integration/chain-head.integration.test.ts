@@ -911,6 +911,20 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.chainOf(version)).toEqual(heads([p, fromStream]));
   });
 
+  it("heartbeats while settling a block that walks and demotes nothing", async () => {
+    const version = freshVersion();
+    const [block] = await buildChain(25_000n, 1, { version });
+    let beats = 0;
+
+    await orderedWith(orderedEvent(block), () => {
+      beats++;
+      return Promise.resolve();
+    });
+
+    expect(await reads.stateOf(block.hash)).toBe("canonical");
+    expect(beats).toBeGreaterThan(0);
+  });
+
   describe("bounds", () => {
     it("stops a walk at the bound without throwing, keeps its partition through it, and rolls back when a heartbeat fails", async () => {
       const version = freshVersion();
@@ -982,7 +996,7 @@ describe("the canonical chain on a real database", () => {
       expect(await reads.repairOpen(Number(from))).toBe(false);
     }, 300_000);
 
-    it("throws, changing nothing, on more canonical blocks above a tip than the bound, and heartbeats through demoting exactly the bound", async () => {
+    it("throws, changing nothing, on more canonical blocks above a tip than the bound, and demotes exactly the bound", async () => {
       const version = freshVersion();
       const from = 200_000n;
       await bareChain({ version, from: from + 1n, count: walkBound + 1 });
@@ -994,18 +1008,13 @@ describe("the canonical chain on a real database", () => {
       expect(await reads.stateOf(block.hash)).toBe("absent");
       expect(await reads.chainOf(version)).toHaveLength(walkBound + 1);
 
-      // No walk to heartbeat in: one replaced block, the bound above the tip.
+      // Replacing the lowest of them leaves exactly the bound above the tip.
       const replacing = await buildBlock(from + 1n, [freshTxHash()], {
         version,
       });
-      let beats = 0;
-      await orderedWith(orderedEvent(replacing), () => {
-        beats++;
-        return Promise.resolve();
-      });
+      await ordered(replacing);
 
       expect(await reads.chainOf(version)).toEqual(heads([replacing]));
-      expect(beats).toBeGreaterThan(0);
     }, 300_000);
 
     it("rethrows a chain lock wait over 10 s", async () => {
