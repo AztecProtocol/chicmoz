@@ -485,7 +485,7 @@ describe("the canonical chain on a real database", () => {
     ]);
   });
 
-  it("walks repairs back from an ordered block far above the head, one per attach, until they meet the old chain", async () => {
+  it("opens a repair at the parent height of each catch-up block that joins below an ordered block far above the head, until one joins on the old chain", async () => {
     const version = freshVersion();
     const [a0, a1] = await buildChain(18_000n, 2, { version });
     const b = await buildChain(18_001n, 5, { version, parent: a0 });
