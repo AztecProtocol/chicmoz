@@ -25,7 +25,7 @@ Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose
 
 ## In CI
 
-`.github/workflows/network-smoke.yml` runs it on pull requests that change what it builds or starts, nightly, and on demand, and reports `network-smoke-status`. It is not a required check. On failure, CI keeps whatever run logs, marks and harness logs exist, for 7 days.
+`.github/workflows/network-smoke.yml` runs it and the scripted mode, as two jobs, on pull requests that change what they build or start, nightly, and on demand, and reports both in `network-smoke-status`. It is not a required check. On failure, CI keeps whatever run logs, marks and harness logs exist, for 7 days.
 
 ## What it checks
 
@@ -47,7 +47,7 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 3. The moved tx is not dropped, its effect is on 7′, and the contract instance is on 7′.
 4. Each dead block is served by its hash, as orphaned.
 
-`logs/scripted-node.log` has each state change and every block lookup with the state it was answered in. CI does not run this mode.
+`logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
 
 ## Reading a failure
 
