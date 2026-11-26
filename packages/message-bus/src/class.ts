@@ -22,9 +22,12 @@ export interface MBOptions {
   ssl?: boolean;
 }
 
-// KafkaJS sends at most one heartbeat per interval (3 s by default), so a
-// handler can call this freely. It throws when the group rebalances; let that
-// propagate so the message is redelivered.
+// KafkaJS's heartbeat for the message being handled. A handler that can run
+// past the session timeout (30 s by default) awaits it while it works, never
+// after it returns, and lets a rejection propagate: it rejects once the group
+// rebalances, so the message is redelivered. Calls inside one heartbeat
+// interval (3 s by default) resolve without reaching the broker, so a resolved
+// call does not prove the member still owns the partition.
 export type Heartbeat = EachMessagePayload["heartbeat"];
 
 type TopicCallback = (event: object, heartbeat: Heartbeat) => Promise<void>;
@@ -127,7 +130,13 @@ export class MessageBus {
   private async ensureProducerConnected() {
     if (!this.#producerConnectingPromise) {
       this.#producer = this.#client.producer();
-      this.#producerConnectingPromise = this.#producer.connect();
+      this.#producerConnectingPromise = this.#producer
+        .connect()
+        .catch((e: unknown) => {
+          // A failed connect must not stick: the next publish retries it.
+          this.#producerConnectingPromise = undefined;
+          throw e;
+        });
     }
     await this.#producerConnectingPromise;
   }
@@ -144,9 +153,11 @@ export class MessageBus {
     await this.produce(topic, messages);
   }
 
-  // KafkaJS hashes the key over the topic's partition count, so messages with
-  // one key stay on one partition, in order, only while that count holds and
-  // each call is awaited before the next.
+  // Messages with one key share a partition while the topic's partition count
+  // holds. They keep their first-append order only for one writer that awaits
+  // each call before the next (a retried send can overtake a concurrent one),
+  // and a lost acknowledgement resends the batch, so consumers must tolerate
+  // duplicates.
   async publishKeyed<T>(topic: string, key: string, ...messages: T[]) {
     await this.produce(topic, messages, key);
   }
@@ -273,9 +284,6 @@ export class MessageBus {
         }
         const cb = this.#consumers[groupId]?.topicCallbacks[topic];
         if (cb) {
-          // The broker evicts a member silent past the session timeout (KafkaJS
-          // default 30 s), and its partitions resume from their last commit. A
-          // handler that can run that long calls the heartbeat it is passed.
           await heartbeat();
           try {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument

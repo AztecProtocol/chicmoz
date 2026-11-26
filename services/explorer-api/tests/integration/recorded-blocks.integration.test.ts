@@ -77,6 +77,7 @@ const frameData = <T>(name: string): T =>
 
 const PENDING = frameData<PendingTxsEvent>("pending-txs-event-1");
 const CHAIN_INFO = frameData<ChicmozChainInfoEvent>("chain-info-event-1");
+const noHeartbeat = () => Promise.resolve();
 const RPC_NODE = producerFrameData(
   "local-network/rpc-node",
   "L2_RPC_NODE_INFO_EVENT",
@@ -247,7 +248,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       const { pendingTxHandler } = await import(
         "../../src/events/received/on-pending-txs.js"
       );
-      await pendingTxHandler.cb(PENDING);
+      await pendingTxHandler.cb(PENDING, noHeartbeat);
       for (const { txHash } of PENDING.txs) {
         expect(
           snapshotOf(await get(`/l2/txs/${txHash}`, "/l2/txs/{hash}")),
@@ -505,8 +506,8 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       const { l2RpcNodeErrorHandler } = await import(
         "../../src/events/received/on-l2-rpc-node.js"
       );
-      await l2RpcNodeInfoHandler.cb(RPC_NODE);
-      await l2RpcNodeErrorHandler.cb(RPC_NODE_ERROR);
+      await l2RpcNodeInfoHandler.cb(RPC_NODE, noHeartbeat);
+      await l2RpcNodeErrorHandler.cb(RPC_NODE_ERROR, noHeartbeat);
     };
 
     it("GET /l2/rpc-nodes answers from the committed string of its cache entry", async () => {
@@ -566,7 +567,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
         "../../src/events/received/on-l1-l2-validator.js"
       );
       const { L1L2ValidatorStatus } = await import("@chicmoz-pkg/types");
-      await chainInfoHandler.cb(CHAIN_INFO);
+      await chainInfoHandler.cb(CHAIN_INFO, noHeartbeat);
       const args = loadFixture("testnet", "l1-log", "rollup-validator-queued")
         .data.log.args as Record<"attester" | "withdrawer", `0x${string}`>;
       const event: L1L2ValidatorEvent = {

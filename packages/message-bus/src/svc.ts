@@ -77,11 +77,9 @@ const _startSubscribe = async (eventHandler: EventHandler) => {
 export type EventHandler = {
   groupId: string;
   topic: ChicmozMessageBusTopic;
-  // The bus always passes `heartbeat`; it is optional so tests can call `cb`
-  // without one.
   cb: (
     message: ChicmozMessageBusPayload,
-    heartbeat?: Heartbeat,
+    heartbeat: Heartbeat,
   ) => Promise<void>;
 };
 

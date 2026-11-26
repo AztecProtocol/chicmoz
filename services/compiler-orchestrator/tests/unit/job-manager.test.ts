@@ -61,6 +61,7 @@ vi.mock("@chicmoz-pkg/message-bus", () => ({
 vi.mock("child_process", () => ({ execFile: mocks.execFile }));
 
 const POLL_INTERVAL_MS = 5000;
+const noHeartbeat = () => Promise.resolve();
 
 const request = (
   overrides: Partial<CompileSourceRequestEvent> = {},
@@ -109,7 +110,7 @@ const finishJob = async (
 ): Promise<Record<string, unknown>> => {
   const handler = await subscribedHandler();
   const event = request();
-  await handler.cb(event);
+  await handler.cb(event, noHeartbeat);
   expect(mocks.backend.launch).toHaveBeenCalledTimes(1);
   mocks.backend.checkStatus.mockResolvedValue(status);
   mocks.backend.readLogs.mockResolvedValue(logs);
@@ -206,7 +207,7 @@ describe("compile request handler", () => {
     );
     const event = request();
 
-    await handler.cb(event);
+    await handler.cb(event, noHeartbeat);
 
     expect(mocks.backend.launch).toHaveBeenCalledTimes(1);
     expect(mocks.backend.launch).toHaveBeenCalledWith(
@@ -240,7 +241,7 @@ describe("compile request handler", () => {
     const handler = await subscribedHandler();
     const event = request();
 
-    await handler.cb(event);
+    await handler.cb(event, noHeartbeat);
 
     const gitCalls = mocks.execFile.mock.calls.map(
       ([file, args]) => [file, args] as [string, string[]],
@@ -277,7 +278,7 @@ describe("compile request handler", () => {
   ])("refuses a %s before running git or the backend", async (_, overrides) => {
     const handler = await subscribedHandler();
 
-    await handler.cb(request(overrides));
+    await handler.cb(request(overrides), noHeartbeat);
 
     expect(mocks.execFile).not.toHaveBeenCalled();
     expect(mocks.backend.launch).not.toHaveBeenCalled();
@@ -310,7 +311,7 @@ describe("compile request handler", () => {
       const handler = await subscribedHandler();
       const event = request();
 
-      await expect(handler.cb(event)).resolves.toBeUndefined();
+      await expect(handler.cb(event, noHeartbeat)).resolves.toBeUndefined();
 
       const results = publishedResults();
       expect(results).toEqual([
@@ -343,7 +344,7 @@ describe("compile request handler", () => {
     );
     const handler = await subscribedHandler();
 
-    await handler.cb(request());
+    await handler.cb(request(), noHeartbeat);
 
     expect(publishedResults()).toEqual([
       expect.objectContaining({
