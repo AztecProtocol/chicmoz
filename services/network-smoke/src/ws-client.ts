@@ -2,11 +2,12 @@ import { type ChicmozL2Block, chicmozL2BlockSchema } from "@chicmoz-pkg/types";
 import { WebSocket } from "ws";
 import { z } from "zod";
 
-/** A block or tips frame, at its arrival; `height` is the tips' proposed number. */
+/** A block or tips frame, at its arrival; for tips, `height` and `hash` are the proposed tip's. */
 export type WsFrame = {
   at: number;
   kind: "block" | "l2Tips";
   height?: number;
+  hash?: string;
 };
 
 export type WsClient = {
@@ -14,11 +15,16 @@ export type WsClient = {
   /** Block frames that failed the shared schema, with the reason. */
   rejected: string[];
   frames: WsFrame[];
+  /** When the socket closed, if it has. */
+  closedAt?: number;
   close(): void;
 };
 
-const tipsHeight = z.object({
-  proposed: z.object({ number: z.coerce.number() }),
+const proposedTip = z.object({
+  proposed: z.object({
+    number: z.coerce.number(),
+    hash: z.string().optional(),
+  }),
 });
 
 /**
@@ -45,11 +51,14 @@ export const connectWs = (url: string, timeoutMs = 10_000) =>
         l2Tips?: unknown;
       };
       if (frame.l2Tips !== undefined) {
-        const tips = tipsHeight.safeParse(frame.l2Tips);
+        const tips = proposedTip.safeParse(frame.l2Tips);
         client.frames.push({
           at,
           kind: "l2Tips",
           height: tips.success ? tips.data.proposed.number : undefined,
+          hash: tips.success
+            ? tips.data.proposed.hash?.toLowerCase()
+            : undefined,
         });
         return;
       }
@@ -63,11 +72,15 @@ export const connectWs = (url: string, timeoutMs = 10_000) =>
           at,
           kind: "block",
           height: Number(parsed.data.height),
+          hash: parsed.data.hash.toLowerCase(),
         });
       } else {
         client.rejected.push(parsed.error.message);
         client.frames.push({ at, kind: "block" });
       }
+    });
+    socket.once("close", () => {
+      client.closedAt = Date.now();
     });
     socket.once("open", () => {
       clearTimeout(timer);

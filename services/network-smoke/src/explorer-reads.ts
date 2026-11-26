@@ -10,6 +10,28 @@ import { z } from "zod";
 
 export type BlockRef = { height: number; hash: string };
 
+export type ReorgRecord = {
+  height: number;
+  nbrOfOrphanedBlocks: number;
+  orphanedBlockHash: string;
+};
+
+type ReorgList = ReorgRecord[] | { status: number };
+
+/** Sorted by root, so two lists compare as sets; a failed read stays as it is. */
+export const byRoot = (reorgs: ReorgList): ReorgList =>
+  Array.isArray(reorgs)
+    ? [...reorgs].sort(
+        (a, b) =>
+          a.height - b.height ||
+          a.orphanedBlockHash.localeCompare(b.orphanedBlockHash),
+      )
+    : reorgs;
+
+/** `baseline` with `record` added, by root; a failed baseline read stays as it is. */
+export const plusReorg = (baseline: ReorgList, record: ReorgRecord) =>
+  Array.isArray(baseline) ? byRoot([...baseline, record]) : baseline;
+
 /** A block as the scenarios compare it: its id, and whether it is served as orphaned. */
 export const served = ({ height, hash }: BlockRef, orphaned: boolean) => ({
   height,

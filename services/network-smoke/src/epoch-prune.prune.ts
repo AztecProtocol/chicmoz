@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readPruneEndpoints } from "./endpoints.js";
 import {
   type BlockRef,
+  byRoot,
   explorerReads,
+  plusReorg,
   served,
   settle,
 } from "./explorer-reads.js";
@@ -35,6 +37,9 @@ const PREFIX_GRACE_MS = 3_000;
 // 15 of the listener's block polls, and longer than its tips cadence (a 5 s
 // poll and the 5 s heartbeat set here), so today's tips timer shows.
 const PREFIX_WAIT_MS = 15_000;
+// The listener polls every second here: a longer gap between its tip reads
+// than the tips cadence means it stopped reading the node.
+const LISTENER_READ_GAP_MS = 5_000;
 
 const t0 = Date.now();
 const log = (line: string) =>
@@ -321,11 +326,48 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
   });
 });
 
+/**
+ * Waits until the websocket publisher has relayed each doomed block and a
+ * tips frame at the doomed tip sent after `since`, so no frame from before
+ * the prune can land in the quiet window.
+ */
+const framesArrived = (
+  doomed: number[],
+  hashes: Map<number, string>,
+  since: number,
+) =>
+  vi.waitFor(
+    () => {
+      const tip = Math.max(...doomed);
+      expect(
+        doomed.filter(
+          (h) =>
+            !ws.frames.some(
+              (f) => f.kind === "block" && f.hash === hashes.get(h),
+            ),
+        ),
+        "doomed blocks the websocket has not relayed",
+      ).toEqual([]);
+      expect(
+        ws.frames.some(
+          (f) =>
+            f.kind === "l2Tips" &&
+            f.at >= since &&
+            f.height === tip &&
+            (f.hash === undefined || f.hash === hashes.get(tip)),
+        ),
+        `a tips frame at the doomed tip ${tip}`,
+      ).toBe(true);
+    },
+    { timeout: 30_000, interval: 500 },
+  );
+
 describe("a prune of empty blocks, which leaves the node on the shorter chain until a tx comes", () => {
   let prune: ForcedPrune;
   let dead: BlockRef[];
   let quiet: WsFrame[];
   let kept: { start: unknown; end: unknown };
+  let baseline: Outcome["reorgs"];
   let receipt: Receipt;
   let chain: Map<number, string>;
   let heights: number[];
@@ -333,6 +375,7 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
 
   beforeAll(async () => {
     log("shorter chain: start");
+    let provedAt = 0;
     prune = await forceEpochPrune({
       node,
       nodeUrl: endpoints.aztecNodeUrl,
@@ -340,9 +383,16 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
       log,
       sendTxs: () => Promise.resolve(),
       emptyBlocks: 2,
-      afterProve: baseHeld,
+      afterProve: (base) => {
+        provedAt = Date.now();
+        return baseHeld(base);
+      },
       expectReplacement: false,
-      beforeTrigger: (doomed, hashes) => apiHolds(doomed, hashes),
+      beforeTrigger: async (doomed, hashes) => {
+        await apiHolds(doomed, hashes);
+        await framesArrived(doomed, hashes, provedAt);
+        baseline = await api.reorgs();
+      },
     });
     dead = deadOf(prune);
     const view = async () => ({
@@ -361,6 +411,24 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
     if (moved.length > 0 || tip !== prune.target) {
       throw new Error(
         `the node left the shorter chain during the wait: tip ${tip}, ${JSON.stringify(moved)}`,
+      );
+    }
+    // Silence counts only from an open socket and a listener still reading.
+    if (ws.closedAt !== undefined && ws.closedAt <= to) {
+      throw new Error(
+        `the websocket closed ${ws.closedAt - from} ms into the wait`,
+      );
+    }
+    const reads = readTipReads(endpoints.rpcTapFile).filter(
+      (r) => r.proposed !== undefined && r.at >= from && r.at <= to,
+    );
+    const instants = [from, ...reads.map((r) => r.at), to];
+    const longestGap = Math.max(
+      ...instants.slice(1).map((t, i) => t - instants[i]),
+    );
+    if (longestGap > LISTENER_READ_GAP_MS) {
+      throw new Error(
+        `the listener read no tip for ${longestGap} ms of the wait (${reads.length} reads)`,
       );
     }
     quiet = ws.frames.filter((f) => f.at >= from && f.at <= to);
@@ -417,21 +485,15 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
     expect
       .soft(seen.chain, "the canonical block above the target")
       .toEqual(expectedChain(heights, chain));
-    const deadHashes = new Set(dead.map((b) => b.hash));
     expect
-      .soft(
-        Array.isArray(seen.reorgs)
-          ? seen.reorgs.filter((r) => deadHashes.has(r.orphanedBlockHash))
-          : seen.reorgs,
-        "reorgs rooted in the dead blocks",
-      )
-      .toEqual([
-        {
+      .soft(byRoot(seen.reorgs), "every reorg: those before the prune, and one")
+      .toEqual(
+        plusReorg(baseline, {
           height: prune.removed[0],
           nbrOfOrphanedBlocks: prune.removed.length,
-          orphanedBlockHash: prune.before.get(prune.removed[0]),
-        },
-      ]);
+          orphanedBlockHash: prune.before.get(prune.removed[0]) ?? "",
+        }),
+      );
     expect
       .soft(seen.dead, "the dead blocks by hash")
       .toEqual(dead.map((b) => served(b, true)));

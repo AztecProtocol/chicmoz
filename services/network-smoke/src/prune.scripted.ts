@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { readScriptedEndpoints } from "./endpoints.js";
-import { explorerReads, served, settle } from "./explorer-reads.js";
+import {
+  byRoot,
+  explorerReads,
+  plusReorg,
+  served,
+  settle,
+} from "./explorer-reads.js";
 import {
   type BlockId,
   type PruneFacts,
@@ -282,27 +288,12 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
   });
 
   it("adds one reorg to those before it: the 4 blocks from height 13", () => {
-    const byRoot = (reorgs: Snapshot["reorgs"]) =>
-      Array.isArray(reorgs)
-        ? [...reorgs].sort(
-            (a, b) =>
-              a.height - b.height ||
-              a.orphanedBlockHash.localeCompare(b.orphanedBlockHash),
-          )
-        : reorgs;
     expect(byRoot(seen.reorgs)).toEqual(
-      byRoot(
-        Array.isArray(baseline)
-          ? [
-              ...baseline,
-              {
-                height: prune.dead[0].height,
-                nbrOfOrphanedBlocks: prune.dead.length,
-                orphanedBlockHash: prune.dead[0].hash.toLowerCase(),
-              },
-            ]
-          : baseline,
-      ),
+      plusReorg(baseline, {
+        height: prune.dead[0].height,
+        nbrOfOrphanedBlocks: prune.dead.length,
+        orphanedBlockHash: prune.dead[0].hash.toLowerCase(),
+      }),
     );
   });
 
