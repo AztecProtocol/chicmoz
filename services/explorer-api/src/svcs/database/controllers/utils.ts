@@ -1,9 +1,14 @@
 import { BadRequestError } from "@chicmoz-pkg/error-middleware";
+import { type getDb } from "@chicmoz-pkg/postgres-helper";
 import { Table, and, getTableColumns, gte, lt } from "drizzle-orm";
 import { ZodError } from "zod";
 import { DB_MAX_BLOCKS } from "../../../environment.js";
 import { logger } from "../../../logger.js";
 import { l2Block } from "../schema/index.js";
+
+export type DbTx = Parameters<
+  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
+>[0];
 
 export const dbParseErrorCallback = (e: unknown) => {
   if (e instanceof ZodError) {

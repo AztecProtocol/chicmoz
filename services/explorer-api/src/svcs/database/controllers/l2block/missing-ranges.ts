@@ -141,6 +141,26 @@ const MAX_GAP_BACKOFF_MS = 60 * 60 * 1000;
 // requested first.
 const CANDIDATE_GAP_LIMIT = 50;
 const TIP_BOUNDARY_REASON: L2BlockRangeRequestReason = "tip_boundary_mismatch";
+// One height whose block message must come back: the canonical block there
+// lacks it, or the height was cleared under a block whose parent is missing.
+// Requested whole, present or not, until a canonical attach from a block
+// message fulfils it (markOpenGapsFulfilledByHeight).
+const REPAIR_REASON: L2BlockRangeRequestReason = "reorg_repair";
+
+export const recordRepairHeights = async (
+  executor: ReturnType<typeof db>,
+  heights: Iterable<bigint>,
+) => {
+  await upsertOpenGaps({
+    ranges: [...heights].map((height) => ({
+      from: Number(height),
+      to: Number(height),
+      statusHint: "proposed" as const,
+    })),
+    reason: REPAIR_REASON,
+    executor,
+  });
+};
 
 /**
  * Whether a gap may be requested again at `now` (epoch ms): never requested,
@@ -364,7 +384,7 @@ const selectGapRequest = async ({
     const upper = Math.min(gap.toHeight, chainTip);
     const missing: number[] = [];
     for (let height = gap.fromHeight; height <= upper; height++) {
-      if (!present.has(height)) {
+      if (gap.reason === REPAIR_REASON || !present.has(height)) {
         missing.push(height);
       }
     }

@@ -19,19 +19,24 @@ import { join } from "node:path";
 // explorer-api modules read their environment at import, so everything from
 // src is imported dynamically, after startExplorerApiForTest().
 
-/** The recorded blocks of one source in chain order, as aztec-listener publishes them. */
-export const recordedBlocks = (source: FixtureSource) =>
-  listFixtures(source, "l2-block")
-    .map((name) => {
-      const { data } = loadFixture(source, "l2-block", name);
+/** The recorded blocks of one source in chain order, as one ordered pass of aztec-listener. */
+export const recordedBlocks = (source: FixtureSource) => {
+  const fixtures = listFixtures(source, "l2-block").map(
+    (name) => [name, loadFixture(source, "l2-block", name).data] as const,
+  );
+  const tip = Math.max(...fixtures.map(([, data]) => data.expected.height));
+  return fixtures
+    .map(([name, data]) => {
       const event: NewBlockEvent = {
         blockNumber: data.expected.height,
         statusHint: "proposed",
         block: data.hex,
+        ordered: { tip },
       };
       return { name, expected: data.expected, event };
     })
     .sort((a, b) => a.expected.height - b.expected.height);
+};
 
 /** Bytecode, artifacts and class-publish logs run to hundreds of kilobytes per copy. */
 const BULKY_KEYS = new Set([
