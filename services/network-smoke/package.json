@@ -13,6 +13,7 @@
     "test": "vitest run --dir src",
     "test-once": "vitest run --dir src",
     "smoke": "node build/cli.js run",
+    "smoke:scripted": "node build/cli.js run scripted",
     "down": "node build/cli.js down"
   },
   "dependencies": {

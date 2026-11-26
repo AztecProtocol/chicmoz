@@ -7,6 +7,7 @@ End-to-end smoke run of the explorer backend against a real Aztec 6.0.0 local ne
 ```sh
 yarn build                                      # the four services, the harness and this package
 yarn smoke                                      # one run: set up, assert, tear down; exit code is the verdict
+yarn smoke:scripted                             # one run against a scripted node that prunes (see below)
 yarn workspace @chicmoz/network-smoke down <run> # clean up a run whose runner was killed (SIGKILL)
 yarn harness ls | down <id>                     # compose projects, as for integration tests
 ```
@@ -34,6 +35,19 @@ Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose
 4. Every height up to that block has the node's hash, and its `proposedOnL1` matches the rollup's `CheckpointProposed` log on anvil (archive, L1 block number, L1 transaction hash).
 5. `/l2/tips` is not degraded, and its proposed tip has reached that block.
 6. No consumer logs three or more handler failures on one topic. One or two can be at-least-once delivery recovering, and the run prints them.
+
+## Scripted mode
+
+`yarn smoke:scripted` replaces anvil and the Aztec node with a scripted JSON-RPC node (`src/scripted-node.ts`) and starts only `aztec-listener` and `explorer-api`, with the same harness, isolation and teardown. It installs no toolchain and needs no foundry. Before any service starts, it creates the block topic with 3 partitions, so blocks published without a key can reach the API out of order.
+
+The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and answers any method it does not implement with "Method not found". Its chain (`src/scripted-chain.ts`) grows blocks 1–10, proves and finalizes 1–6, then prunes 7–10 and grows 7′–12′ on 6. The block that deploys a contract dies at 8; its tx is mined again in 7′. The test (`src/prune.scripted.ts`) steps the node through each state on its control port (the `aztecAdmin` port: `GET /script`, `POST /script/step`), waits until the API stops changing, and checks through REST only:
+
+1. Heights 1–12 serve the final chain, and nothing exists at 13.
+2. `/l2/reorgs` lists one reorg: height 7, 4 blocks, rooted at the dead 7.
+3. The moved tx is not dropped, its effect is on 7′, and the contract instance is on 7′.
+4. Each dead block is served by its hash, as orphaned.
+
+`logs/scripted-node.log` has each state change and every block lookup with the state it was answered in. CI does not run this mode.
 
 ## Reading a failure
 

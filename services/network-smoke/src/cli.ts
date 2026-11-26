@@ -67,18 +67,45 @@ const down = async (runId: string) => {
   process.stdout.write(`run ${runId} is down\n`);
 };
 
-const [command, arg] = process.argv.slice(2);
+const portOf = (value: string) => {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`"${value}" is not a port`);
+  }
+  return port;
+};
+
+const [command, ...args] = process.argv.slice(2);
 
 const main = async () => {
-  if (command === "run") {
-    process.exitCode = await run();
+  if (command === "run" && args.length === 0) {
+    process.exitCode = await run("network");
     return;
   }
-  if (command === "down" && arg) {
-    await down(arg);
+  if (command === "run" && args.length === 1 && args[0] === "scripted") {
+    process.exitCode = await run("scripted");
     return;
   }
-  throw new Error("usage: cli.js run | cli.js down <run id>");
+  if (command === "down" && args.length === 1) {
+    await down(args[0]);
+    return;
+  }
+  // A child of `run scripted`; it serves until the run stops its group.
+  if (command === "scripted-node" && args.length === 2) {
+    // Imported here, so `run` and `down` never load the SDK.
+    const { startScriptedNode } = await import("./scripted-node.js");
+    const node = await startScriptedNode({
+      rpcPort: portOf(args[0]),
+      controlPort: portOf(args[1]),
+    });
+    process.stdout.write(
+      `scripted node: rpc ${node.rpcUrl}, control ${node.controlUrl}\n`,
+    );
+    return;
+  }
+  throw new Error(
+    "usage: cli.js run [scripted] | cli.js down <run id> | cli.js scripted-node <rpc port> <control port>",
+  );
 };
 
 main().catch((e: Error) => {
