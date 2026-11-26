@@ -143,12 +143,14 @@ export const startScriptedNode = async ({
   const nodeInfo = recordedNodeInfo();
   let current = 0;
   let tipReads = 0;
+  let stateReads = 0;
   const state = () => states[current];
 
   const handler = {
     getNodeInfo: () => Promise.resolve(nodeInfo),
     getChainTips: (): Promise<L2Tips> => {
       tipReads++;
+      stateReads++;
       const s = state();
       const proposed = s.chain.length - 1;
       return Promise.resolve({
@@ -162,8 +164,12 @@ export const startScriptedNode = async ({
       });
     },
     getBlockNumber: (tag?: L2BlockTag) => {
+      const tier = tag ?? "proposed";
       tipReads++;
-      return Promise.resolve(BlockNumber(heightAt(state(), tag ?? "proposed")));
+      if (tier === "proposed") {
+        stateReads++;
+      }
+      return Promise.resolve(BlockNumber(heightAt(state(), tier)));
     },
     getBlock: async (param: BlockParameter, options?: BlockIncludeOptions) => {
       const block = find(state(), param);
@@ -214,7 +220,12 @@ export const startScriptedNode = async ({
     { host, port: rpcPort },
   );
 
-  const status = (): ScriptStatus => ({ ...facts, current, tipReads });
+  const status = (): ScriptStatus => ({
+    ...facts,
+    current,
+    tipReads,
+    stateReads,
+  });
   const control = createServer((req, res) => {
     const reply = (code: number, body: unknown) => {
       res.writeHead(code, { "content-type": "application/json" });
@@ -228,6 +239,7 @@ export const startScriptedNode = async ({
         return;
       }
       current++;
+      stateReads = 0;
       const s = state();
       log(
         `state ${current} ${s.label}: proposed ${s.chain.length - 1} ${s.chain.at(-1)?.hash}, checkpointed ${s.checkpointed}, proven ${s.proven}, finalized ${s.finalized}`,
@@ -239,7 +251,7 @@ export const startScriptedNode = async ({
   });
   const controlBound = await listen(control, host, controlPort);
   log(
-    `state 0 ${state().label}; ${states.length} states, prune at ${facts.pruneAt}`,
+    `state 0 ${state().label}; ${states.length} states, prunes at ${facts.prunes.map((p) => p.pruneAt).join(" and ")}`,
   );
 
   return {

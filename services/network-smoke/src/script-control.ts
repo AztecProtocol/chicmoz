@@ -2,31 +2,44 @@ import { z } from "zod";
 
 const blockIdSchema = z.object({ height: z.number().int(), hash: z.string() });
 
-/** What the explorer must end up serving, as the scripted node built it. */
-export const scriptFactsSchema = z.object({
-  states: z.array(z.string()),
-  /** Index of the first state that serves the replacing chain. */
+const pruneFactsSchema = z.object({
+  /** Index of the first state without the dead blocks. */
   pruneAt: z.number().int(),
-  /** Blocks 7–10 as the node served them before the prune. */
+  /** States from `pruneAt` on that serve the shorter chain, whose tip is the prune target, before the replacing block. */
+  shorterSteps: z.number().int(),
+  /** Index of the state where the replacing chain has grown to its end. */
+  endAt: z.number().int(),
+  /** The pruned blocks, as the node served them before the prune. */
   dead: z.array(blockIdSchema),
-  /** Blocks 1–12′ of the last state. */
+  /** Every block the node serves at `endAt`. */
   final: z.array(blockIdSchema),
-  /** In a dead block and again in the replacing chain; it deploys `contractAddress`. */
+  /** In a dead block and again in the replacing chain. */
   movedTx: z.object({
     hash: z.string(),
     deadHeight: z.number().int(),
     finalHeight: z.number().int(),
   }),
+});
+
+/** What the explorer must end up serving, as the scripted node built it. */
+export const scriptFactsSchema = z.object({
+  states: z.array(z.string()),
+  /** First a prune whose replacing block is there at once, then one that serves the shorter chain first. */
+  prunes: z.tuple([pruneFactsSchema, pruneFactsSchema]),
+  /** Deployed by the first prune's moved tx. */
   contractAddress: z.string(),
 });
 
 export type ScriptFacts = z.infer<typeof scriptFactsSchema>;
+export type PruneFacts = z.infer<typeof pruneFactsSchema>;
 export type BlockId = z.infer<typeof blockIdSchema>;
 
 export const scriptStatusSchema = scriptFactsSchema.extend({
   current: z.number().int(),
   /** `getChainTips` and `getBlockNumber` calls served so far: the listener's polls. */
   tipReads: z.number().int(),
+  /** Reads of the proposed tip answered in the current state. */
+  stateReads: z.number().int(),
 });
 
 export type ScriptStatus = z.infer<typeof scriptStatusSchema>;

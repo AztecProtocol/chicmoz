@@ -213,7 +213,6 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
       node,
       nodeUrl: endpoints.aztecNodeUrl,
       anvilUrl: endpoints.anvilUrl,
-      watch,
       log,
       sendTxs: async () => {
         txs = [await sender.deploy(), await sender.deploy()];
@@ -338,7 +337,6 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
       node,
       nodeUrl: endpoints.aztecNodeUrl,
       anvilUrl: endpoints.anvilUrl,
-      watch,
       log,
       sendTxs: () => Promise.resolve(),
       emptyBlocks: 2,

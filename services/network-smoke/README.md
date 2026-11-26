@@ -49,6 +49,13 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 4. Each dead block is served by its hash, as orphaned.
 5. `scripts/compare-chain.ts` finds no mismatch before the prune, and after it names the same first divergence as the checks above, without printing either URL.
 
+That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, which the test holds until the listener has read it, before it proposes 13″ with that tx and grows 13″–16″. The checks:
+
+1. Heights 13–16 serve 13″–16″, and nothing exists at 17.
+2. `/l2/reorgs` is the list from before the prune plus one reorg: height 13, 4 blocks, rooted at the dead 13′.
+3. The moved tx is not dropped, and its effect is on 13″.
+4. Each dead block is served by its hash, as orphaned.
+
 `logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
 
 ## Prune mode

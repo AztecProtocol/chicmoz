@@ -108,6 +108,9 @@ const idOf = ({ block, hash }: ScriptedBlock): BlockId => ({
  * network's did across an epoch prune: the shorter chain is never served
  * (the replacing block is already there), the checkpointed tip reaches 7′ one
  * step later, and the proven and finalized tips stay at the prune target.
+ * Then 7′–12′ become proven and finalized, 13′–16′ grow, and the node
+ * prunes them the other way: it serves the shorter chain, tip 12′, for one
+ * step before it proposes 13″ and grows 13″–16″.
  */
 export const buildScript = async (): Promise<Script> => {
   const { l1ChainId, rollupVersion } = recordedNodeInfo();
@@ -118,6 +121,7 @@ export const buildScript = async (): Promise<Script> => {
   };
   const classTx = recordedTx("block-1");
   const deployTx = recordedTx("block-2");
+  const secondTx = recordedTx("block-11");
   const [contractAddress] =
     recordedBlock("block-2").expected.contractInstanceAddresses;
 
@@ -145,6 +149,15 @@ export const buildScript = async (): Promise<Script> => {
   const replacing = await grow(old.slice(0, 7), 12, (h) => h + 7, {
     7: [deployTx],
   });
+  const second = await grow(replacing.slice(0, 13), 16, (h) => h + 7, {
+    14: [secondTx],
+  });
+  const secondReplacing = await grow(
+    replacing.slice(0, 13),
+    16,
+    (h) => h + 11,
+    { 13: [secondTx] },
+  );
 
   const states: NodeState[] = [];
   const at = (
@@ -170,19 +183,51 @@ export const buildScript = async (): Promise<Script> => {
   for (let h = 8; h <= 12; h++) {
     at(`add ${h}′`, replacing.slice(0, h + 1), h, 6, 6);
   }
+  const endAt = states.length - 1;
+
+  at("prove 7′–12′", replacing, 12, 12, 6);
+  at("finalize 7′–12′", replacing, 12, 12, 12);
+  for (let h = 13; h <= 16; h++) {
+    at(`add ${h}′`, second.slice(0, h + 1), h, 12, 12);
+  }
+  const secondPruneAt = states.length;
+  at("prune 13′–16′", replacing, 12, 12, 12);
+  at("propose 13″", secondReplacing.slice(0, 14), 12, 12, 12);
+  at("checkpoint 13″", secondReplacing.slice(0, 14), 13, 12, 12);
+  for (let h = 14; h <= 16; h++) {
+    at(`add ${h}″`, secondReplacing.slice(0, h + 1), h, 12, 12);
+  }
 
   return {
     states,
     facts: {
       states: states.map((s) => s.label),
-      pruneAt,
-      dead: old.slice(7).map(idOf),
-      final: replacing.slice(1).map(idOf),
-      movedTx: {
-        hash: deployTx.txHash.toString(),
-        deadHeight: 8,
-        finalHeight: 7,
-      },
+      prunes: [
+        {
+          pruneAt,
+          shorterSteps: 0,
+          endAt,
+          dead: old.slice(7).map(idOf),
+          final: replacing.slice(1).map(idOf),
+          movedTx: {
+            hash: deployTx.txHash.toString(),
+            deadHeight: 8,
+            finalHeight: 7,
+          },
+        },
+        {
+          pruneAt: secondPruneAt,
+          shorterSteps: 1,
+          endAt: states.length - 1,
+          dead: second.slice(13).map(idOf),
+          final: secondReplacing.slice(1).map(idOf),
+          movedTx: {
+            hash: secondTx.txHash.toString(),
+            deadHeight: 14,
+            finalHeight: 13,
+          },
+        },
+      ],
       contractAddress,
     },
   };

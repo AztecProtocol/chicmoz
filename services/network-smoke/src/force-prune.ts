@@ -27,13 +27,13 @@ const tipsView = (t: NodeTips): TipsView => ({
   finalized: Number(t.finalized.block.number),
 });
 
-/** The hash at each height 1..`to`, as the node serves them now. */
-export const readHashes = async (node: AztecNode, to: number) => {
+/** The hash at each height `from`..`to`, as the node serves them now. */
+export const readHashes = async (node: AztecNode, to: number, from = 1) => {
   const hashes = new Map<number, string>();
-  for (let from = 1; from <= to; from += NODE_PAGE) {
+  for (let start = from; start <= to; start += NODE_PAGE) {
     const blocks = await node.getBlocks(
-      BlockNumber(from),
-      Math.min(NODE_PAGE, to - from + 1),
+      BlockNumber(start),
+      Math.min(NODE_PAGE, to - start + 1),
     );
     for (const b of blocks) {
       hashes.set(Number(b.number), b.hash.toString().toLowerCase());
@@ -154,7 +154,7 @@ export type ForcedPrune = {
   /** The node's hashes after the prune, or after the replacement when expected. */
   after: Map<number, string>;
   timings: { triggerToPruneMs: number; pruneToReplacementMs?: number };
-  /** Epoch ms: the warp's start, and when the watch saw the prune and the replacement. */
+  /** Epoch ms: the warp's start, and the first reads, 250 ms apart, that showed the prune and the replacement. */
   at: { warp: number; prune: number; replacement?: number };
 };
 
@@ -170,7 +170,6 @@ export const forceEpochPrune = async ({
   node,
   nodeUrl,
   anvilUrl,
-  watch,
   sendTxs,
   emptyBlocks,
   afterProve,
@@ -182,7 +181,6 @@ export const forceEpochPrune = async ({
   node: AztecNode;
   nodeUrl: string;
   anvilUrl: string;
-  watch: ChainWatch;
   /** Resolves once the node has the txs in blocks. */
   sendTxs: () => Promise<void>;
   emptyBlocks: number;
@@ -232,19 +230,23 @@ export const forceEpochPrune = async ({
     `doomed ${doomed.join(",")}; warped from epoch ${epoch} to ${targetEpoch}`,
   );
 
-  const doomedGone = (e: ChainEvent) =>
-    e.kind === "tip-back" ||
-    (e.height !== undefined && doomed.includes(e.height));
-  const replaced = (e: ChainEvent) =>
-    e.kind === "hash-changed" &&
-    e.height !== undefined &&
-    doomed.includes(e.height);
+  // Each read is compared with `before`, not with the previous read: a
+  // height read absent and later holding a new block differs from neither
+  // neighbouring read.
+  const doomedTip = Math.max(...doomed);
   let pruneAt: number | undefined;
   let replacedAt: number | undefined;
   while (Date.now() < warpedAt + timeoutMs) {
-    const since = watch.events.filter((e) => e.at >= warpedAt);
-    pruneAt ??= since.find(doomedGone)?.at;
-    replacedAt ??= since.find(replaced)?.at;
+    const tip = tipsView(await node.getChainTips()).proposed;
+    const now = await readHashes(node, Math.min(tip, doomedTip), doomed[0]);
+    const at = Date.now();
+    const moved = doomed.filter((h) => now.get(h) !== before.get(h));
+    if (moved.length > 0) {
+      pruneAt ??= at;
+    }
+    if (moved.some((h) => now.has(h))) {
+      replacedAt ??= at;
+    }
     if (
       pruneAt !== undefined &&
       (!expectReplacement || replacedAt !== undefined)

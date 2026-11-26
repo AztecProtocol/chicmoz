@@ -21,7 +21,7 @@ describe("scripted node", () => {
   it("serves each state, through the SDK client, as a linked chain whose tips stay ordered", async () => {
     const client = createAztecNodeClient(node.rpcUrl);
     const control = scriptControl(node.controlUrl);
-    const { states, pruneAt, dead, final, movedTx } = await control.status();
+    const { states, prunes } = await control.status();
     const genesis = await client.getBlock(BlockNumber(0));
     expect(genesis, "block 0").toBeDefined();
     const { rollupVersion } = await client.getNodeInfo();
@@ -89,37 +89,40 @@ describe("scripted node", () => {
       }
       expect(tips.proposed.hash).toBe(byHeight.get(tips.proposed.number));
 
-      if (i === pruneAt - 1) {
-        expect(
-          blocks
-            .slice(6)
-            .map((b) => ({ height: b.number, hash: b.hash.toString() })),
-        ).toEqual(dead);
-        expect(
-          blocks[movedTx.deadHeight - 1].body.txEffects.map((tx) =>
-            tx.txHash.toString(),
-          ),
-        ).toContain(movedTx.hash);
-      }
       served = blocks.map((b) => ({
         height: b.number,
         hash: b.hash.toString(),
       }));
-      if (i >= pruneAt) {
-        for (const { hash } of dead) {
-          expect(
-            await client.getBlockData({ hash: BlockHash.fromString(hash) }),
-          ).toBeUndefined();
+      const txsAt = (height: number) =>
+        blocks[height - 1].body.txEffects.map((tx) => tx.txHash.toString());
+      for (const [p, prune] of prunes.entries()) {
+        const at = `${states[i]}: prune ${p + 1}`;
+        const target = prune.dead[0].height - 1;
+        if (i === prune.pruneAt - 1) {
+          expect(served.slice(target), `${at}, its dead blocks`).toEqual(
+            prune.dead,
+          );
+          expect(txsAt(prune.movedTx.deadHeight)).toContain(prune.movedTx.hash);
+        }
+        if (i >= prune.pruneAt && i < prune.pruneAt + prune.shorterSteps) {
+          expect(tips.proposed.number, `${at}, the shorter chain`).toBe(target);
+        }
+        if (i >= prune.pruneAt) {
+          for (const { hash } of prune.dead) {
+            expect(
+              await client.getBlockData({ hash: BlockHash.fromString(hash) }),
+            ).toBeUndefined();
+          }
+        }
+        if (i === prune.endAt) {
+          expect(served, `${at}, its final chain`).toEqual(prune.final);
+          expect(txsAt(prune.movedTx.finalHeight)).toContain(
+            prune.movedTx.hash,
+          );
         }
       }
     }
-    expect(served).toEqual(final);
-    const replacing = await client.getBlock(BlockNumber(movedTx.finalHeight), {
-      includeTransactions: true,
-    });
-    expect(
-      replacing!.body.txEffects.map((tx) => tx.txHash.toString()),
-    ).toContain(movedTx.hash);
+    expect(prunes.map((p) => p.shorterSteps)).toEqual([0, 1]);
   }, 120_000);
 
   it("answers a method it does not implement with Method not found", async () => {
