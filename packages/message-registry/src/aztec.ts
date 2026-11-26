@@ -18,8 +18,8 @@ export type NewBlockEvent = {
   statusHint: L2BlockStatusHint;
   block?: string;
   // Only on blocks the hash-following listener sends in chain order. `tip` is
-  // the proposed tip of the pass that sent the block: every canonical block
-  // above it is dead.
+  // the proposed tip of the pass that sent the block: every canonical block of
+  // the same rollup version above it is dead.
   ordered?: { tip: number };
 };
 
@@ -44,7 +44,10 @@ export type ContractInstanceBalanceEvent = {
   blockNumber?: string;
 };
 
-export type CatchupBlockEvent = NewBlockEvent & {
+// Catch-up blocks answer a height request, so they never carry the ordered
+// stream's authority.
+export type CatchupBlockEvent = Omit<NewBlockEvent, "ordered"> & {
+  ordered?: never;
   requestId?: string;
   catchupReason?: "startup" | "cadence" | "manual" | "eternal" | "reorg_repair";
   // At or below the serving node's own finalized tip, read before the block.
