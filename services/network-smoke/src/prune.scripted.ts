@@ -1,4 +1,6 @@
+import { execFile } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import {
   chicmozL2BlockLightSchema,
   chicmozL2ContractInstanceDeluxeSchema,
@@ -111,9 +113,52 @@ const snapshot = async ({
 
 type Snapshot = Awaited<ReturnType<typeof snapshot>>;
 
+const COMPARE_CHAIN = fileURLToPath(
+  new URL("../scripts/compare-chain.ts", import.meta.url),
+);
+
+/** One check of the read-only checker against this run's node and API. */
+const compareChain = (check: "sample" | "window") =>
+  new Promise<{ code: number; output: string; firstMismatch: unknown }>(
+    (resolve, reject) =>
+      execFile(
+        process.execPath,
+        [COMPARE_CHAIN, check],
+        {
+          env: {
+            ...process.env,
+            COMPARE_NODE_URL: endpoints.aztecNodeUrl,
+            COMPARE_API_URL: endpoints.explorerApiUrl,
+          },
+          timeout: 60_000,
+        },
+        (error, stdout, stderr) => {
+          const code = typeof error?.code === "number" ? error.code : 0;
+          if (error && code === 0) {
+            reject(error);
+            return;
+          }
+          let last: unknown;
+          try {
+            last = JSON.parse(stdout.trim().split("\n").at(-1) ?? "");
+          } catch {
+            // Not a JSON line: the raw output stands in for the result.
+          }
+          const line = z.object({ firstMismatch: z.unknown() }).safeParse(last);
+          resolve({
+            code,
+            output: stdout + stderr,
+            firstMismatch: line.success ? line.data.firstMismatch : stdout,
+          });
+        },
+      ),
+  );
+
 describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
   let script: ScriptStatus;
   let api: Snapshot;
+  let checkerBefore: Awaited<ReturnType<typeof compareChain>>;
+  let checkerAfter: Awaited<ReturnType<typeof compareChain>>[];
 
   beforeAll(async () => {
     script = await control.status();
@@ -141,6 +186,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
             ).toEqual(old.map((b) => served(b, false))),
           { timeout: 60_000, interval: 1_000 },
         );
+        checkerBefore = await compareChain("sample");
       }
       await control.step();
     }
@@ -163,6 +209,39 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
     process.stdout.write(
       `the API after the script, ${settled ? "settled" : `still changing after ${SETTLE_TIMEOUT_MS / 1000} s`}:\n${JSON.stringify(api, null, 2)}\n`,
     );
+    checkerAfter = [await compareChain("sample"), await compareChain("window")];
+  });
+
+  it("has compare-chain name the API's first divergence from the node, and never print the endpoints", () => {
+    const expected = [
+      ...script.final.map((b) => served(b, false)),
+      { status: 404 },
+    ];
+    const diverged = api.canonical.findIndex(
+      (b, i) => JSON.stringify(b) !== JSON.stringify(expected[i]),
+    );
+    const firstHeight = diverged < 0 ? undefined : diverged + 1;
+    expect
+      .soft(checkerBefore, "before the prune")
+      .toMatchObject({ code: 0, firstMismatch: null });
+    for (const [i, run] of checkerAfter.entries()) {
+      const check = ["sample", "window"][i];
+      expect
+        .soft(run.code, `${check}: exit code`)
+        .toBe(firstHeight === undefined ? 0 : 1);
+      expect
+        .soft(run.firstMismatch, `${check}: first mismatch`)
+        .toEqual(
+          firstHeight === undefined
+            ? null
+            : expect.objectContaining({ height: firstHeight }),
+        );
+    }
+    for (const run of [checkerBefore, ...checkerAfter]) {
+      for (const url of [endpoints.aztecNodeUrl, endpoints.explorerApiUrl]) {
+        expect.soft(run.output).not.toContain(new URL(url).host);
+      }
+    }
   });
 
   it("serves the script's final chain as canonical, and nothing above it", () => {

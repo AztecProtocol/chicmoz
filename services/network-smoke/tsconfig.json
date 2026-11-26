@@ -13,6 +13,7 @@
   },
   "include": [
     "src",
+    "scripts",
     "vitest.config.ts",
     "vitest.smoke.config.ts",
     "vitest.scripted.config.ts"

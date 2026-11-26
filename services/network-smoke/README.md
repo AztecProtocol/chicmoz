@@ -46,8 +46,24 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 2. `/l2/reorgs` lists one reorg: height 7, 4 blocks, rooted at the dead 7.
 3. The moved tx is not dropped, its effect is on 7′, and the contract instance is on 7′.
 4. Each dead block is served by its hash, as orphaned.
+5. `scripts/compare-chain.ts` finds no mismatch before the prune, and after it names the same first divergence as the checks above, without printing either URL.
 
 `logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
+
+## compare-chain
+
+`scripts/compare-chain.ts` checks, read-only, that an explorer API's canonical chain is a node's. Node 24 runs it directly:
+
+```sh
+COMPARE_NODE_URL=<node JSON-RPC> COMPARE_API_URL=<API base URL> node scripts/compare-chain.ts sample | window | reorgs | watch
+```
+
+- `sample`: the API's top 40 heights against the node's hashes. It reads the node's tips before and after, and marks the sample `blind` if they moved.
+- `window`: every height from the node's finalized tip to its proposed tip, one API call every 2 s.
+- `reorgs`: each `/l2/reorgs` record whose dead root block is still on the node's chain.
+- `watch`: `sample` every minute, `reorgs` every 10 minutes and `window` every hour, until stopped. It also reports a height whose API hash and node hash both changed as a witnessed prune.
+
+Each check prints one JSON line, with the first mismatch and the count; a one-shot check exits 1 on a mismatch. The URLs can hold an API key, so they are never printed, and errors are printed with them redacted.
 
 ## Reading a failure
 
