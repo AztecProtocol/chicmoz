@@ -24,7 +24,6 @@ import {
 } from "../../../environment.js";
 import { logger } from "../../../logger.js";
 import {
-  type ElectionReader,
   type OpenElectionReader,
   boundedElectionReaders,
 } from "./election-probe.js";
@@ -34,10 +33,12 @@ import { type RpcNode, getOnlineRpcNodes } from "./pool.js";
 /** The pin holds until a preferred node is more than this many blocks ahead of it. */
 const PIN_LEAD = 2;
 const SET_ASIDE_MS = 5 * 60_000;
-// One pinned read, retries included: the pool's HTTP client allows minutes per attempt.
+// One pinned read, retries included: the pool's HTTP client allows minutes per
+// attempt. The timed-out call keeps running until the client's own retries
+// end; its answer is dropped, and it may still mark the node alive or offline.
 const PINNED_READ_TIMEOUT_MS = 60_000;
 
-/** A node answered as no honest node does. */
+/** A node's answer failed a response check, or its walk-back passed the bound. */
 export class NodeCheckError extends Error {
   override readonly name = "NodeCheckError";
 }
@@ -66,9 +67,14 @@ export type StickySourceConfig = {
 
 /** What every snapshot of one pass is checked against. */
 type PassBounds = { finalized: L2BlockId; floor: number | undefined };
-type Pin = { node: RpcNode; bounds: PassBounds };
+/** `proposed` is the tip the election's probe showed. */
+type Pin = { node: RpcNode; bounds: PassBounds; proposed: L2BlockId };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
+type Fault = {
+  kind: "behind" | "fork" | "missing" | "floor" | "unreachable";
+  reason: string;
+};
 
 const sameNode = (a: RpcNode | undefined, b: RpcNode | undefined) =>
   a !== undefined && b !== undefined && a.url === b.url;
@@ -81,21 +87,32 @@ const describeTips = (tips: L2Tips | undefined) =>
     ? "no tips"
     : `proposed ${tips.proposed.number}, proven ${tips.proven.block.number}, finalized ${tips.finalized.block.number}`;
 
+const forkAt = (height: number): Fault => ({
+  kind: "fork",
+  reason: `has another block at the block stream's finalized height ${height}`,
+});
+
 // The checks a snapshot needs no read for. The stream reports a lower
 // finalized tip too, which would point the store below hashes it deleted.
 const tipsFault = (
   tips: L2Tips,
   { finalized, floor }: PassBounds,
-): string | undefined => {
+): Fault | undefined => {
   const theirs = tips.finalized.block;
   if (theirs.number < finalized.number) {
-    return `is finalized at block ${theirs.number}, below the block stream's ${finalized.number}`;
+    return {
+      kind: "behind",
+      reason: `is finalized at block ${theirs.number}, below the block stream's ${finalized.number}`,
+    };
   }
   if (theirs.number === finalized.number && theirs.hash !== finalized.hash) {
-    return `has another block at the block stream's finalized height ${finalized.number}`;
+    return forkAt(finalized.number);
   }
   if (floor !== undefined && tips.proposed.number < floor) {
-    return `is at block ${tips.proposed.number}, below the old listener's proven height ${floor}`;
+    return {
+      kind: "floor",
+      reason: `is at block ${tips.proposed.number}, below the old listener's proven height ${floor}`,
+    };
   }
   return undefined;
 };
@@ -179,20 +196,23 @@ const blockDataFault = async (query: BlockQuery, header: BlockHeader) => {
 
 /**
  * The block stream's source. `elect()` picks one node before each pass, and
- * every read of that pass goes to it. A node whose answer fails a check
- * fails the pass and sits out the elections for five minutes.
+ * every read of that pass goes to it. A failed response check or a walk-back
+ * past the bound sets the node aside for five minutes. A failed read, a
+ * rejected snapshot, the prefix rule or an empty range benches it until its
+ * tip changes or no other node is eligible.
  */
 export class StickySource implements L2BlockStreamSource {
   /** The store as the stream must read it: its hash lookups count against the walk bound. */
   readonly localData: L2BlockStreamLocalDataProvider;
   private pin: Pin | undefined;
-  // Nodes whose last pass ended on the prefix rule or an empty range. They sit
-  // out while another eligible node exists, so tied shorter copies cannot take
-  // turns ahead of the node with the replacing block. Cleared once every
-  // eligible node is in it, or after a pass that stored its snapshot's tip.
-  private readonly shorterCopies = new Set<string>();
+  // Benched nodes, with the tip each showed in the probe that elected it. They
+  // sit out while another eligible node exists, so neither a node that keeps
+  // failing nor tied shorter copies can take every turn. A member is back once
+  // its probe shows another tip, and all are once no eligible node is outside.
+  private readonly benched = new Map<string, L2BlockId>();
   private readonly setAsideUntil = new Map<string, number>();
   private readonly finalizedMatches = new Map<string, L2BlockId>();
+  private readonly electionFaults = new Map<string, Fault["kind"]>();
   private blockReads = 0;
   private hashLookups = 0;
   private latestTips: L2Tips | undefined;
@@ -244,19 +264,13 @@ export class StickySource implements L2BlockStreamSource {
    */
   async elect(): Promise<RpcNode | undefined> {
     const stored = await this.deps.store.getL2Tips();
-    if (
-      this.latestTips !== undefined &&
-      sameBlock(stored.proposed, this.latestTips.proposed)
-    ) {
-      this.shorterCopies.clear();
-    }
     this.blockReads = 0;
     this.hashLookups = 0;
     this.latestTips = undefined;
     this.latestError = undefined;
     const bounds: PassBounds = {
       finalized: stored.finalized.block,
-      floor: await this.bootstrapFloor(stored.proposed.number),
+      floor: await this.bootstrapFloor(stored),
     };
     const now = this.now();
     const probes = await Promise.all(
@@ -268,11 +282,16 @@ export class StickySource implements L2BlockStreamSource {
     let eligible = probes.filter(
       (p): p is Candidate => p.eligible && p.tips !== undefined,
     );
-    if (eligible.some((c) => !this.shorterCopies.has(c.node.url))) {
-      eligible = eligible.filter((c) => !this.shorterCopies.has(c.node.url));
-    } else {
-      this.shorterCopies.clear();
+    for (const { node, tips } of eligible) {
+      const benchedAt = this.benched.get(node.url);
+      if (benchedAt !== undefined && !sameBlock(benchedAt, tips.proposed)) {
+        this.benched.delete(node.url);
+      }
     }
+    if (eligible.every((c) => this.benched.has(c.node.url))) {
+      this.benched.clear();
+    }
+    eligible = eligible.filter((c) => !this.benched.has(c.node.url));
     const pinned = this.pin?.node;
     if (eligible.length === 0) {
       this.pin = undefined;
@@ -308,14 +327,14 @@ export class StickySource implements L2BlockStreamSource {
         } (${describeTips(before?.tips)})`,
       );
     }
-    this.pin = { node: next.node, bounds };
+    this.pin = { node: next.node, bounds, proposed: next.tips.proposed };
     return next.node;
   }
 
-  /** The pass ended on the prefix rule: unpins the node and counts it among the shorter copies. */
+  /** The pass ended on the prefix rule: unpins the node and benches it. */
   endPassOnPrefix(): void {
     if (this.pin !== undefined) {
-      this.endPassShort(this.pin.node);
+      this.bench(this.pin);
     }
   }
 
@@ -331,10 +350,16 @@ export class StickySource implements L2BlockStreamSource {
       const { pin, result: tips } = await this.pinnedCall("getChainTips", []);
       // A restart or another backend behind the same URL can answer other
       // than the election's probe did.
-      const fault = tipsFault(tips, pin.bounds);
+      const fault = await this.snapshotFault(
+        pin.node.url,
+        tips,
+        pin.bounds,
+        (height) => this.pinnedBlockHash(height),
+      );
       if (fault !== undefined) {
-        const message = `Node ${pin.node.name} ${fault}; the block stream skips this pass`;
+        const message = `Node ${pin.node.name} ${fault.reason}; the block stream skips this pass`;
         logger.warn(message);
+        this.bench(pin);
         throw new AbortError(message);
       }
       this.latestTips = tips;
@@ -386,7 +411,7 @@ export class StickySource implements L2BlockStreamSource {
       if (responses.length === 0 && tip !== undefined && query.from <= tip) {
         // An honest node that pruned after its tips were read answers so, and
         // the stream aborts the pass on an empty range.
-        this.endPassShort(pin.node);
+        this.bench(pin);
         return [];
       }
       const blocks = responses.map(
@@ -426,17 +451,31 @@ export class StickySource implements L2BlockStreamSource {
     if (pin === undefined) {
       throw new AbortError();
     }
-    const result = await withDeadline(
-      callNodeFunction(fnName, args, pin.node),
-      PINNED_READ_TIMEOUT_MS,
-      () =>
-        new TimeoutError(
-          `Node ${pin.node.name} did not answer ${String(fnName)} within ${
-            PINNED_READ_TIMEOUT_MS / 1000
-          } s`,
-        ),
-    );
-    return { pin, result };
+    try {
+      const result = await withDeadline(
+        callNodeFunction(fnName, args, pin.node),
+        PINNED_READ_TIMEOUT_MS,
+        () =>
+          new TimeoutError(
+            `Node ${pin.node.name} did not answer ${String(fnName)} within ${
+              PINNED_READ_TIMEOUT_MS / 1000
+            } s`,
+          ),
+      );
+      return { pin, result };
+    } catch (e) {
+      this.bench(pin);
+      throw e;
+    }
+  }
+
+  private async pinnedBlockHash(height: number): Promise<string | undefined> {
+    const { result: block } = await this.pinnedCall("getBlock", [
+      BlockNumber(height),
+    ]);
+    return block === undefined
+      ? undefined
+      : (await block.header.hash()).toString();
   }
 
   // Bounds the walk-back on a node that disagrees with every stored hash, or
@@ -479,74 +518,114 @@ export class StickySource implements L2BlockStreamSource {
     );
   }
 
-  private endPassShort(node: RpcNode) {
-    this.shorterCopies.add(node.url);
-    if (sameNode(node, this.pin?.node)) {
+  private bench(pin: Pin) {
+    this.benched.set(pin.node.url, pin.proposed);
+    if (this.pin === pin) {
       this.pin = undefined;
     }
   }
 
   private async probe(node: RpcNode, bounds: PassBounds): Promise<Probe> {
+    let tips: L2Tips | undefined;
+    let fault: Fault | undefined;
     try {
       const reader = this.openReader(node);
-      const tips = await reader.getChainTips();
-      const fault =
-        tipsFault(tips, bounds) ??
-        (tips.finalized.block.number > bounds.finalized.number
-          ? await this.aheadFault(node, reader, bounds.finalized)
-          : undefined);
-      if (fault !== undefined) {
-        logger.warn(
-          `Node ${node.name} sits out this block stream election: it ${fault}`,
-        );
-      }
-      return { node, tips, eligible: fault === undefined };
-    } catch (e) {
-      logger.warn(
-        `Node ${node.name} sits out this block stream election: ${(e as Error).message}`,
+      tips = await reader.getChainTips();
+      fault = await this.snapshotFault(node.url, tips, bounds, (height) =>
+        reader.getBlockHash(height),
       );
-      return { node, eligible: false };
+    } catch (e) {
+      fault = {
+        kind: "unreachable",
+        reason: `failed its probe: ${(e as Error).message}`,
+      };
     }
+    this.noteElectionFault(node, fault);
+    return { node, tips, eligible: fault === undefined };
+  }
+
+  // A node left out of every election logs once, not on each.
+  private noteElectionFault(node: RpcNode, fault: Fault | undefined) {
+    const last = this.electionFaults.get(node.url);
+    if (fault === undefined) {
+      if (last !== undefined) {
+        this.electionFaults.delete(node.url);
+        logger.info(`Node ${node.name} is back in the block stream elections`);
+      }
+      return;
+    }
+    if (fault.kind !== last) {
+      this.electionFaults.set(node.url, fault.kind);
+      logger.warn(
+        `Node ${node.name} is left out of the block stream elections: it ${fault.reason}`,
+      );
+    }
+  }
+
+  private async snapshotFault(
+    url: string,
+    tips: L2Tips,
+    bounds: PassBounds,
+    readHash: (height: number) => Promise<string | undefined>,
+  ): Promise<Fault | undefined> {
+    const fault = tipsFault(tips, bounds);
+    if (fault?.kind === "fork") {
+      // Another block at that height: the URL's backend changed since its match.
+      this.finalizedMatches.delete(url);
+    }
+    if (
+      fault !== undefined ||
+      tips.finalized.block.number <= bounds.finalized.number
+    ) {
+      return fault;
+    }
+    return this.anchorFault(url, bounds.finalized, readHash);
   }
 
   // A node finalized past the store must hold the store's finalized block, or
   // following it would overwrite the store's finalized history and lock every
   // honest node out. A finalized block never changes, so a match holds until
-  // the store's finalized tip moves; a mismatch is read again next time.
-  private async aheadFault(
-    node: RpcNode,
-    reader: ElectionReader,
+  // the store's finalized tip moves, as long as the URL keeps one backend.
+  private async anchorFault(
+    url: string,
     finalized: L2BlockId,
-  ): Promise<string | undefined> {
-    const match = this.finalizedMatches.get(node.url);
+    readHash: (height: number) => Promise<string | undefined>,
+  ): Promise<Fault | undefined> {
+    const match = this.finalizedMatches.get(url);
     if (match !== undefined && sameBlock(match, finalized)) {
       return undefined;
     }
-    const hash = await reader.getBlockHash(finalized.number);
-    if (hash !== finalized.hash) {
-      return hash === undefined
-        ? `has no block at the block stream's finalized height ${finalized.number}`
-        : `has another block at the block stream's finalized height ${finalized.number}`;
+    const hash = await readHash(finalized.number);
+    if (hash === finalized.hash) {
+      this.finalizedMatches.set(url, finalized);
+      return undefined;
     }
-    this.finalizedMatches.set(node.url, finalized);
-    return undefined;
+    this.finalizedMatches.delete(url);
+    return hash === undefined
+      ? {
+          kind: "missing",
+          reason: `has no block at the block stream's finalized height ${finalized.number}`,
+        }
+      : forkAt(finalized.number);
   }
 
   // Proven blocks move back only on an L1 reorg, so a first tip at or above
   // the old listener's proven height removes at most the unproven blocks. The
-  // floor holds until this version's own tip reaches it; a store of another
-  // version means the API holds no block of this one.
-  private async bootstrapFloor(
-    storedProposed: number,
-  ): Promise<number | undefined> {
+  // floor holds until this version's proposed or finalized tip reaches it. A
+  // reorg below it can come only before the finalized tip gets there; a
+  // restart after one brings the floor back until a node is at it again.
+  private async bootstrapFloor(stored: L2Tips): Promise<number | undefined> {
     if (!this.floorLifted) {
+      // A store of another version means the API holds no block of this one;
+      // that assumes no rollback to the old listener across a version change.
       this.floorLifted = await this.deps.store.otherVersionStored();
     }
     if (this.floorLifted) {
       return undefined;
     }
     const floor = await this.deps.legacyProvenHeight();
-    this.floorLifted = storedProposed >= floor;
+    this.floorLifted =
+      stored.proposed.number >= floor || stored.finalized.block.number >= floor;
     return this.floorLifted ? undefined : floor;
   }
 
