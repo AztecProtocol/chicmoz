@@ -377,7 +377,7 @@ describe("the canonical chain on a real database", () => {
     ]);
   });
 
-  it("joins a catch-up block at an empty height only when the chain above descends from it, without demoting or recording", async () => {
+  it("joins a catch-up block at an empty height only when the chain above descends from it", async () => {
     const version = freshVersion();
     const c = await buildChain(6_000n, 4, { version });
     for (const block of [c[0], c[2], c[3]]) {
@@ -407,6 +407,48 @@ describe("the canonical chain on a real database", () => {
     await catchup(above, { final: true });
 
     expect(await reads.chainOf(version)).toEqual(heads([head]));
+  });
+
+  it("demotes the block below a catch-up block joined from above when it is not its parent, and requests the parent", async () => {
+    const version = freshVersion();
+    const [a0, a1] = await buildChain(17_000n, 2, { version });
+    const b1 = await buildBlock(17_001n, [freshTxHash()], {
+      version,
+      parent: a0,
+    });
+    const [b2, b3] = await buildChain(17_002n, 2, { version, parent: b1 });
+    await ordered(a0);
+    await ordered(a1);
+    await ordered(b3);
+
+    await catchup(b2);
+
+    expect(await reads.chainOf(version)).toEqual(heads([a0, b2, b3]));
+    expect(await reads.recordsOf(version)).toEqual([
+      { active: true, blocks: [a1.hash] },
+    ]);
+    expect(await reads.repairOpen(17_001)).toBe(true);
+  });
+
+  it("walks repairs back from an ordered block far above the head, one per attach, until they meet the old chain", async () => {
+    const version = freshVersion();
+    const [a0, a1] = await buildChain(18_000n, 2, { version });
+    const b = await buildChain(18_001n, 5, { version, parent: a0 });
+    await ordered(a0);
+    await ordered(a1);
+    await ordered(b[4]);
+
+    for (const block of b.slice(0, 4).reverse()) {
+      const height = Number(block.height);
+      expect([
+        await reads.repairOpen(height),
+        await reads.repairOpen(height - 1),
+      ]).toEqual([true, false]);
+      await catchup(block);
+    }
+
+    expect(await reads.chainOf(version)).toEqual(heads([a0, ...b]));
+    expect(await reads.repairOpen(18_001)).toBe(false);
   });
 
   it("fills history from block 1 with final catch-up blocks, each only on the canonical block below as its parent", async () => {
@@ -578,6 +620,43 @@ describe("the canonical chain on a real database", () => {
     expect([
       await reads.repairOpen(15_001),
       await reads.repairOpen(15_002),
+    ]).toEqual([true, true]);
+  });
+
+  it("demotes a stale canonical holder of a tx below a catch-up block joined from above, and requests the heights that leaves empty", async () => {
+    const version = freshVersion();
+    const x = freshTxHash();
+    const a0 = await buildBlock(21_000n, [freshTxHash()], { version });
+    const a1 = await buildBlock(21_001n, [x], { version, parent: a0 });
+    const a2 = await buildBlock(21_002n, [freshTxHash()], {
+      version,
+      parent: a1,
+    });
+    for (const block of [a0, a1, a2]) {
+      await ordered(block);
+    }
+    const b1 = await buildBlock(21_001n, [freshTxHash()], {
+      version,
+      parent: a0,
+    });
+    const b2 = await buildBlock(21_002n, [freshTxHash()], {
+      version,
+      parent: b1,
+    });
+    const b3 = await buildBlock(21_003n, [x], { version, parent: b2 });
+    const b4 = await buildBlock(21_004n, [freshTxHash()], {
+      version,
+      parent: b3,
+    });
+    await ordered(b4);
+
+    await catchup(b3);
+
+    expect(await reads.chainOf(version)).toEqual(heads([a0, b3, b4]));
+    expect(await reads.ownerOf(x)).toBe(b3.hash);
+    expect([
+      await reads.repairOpen(21_001),
+      await reads.repairOpen(21_002),
     ]).toEqual([true, true]);
   });
 

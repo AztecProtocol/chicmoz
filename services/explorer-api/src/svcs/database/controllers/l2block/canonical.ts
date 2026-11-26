@@ -36,7 +36,8 @@ import { store, writeTxEffect } from "./store.js";
 //
 // Ordered blocks are the listener's chain, sent in order: each is canonical
 // at its height and nothing canonical stays above its tip. Catch-up blocks
-// only fill empty heights below the canonical head and never demote anything.
+// only fill empty heights below the canonical head; one that the chain above
+// descends from carries that chain's authority over the heights below it.
 
 /** Walks stop after this many steps; more canonical blocks than this above a tip is corrupted state. */
 export const WALK_BOUND = 10_000;
@@ -819,10 +820,13 @@ export const applyOrderedBlock = (
 };
 
 /**
- * A catch-up block never demotes anything. It joins only at an empty height
- * below the canonical head: when the lowest canonical block above descends
- * from it, or, with `final` (at or below the serving node's own finalized
- * tip), when the canonical block below, if any, is its parent.
+ * A catch-up block never replaces a canonical block. It joins only at an
+ * empty height below the canonical head: when the lowest canonical block
+ * above descends from it, with that block's authority below its height, so
+ * the holders of its txs there go, its stored ancestors come back and the
+ * heights left empty are asked for, as for an ordered block; or, with
+ * `final` (at or below the serving node's own finalized tip), when the
+ * canonical block below, if any, is its parent.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
@@ -849,10 +853,13 @@ export const applyCatchupBlock = (
       return false;
     }
     if (link !== "undecided") {
+      await demoteHolders(change, incoming.block, stored.height - 1n);
       await promote(change, stored, { walked: false });
       for (const walked of link.walked) {
         await promote(change, walked, { walked: true });
       }
+      await reviveAncestors(change, stored);
+      await requestEmptied(change, stored.height);
       return true;
     }
     if (!final) {
