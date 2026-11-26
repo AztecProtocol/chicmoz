@@ -93,6 +93,7 @@ export const startServices = (
     runId,
     anvilUrl,
     aztecNodeUrl,
+    extraEnv = {},
   }: {
     stack: Stack;
     ports: Ports;
@@ -100,6 +101,8 @@ export const startServices = (
     /** Only the ethereum-listener reads it. */
     anvilUrl?: string;
     aztecNodeUrl: string;
+    /** Per service, on top of the env below. */
+    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
   },
 ) => {
   const common = {
@@ -155,6 +158,7 @@ export const startServices = (
       env: {
         ...common,
         ...env[name](),
+        ...extraEnv[name],
         ...(svc.database ? { POSTGRES_DB_NAME: svc.database } : {}),
       },
     });

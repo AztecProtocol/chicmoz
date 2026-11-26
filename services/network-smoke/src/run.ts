@@ -45,9 +45,19 @@ const SUITE_TIMEOUT_MS = 15 * 60_000;
 
 export type Mode = "network" | "scripted";
 
+// A scenario judges what the blocks alone do to the explorer, so the API's
+// repair loop, whose first pass comes 2 min after it starts, stays out.
+const NO_REPAIR = {
+  "explorer-api": { L2_BLOCK_RECONCILIATION_INTERVAL_MS: String(3_600_000) },
+};
+
 const MODES: Record<
   Mode,
-  { services: readonly ServiceName[]; vitestConfig: string }
+  {
+    services: readonly ServiceName[];
+    vitestConfig: string;
+    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
+  }
 > = {
   network: {
     services: [
@@ -62,6 +72,7 @@ const MODES: Record<
   scripted: {
     services: ["explorer-api", "aztec-listener"],
     vitestConfig: "vitest.scripted.config.ts",
+    extraEnv: NO_REPAIR,
   },
 };
 
@@ -101,7 +112,7 @@ export const run = async (mode: Mode): Promise<number> => {
   if (platform() !== "linux") {
     throw new Error("the network smoke run needs Linux (/proc)");
   }
-  const { services, vitestConfig } = MODES[mode];
+  const { services, vitestConfig, extraEnv } = MODES[mode];
   const missing = missingBuilds(services);
   if (missing.length > 0) {
     throw new Error(`run \`yarn build\` first; missing ${missing.join(", ")}`);
@@ -356,6 +367,7 @@ export const run = async (mode: Mode): Promise<number> => {
       ports,
       runId,
       anvilUrl: mode === "network" ? anvilUrl : undefined,
+      extraEnv,
       aztecNodeUrl,
     });
     const alive = () => services.map((name) => deathOf(name)()).find(Boolean);
