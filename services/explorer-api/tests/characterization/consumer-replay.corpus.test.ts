@@ -180,9 +180,9 @@ for (const network of new Set(FRAMES.map((frame) => frame.network))) {
   SUBSCRIBED.set(network, await subscriptions(network));
 }
 
-// The bus consumer's acceptance rule: a BSON value whose `data` is an object.
 const noHeartbeat = () => Promise.resolve();
 
+// The bus consumer's acceptance rule: a BSON value whose `data` is an object.
 const busDecode = (bytes: Uint8Array): ChicmozMessageBusPayload => {
   const decoded: Record<string, unknown> = BSON.deserialize(bytes);
   if (typeof decoded.data !== "object") {

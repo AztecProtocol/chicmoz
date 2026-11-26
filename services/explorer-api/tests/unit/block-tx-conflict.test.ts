@@ -55,10 +55,10 @@ const { blockHandler, catchupHandler } = await import(
   "../../src/events/received/on-block/index.js"
 );
 
-// Block 103158 from the 2026-09-29 incident: its tx was held by the active,
-// stale-fork block 103172.
 const noHeartbeat = () => Promise.resolve();
 
+// Block 103158 from the 2026-09-29 incident: its tx was held by the active,
+// stale-fork block 103172.
 const parsed = () => ({
   height: 103158n,
   hash: "0x0394",

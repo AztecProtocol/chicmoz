@@ -24,10 +24,11 @@ export interface MBOptions {
 
 // KafkaJS's heartbeat for the message being handled. A handler that can run
 // past the session timeout (30 s by default) awaits it while it works, never
-// after it returns, and lets a rejection propagate: it rejects once the group
-// rebalances, so the message is redelivered. Calls inside one heartbeat
-// interval (3 s by default) resolve without reaching the broker, so a resolved
-// call does not prove the member still owns the partition.
+// after it returns, and lets a rejection propagate, so the message is
+// redelivered. Only a call that reaches the broker can learn of a rebalance:
+// calls inside one heartbeat interval (3 s by default) resolve locally or share
+// the request in flight. A resolved call never proves that this member still
+// owns the partition.
 export type Heartbeat = EachMessagePayload["heartbeat"];
 
 type TopicCallback = (event: object, heartbeat: Heartbeat) => Promise<void>;
@@ -129,7 +130,9 @@ export class MessageBus {
 
   private async ensureProducerConnected() {
     if (!this.#producerConnectingPromise) {
-      this.#producer = this.#client.producer();
+      // Reused across retries, so `disconnect()` also closes what a failed
+      // connect left open.
+      this.#producer ??= this.#client.producer();
       this.#producerConnectingPromise = this.#producer
         .connect()
         .catch((e: unknown) => {
@@ -143,7 +146,13 @@ export class MessageBus {
 
   private async connectConsumer(groupId: string) {
     this.#consumers[groupId] = {
-      consumer: this.#client.consumer({ groupId }),
+      // The crash handler in nonRetriableWrapper is the only restart path:
+      // KafkaJS's own restart would keep the crashed consumer running beside
+      // its replacement, two members of one group in one process.
+      consumer: this.#client.consumer({
+        groupId,
+        retry: { restartOnFailure: () => Promise.resolve(false) },
+      }),
       topicCallbacks: {},
     };
     await this.#consumers[groupId]!.consumer.connect();
@@ -162,12 +171,17 @@ export class MessageBus {
     await this.produce(topic, messages, key);
   }
 
-  private async produce<T>(topic: string, messages: T[], key?: string) {
+  private throwIfShutdown() {
     if (this.#shutdown) {
       throw new Error("MessageBus is already shutdown");
     }
+  }
 
+  private async produce<T>(topic: string, messages: T[], key?: string) {
+    this.throwIfShutdown();
     await this.ensureProducerConnected();
+    // `disconnect()` may have started while the connect was in flight.
+    this.throwIfShutdown();
 
     const kafkaMessages: Message[] = messages.map((m) => ({
       key,
@@ -313,6 +327,9 @@ export class MessageBus {
 
   async disconnect() {
     this.#shutdown = true;
+    // A connect still in flight would otherwise open the producer after it is
+    // closed here.
+    await this.#producerConnectingPromise?.catch(() => undefined);
     await this.#producer?.disconnect();
     for (const consumer of Object.values(this.#consumers)) {
       await consumer?.consumer.disconnect();

@@ -1,27 +1,34 @@
 import { type Logger } from "@chicmoz-pkg/logger-server";
 import { BSON } from "bson";
-import { type Consumer, type Producer } from "kafkajs";
+import { type Consumer, type ConsumerConfig, type Producer } from "kafkajs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Heartbeat, MessageBus } from "./class.js";
 
-const { producer, consumer } = vi.hoisted(() => ({
-  producer: {
+const { producer, consumer, newProducer, newConsumer } = vi.hoisted(() => {
+  const producer = {
     connect: vi.fn<Producer["connect"]>(() => Promise.resolve()),
     send: vi.fn<Producer["send"]>(),
-  },
-  consumer: {
+    disconnect: vi.fn<Producer["disconnect"]>(() => Promise.resolve()),
+  };
+  const consumer = {
     connect: vi.fn(),
     subscribe: vi.fn(),
     on: vi.fn(),
     run: vi.fn<Consumer["run"]>(),
-  },
-}));
+  };
+  return {
+    producer,
+    consumer,
+    newProducer: vi.fn(() => producer),
+    newConsumer: vi.fn((_config: ConsumerConfig) => consumer),
+  };
+});
 
 vi.mock("kafkajs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("kafkajs")>()),
   Kafka: class {
-    producer = () => producer;
-    consumer = () => consumer;
+    producer = newProducer;
+    consumer = newConsumer;
   },
 }));
 
@@ -75,8 +82,36 @@ describe("MessageBus", () => {
     await expect(mb.publish("topic", { n: 1 })).rejects.toBe(down);
     await mb.publish("topic", { n: 2 });
 
+    expect(newProducer).toHaveBeenCalledTimes(1);
     expect(producer.connect).toHaveBeenCalledTimes(2);
     expect(producer.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing once disconnect starts during the producer's connect", async () => {
+    const mb = newMessageBus();
+    let connected!: () => void;
+    producer.connect.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        connected = resolve;
+      }),
+    );
+
+    const publishing = mb.publish("topic", { n: 1 });
+    const disconnecting = mb.disconnect();
+    connected();
+
+    await expect(publishing).rejects.toThrow("already shutdown");
+    await disconnecting;
+    expect(producer.send).not.toHaveBeenCalled();
+    expect(producer.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns off KafkaJS's own consumer restart, so a crash leaves one consumer", async () => {
+    const mb = newMessageBus();
+    await mb.subscribe("group", "topic", vi.fn());
+
+    const restart = newConsumer.mock.calls[0]?.[0].retry?.restartOnFailure;
+    await expect(restart?.(new Error("crash"))).resolves.toBe(false);
   });
 
   it("passes the handler its message's heartbeat and fails the message when it rejects", async () => {
