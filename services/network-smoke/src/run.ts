@@ -301,6 +301,7 @@ export const run = async (mode: Mode): Promise<number> => {
           foundryBinDir: config.foundryBinDir,
           runId,
           log: join(logDir, "npm-ci.log"),
+          signal: abort.signal,
         }),
       );
       mark("toolchain ready");

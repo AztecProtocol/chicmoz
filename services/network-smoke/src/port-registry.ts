@@ -123,9 +123,16 @@ const lock = async (file: string, waitMs: number) => {
     }
     if (fd !== undefined) {
       try {
-        writeSync(fd, token);
-      } finally {
-        closeSync(fd);
+        try {
+          writeSync(fd, token);
+        } finally {
+          closeSync(fd);
+        }
+      } catch (e) {
+        // No unlock could ever match a lock without our token, so it would
+        // block every writer until removed by hand.
+        rmSync(path, { force: true });
+        throw e;
       }
       // Unlinked only while it still holds this token.
       return () => {

@@ -69,6 +69,7 @@ const installAztec = async (
   toolchainDir: string,
   runId: string,
   log: string,
+  signal?: AbortSignal,
 ) => {
   const manifest = readFileSync(join(TOOLCHAIN_SRC, "package.json"), "utf8");
   const lock = readFileSync(join(TOOLCHAIN_SRC, "package-lock.json"), "utf8");
@@ -88,11 +89,18 @@ const installAztec = async (
     // The bytes checked and hashed above, not a second read of the checkout.
     writeFileSync(join(tmp, "package.json"), manifest);
     writeFileSync(join(tmp, "package-lock.json"), lock);
-    // No install scripts run; see NODE_BACKEND where the node starts.
+    // No install scripts run; see NODE_BACKEND where the node starts. An
+    // aborted run kills npm before the staging directory is removed.
     const { stdout, stderr } = await execFileAsync(
       "npm",
       ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
-      { cwd: tmp, maxBuffer: 64 * 1024 * 1024, timeout: 600_000 },
+      {
+        cwd: tmp,
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: 600_000,
+        signal,
+        killSignal: "SIGKILL",
+      },
     );
     writeFileSync(log, stdout + stderr);
     // A tree without the entry point under this lock's name would block
@@ -159,13 +167,15 @@ export const prepareToolchain = async ({
   foundryBinDir,
   runId,
   log,
+  signal,
 }: {
   toolchainDir: string;
   foundryBinDir?: string;
   runId: string;
   log: string;
+  signal?: AbortSignal;
 }): Promise<Toolchain> => {
-  const aztec = installAztec(toolchainDir, runId, log);
+  const aztec = installAztec(toolchainDir, runId, log, signal);
   const foundry = pinnedFoundry(foundryBinDir);
   await settleAll([aztec, foundry]);
   const dir = await aztec;
