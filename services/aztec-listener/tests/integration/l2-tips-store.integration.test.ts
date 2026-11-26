@@ -96,9 +96,9 @@ describe("PostgresL2TipsStore", () => {
       await postgres.handleBlockStreamEvent(event);
     };
 
-    expect(await postgres.anyVersionStored()).toBe(false);
+    expect(await postgres.otherVersionStored()).toBe(false);
     await apply({ type: "blocks-added", blocks: [b1, b2, b3, b4, b5] });
-    expect(await postgres.anyVersionStored()).toBe(true);
+    expect(await postgres.otherVersionStored()).toBe(false);
     await apply({
       type: "chain-checkpointed",
       block: await idOf(b4),
@@ -146,6 +146,7 @@ describe("PostgresL2TipsStore", () => {
     expect(afterReplace.hashes[4]).toBe((await idOf(replacing[0])).hash);
 
     const nextVersion = new PostgresL2TipsStore(VERSION + 1, genesis);
+    expect(await nextVersion.otherVersionStored()).toBe(true);
     expect(await view(nextVersion)).toEqual(
       await view(new L2TipsMemoryStore(genesis)),
     );

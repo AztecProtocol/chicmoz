@@ -8,7 +8,7 @@ import {
   type L2BlockTag,
   L2TipsStoreBase,
 } from "@aztec-labs/stdlib/block";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, lt, ne } from "drizzle-orm";
 import {
   l2BlockStreamHashTable as hashes,
   l2BlockStreamTipTable as tips,
@@ -24,9 +24,12 @@ export class PostgresL2TipsStore extends L2TipsStoreBase {
     super(initialBlockHash);
   }
 
-  /** False until a stream has stored a tip for any rollup version. */
-  public async anyVersionStored(): Promise<boolean> {
-    const rows = await db().select({ tag: tips.tag }).from(tips).limit(1);
+  public async otherVersionStored(): Promise<boolean> {
+    const rows = await db()
+      .select({ tag: tips.tag })
+      .from(tips)
+      .where(ne(tips.rollupVersion, this.rollupVersion))
+      .limit(1);
     return rows.length > 0;
   }
 

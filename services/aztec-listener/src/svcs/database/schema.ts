@@ -47,7 +47,6 @@ export const txsTable = pgTable("txs_table", {
   txState: varchar("tx_state").notNull().$type<TxState>(),
 });
 
-// The SDK block stream's tips and hash history, one set per rollup version.
 export const l2BlockStreamTipTable = pgTable(
   "l2_block_stream_tip",
   {

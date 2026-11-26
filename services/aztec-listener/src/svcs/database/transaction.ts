@@ -10,7 +10,9 @@ export const db = (): Db => current.getStore() ?? getDb();
 
 /**
  * Runs `fn` in one transaction. A call made inside another joins it, so every
- * write through `db()` commits or rolls back with the outermost call.
+ * write through `db()` commits or rolls back with the outermost call. Every
+ * write started inside must be awaited before `fn` returns: work that
+ * outlives `fn` runs on a finished transaction.
  */
 export const inTransaction = <T>(fn: () => Promise<T>): Promise<T> =>
   current.getStore() !== undefined

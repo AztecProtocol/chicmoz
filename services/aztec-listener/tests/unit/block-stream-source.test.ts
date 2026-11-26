@@ -5,13 +5,14 @@ import {
   CheckpointNumber,
 } from "@aztec-labs/foundation/branded-types";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
-import { AbortError } from "@aztec-labs/foundation/error";
+import { AbortError, TimeoutError } from "@aztec-labs/foundation/error";
 import { type AztecNode } from "@aztec-labs/aztec.js/node";
 import {
   type BlockHash,
   type BlockParameter,
   L2Block,
   type L2BlockStreamEventHandler,
+  type L2BlockStreamLocalDataProvider,
   L2BlockStream,
   type L2Tips,
   L2TipsMemoryStore,
@@ -81,6 +82,9 @@ const respond = async (
   ...(withBody ? { body: block.body } : {}),
 });
 
+const blocksFrom = (chain: Chain, heights: number[]) =>
+  Promise.all(heights.map((n) => respond(chain.blocks[n], true)));
+
 const checkpointHash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 
 /** The parts of an Aztec node the stream source and the election read. */
@@ -91,6 +95,8 @@ class FakeNode {
   probes = 0;
   headerReads = 0;
   readonly calls: string[] = [];
+  /** Answers the pass's tips reads only; the election's probe still sees `tips()`. */
+  chainTipsOverride?: () => L2Tips;
   getBlocksOverride?: (from: number, limit: number) => Promise<BlockResponse[]>;
   getBlockOverride?: (
     param: BlockParameter,
@@ -130,7 +136,7 @@ class FakeNode {
 
   getChainTips() {
     this.calls.push("getChainTips");
-    return Promise.resolve(this.tips());
+    return Promise.resolve(this.chainTipsOverride?.() ?? this.tips());
   }
 
   getBlock(param: BlockParameter): Promise<BlockResponse | undefined> {
@@ -206,7 +212,7 @@ type Setup = {
   online?: FakeNode[];
   maxPruneDepth?: number;
   legacyProvenHeight?: number;
-  versionStored?: () => boolean;
+  otherVersionStored?: () => boolean;
 };
 
 const setup = ({
@@ -214,10 +220,10 @@ const setup = ({
   online = nodes,
   maxPruneDepth = 10,
   legacyProvenHeight = 0,
-  versionStored = () => true,
+  otherVersionStored = () => true,
 }: Setup) => {
   const store = Object.assign(new L2TipsMemoryStore(genesis), {
-    anyVersionStored: () => Promise.resolve(versionStored()),
+    otherVersionStored: () => Promise.resolve(otherVersionStored()),
   });
   const clock = { now: 1_000_000 };
   const world = { online };
@@ -231,8 +237,13 @@ const setup = ({
     },
     { maxPruneDepth, waitAlertMs: 60_000 },
   );
-  const streamWith = (handler: L2BlockStreamEventHandler = store) =>
-    new L2BlockStream(source, store, handler, undefined, { batchSize: 10 });
+  const streamWith = (
+    handler: L2BlockStreamEventHandler = store,
+    localData: L2BlockStreamLocalDataProvider = source.localData,
+  ) =>
+    new L2BlockStream(source, localData, handler, undefined, {
+      batchSize: 10,
+    });
   const stream = streamWith();
   /** One listener pass: the election, then the stream when a node is pinned. */
   const pass = async (s = stream) => {
@@ -275,6 +286,13 @@ const fallbackWarnings = () =>
     String(message).includes("behind on proofs"),
   ).length;
 
+/** A node whose pass leaves the store finalized at block 4 of `main`. */
+const finalizedAtFour = () => {
+  const node = new FakeNode("honest", prefix(main, 6));
+  node.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
+  return node;
+};
+
 describe("StickySource election", () => {
   it("keeps the pin until a node is more than 2 blocks ahead, so a stalled node loses it, and starts on the most advanced node", async () => {
     const a = new FakeNode("a", prefix(main, 5));
@@ -290,8 +308,7 @@ describe("StickySource election", () => {
   });
 
   it("never elects a node behind on finality or with another block at the store's finalized height, so the store's finalized tip never moves back", async () => {
-    const honest = new FakeNode("honest", prefix(main, 6));
-    honest.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
+    const honest = finalizedAtFour();
     const behind = new FakeNode("behind", prefix(main, 9));
     behind.tiers = { checkpointed: 9, proven: 3, finalized: 3 };
     // Finalized at or ahead of the store, on chains that left ours below block 4.
@@ -309,7 +326,6 @@ describe("StickySource election", () => {
     world.online = [behind, twin, forked, honest];
     expect(await source.elect()).toBe(honest.rpc);
     expect(await source.elect()).toBe(honest.rpc);
-    expect(forked.headerReads).toBe(1);
 
     world.online = [behind, twin, forked];
     expect(await pass()).toBeUndefined();
@@ -317,6 +333,43 @@ describe("StickySource election", () => {
       number: 4,
       hash: main.hashes[4],
     });
+  });
+
+  it("elects a node that had another block at the store's finalized height once it serves the store's block", async () => {
+    const honest = finalizedAtFour();
+    const x = new FakeNode("x", await grow(prefix(main, 2), 10));
+    x.tiers = { checkpointed: 10, proven: 6, finalized: 6 };
+    const { source, world, pass } = setup({
+      nodes: [honest, x],
+      online: [honest],
+    });
+    await pass();
+
+    world.online = [x];
+    expect(await source.elect()).toBeUndefined();
+    x.chain = prefix(main, 10);
+    expect(await source.elect()).toBe(x.rpc);
+    // The match holds until the store's finalized tip moves.
+    expect(await source.elect()).toBe(x.rpc);
+    expect(x.headerReads).toBe(2);
+  });
+
+  it("compares the hash at the store's finalized height on every election, after a cached match too", async () => {
+    const honest = finalizedAtFour();
+    const x = new FakeNode("x", prefix(main, 10));
+    x.tiers = { checkpointed: 10, proven: 6, finalized: 6 };
+    const { source, world, pass } = setup({
+      nodes: [honest, x],
+      online: [honest],
+    });
+    await pass();
+
+    world.online = [x];
+    expect(await source.elect()).toBe(x.rpc);
+    // Another backend behind the same URL, finalized at the store's height on another block.
+    x.chain = await grow(prefix(main, 3), 10);
+    x.tiers = { checkpointed: 10, proven: 4, finalized: 4 };
+    expect(await source.elect()).toBeUndefined();
   });
 
   it("prefers nodes at or above the store's proven tip, and warns once when it has to follow nodes behind on proofs", async () => {
@@ -362,7 +415,7 @@ describe("StickySource election", () => {
     const { source, clock, world } = setup({
       nodes: [a, b],
       legacyProvenHeight: 10,
-      versionStored: () => stored,
+      otherVersionStored: () => stored,
     });
 
     expect(await source.elect()).toBeUndefined();
@@ -376,10 +429,33 @@ describe("StickySource election", () => {
     b.chain = prefix(main, 10);
     expect(await source.elect()).toBe(b.rpc);
 
-    // Once a version has a store, the floor is gone.
+    // A store of another rollup version lifts the floor.
     stored = true;
     world.online = [a];
     expect(await source.elect()).toBe(a.rpc);
+  });
+
+  it("keeps the floor until the stream's own tip reaches it", async () => {
+    const a = new FakeNode("a", prefix(main, 12));
+    const b = new FakeNode("b", prefix(main, 9));
+    const { store, source, world, pass } = setup({
+      nodes: [a, b],
+      online: [a],
+      legacyProvenHeight: 10,
+      otherVersionStored: () => false,
+    });
+    // The first pass stores blocks below the floor, then loses its node.
+    a.getBlocksOverride = (from) =>
+      from === 1
+        ? blocksFrom(main, [1, 2, 3, 4, 5])
+        : Promise.reject(new Error("connection reset"));
+    expect(await pass()).toBe(a.rpc);
+    expect((await store.getL2Tips()).proposed.number).toBe(5);
+
+    world.online = [b];
+    expect(await source.elect()).toBeUndefined();
+    b.chain = prefix(main, 10);
+    expect(await source.elect()).toBe(b.rpc);
   });
 
   it("leaves out a node that drips its tips past the deadline or sends more than 64 KiB, and follows another", async () => {
@@ -414,7 +490,7 @@ describe("StickySource election", () => {
       }));
       const source = new StickySource({
         store: Object.assign(new L2TipsMemoryStore(genesis), {
-          anyVersionStored: () => Promise.resolve(true),
+          otherVersionStored: () => Promise.resolve(true),
         }),
         legacyProvenHeight: () => Promise.resolve(0),
         nodes: () => [slow, big, good],
@@ -456,7 +532,7 @@ describe("StickySource passes", () => {
     x.calls.length = 0;
     y.calls.length = 0;
     const probes = y.probes;
-    await new L2BlockStream(source, store, store, undefined, {
+    await new L2BlockStream(source, source.localData, store, undefined, {
       batchSize: 10,
     }).sync();
 
@@ -469,10 +545,44 @@ describe("StickySource passes", () => {
     );
   });
 
-  it("follows the node with the replacing block after the pinned node, tied with it, ended its pass on the prefix rule", async () => {
+  it("skips the pass when the pinned node's snapshot fails the election's checks, the post-walk one too", async () => {
+    // A restarted node, finalized below what its probe showed.
+    const x = finalizedAtFour();
+    const { store, source, stream, pass } = setup({ nodes: [x] });
+    await pass();
+    const synced = await store.getL2Tips();
+    x.chain = prefix(main, 8);
+    expect(await source.elect()).toBe(x.rpc);
+    x.tiers = { checkpointed: 8, proven: 3, finalized: 3 };
+    await stream.sync();
+    expect(await store.getL2Tips()).toEqual(synced);
+    expect(source.lastError).toBeInstanceOf(AbortError);
+
+    // Below the floor on the snapshot the stream reads after its walk-back.
+    const y = new FakeNode("y", await grow(prefix(main, 4), 9));
+    const floored = setup({
+      nodes: [y],
+      legacyProvenHeight: 8,
+      otherVersionStored: () => false,
+    });
+    await floored.store.handleBlockStreamEvent({
+      type: "blocks-added",
+      blocks: main.blocks.slice(1, 6),
+    });
+    const partial = await floored.store.getL2Tips();
+    const low = new FakeNode("low", prefix(y.chain, 6)).tips();
+    let snapshots = 0;
+    y.chainTipsOverride = () => (++snapshots === 2 ? low : y.tips());
+    expect(await floored.pass()).toBe(y.rpc);
+    expect(snapshots).toBe(2);
+    expect(await floored.store.getL2Tips()).toEqual(partial);
+  });
+
+  it("follows the node with the replacing block within three passes while two tied nodes have only a shorter copy, and lets them back after that pass", async () => {
     const a = new FakeNode("a", prefix(main, 6));
     const b = new FakeNode("b", prefix(main, 6));
-    const { store, source, streamWith, pass } = setup({ nodes: [a, b] });
+    const c = new FakeNode("c", prefix(main, 6));
+    const { store, source, streamWith, pass } = setup({ nodes: [a, b, c] });
     await pass();
     // Stands in for the publisher's prefix rule.
     const publisher: L2BlockStreamEventHandler = {
@@ -490,19 +600,44 @@ describe("StickySource passes", () => {
     const stream = streamWith(publisher);
 
     a.chain = prefix(main, 5);
-    b.chain = await grow(prefix(main, 4), 5);
-    expect(await pass(stream)).toBe(a.rpc);
-    expect((await store.getL2Tips()).proposed.number).toBe(6);
-
-    expect(await pass(stream)).toBe(b.rpc);
+    b.chain = prefix(main, 5);
+    c.chain = await grow(prefix(main, 4), 5);
+    const elected = [
+      await pass(stream),
+      await pass(stream),
+      await pass(stream),
+    ];
+    expect(elected).toEqual([a.rpc, b.rpc, c.rpc]);
     expect((await store.getL2Tips()).proposed).toEqual({
       number: 5,
-      hash: b.chain.hashes[5],
+      hash: c.chain.hashes[5],
     });
+
+    a.chain = await grow(c.chain, 9);
+    expect(await pass(stream)).toBe(a.rpc);
   });
 
-  const blocksFrom = (chain: Chain, heights: number[]) =>
-    Promise.all(heights.map((n) => respond(chain.blocks[n], true)));
+  it("follows a node that pruned between its tips and its blocks on the next pass, without setting it aside", async () => {
+    const x = new FakeNode("x", prefix(main, 5));
+    const { store, source, pass } = setup({ nodes: [x] });
+    await pass();
+    const pruned = await grow(prefix(main, 3), 4);
+    x.chain = prefix(main, 6);
+    x.getBlocksOverride = () => {
+      x.chain = pruned;
+      x.getBlocksOverride = undefined;
+      return Promise.resolve([]);
+    };
+
+    expect(await pass()).toBe(x.rpc);
+    expect((await store.getL2Tips()).proposed.number).toBe(5);
+    expect(source.lastError).toBeUndefined();
+    expect(await pass()).toBe(x.rpc);
+    expect((await store.getL2Tips()).proposed).toEqual({
+      number: 4,
+      hash: pruned.hashes[4],
+    });
+  });
 
   it.each([
     {
@@ -525,14 +660,6 @@ describe("StickySource passes", () => {
       fault: "a range is longer than its limit",
       arrange: (x: FakeNode) => {
         x.getBlocksOverride = () => blocksFrom(main, [3, 4, 5]);
-      },
-      read: (s: StickySource) =>
-        s.getBlocks({ from: BlockNumber(3), limit: 2 }),
-    },
-    {
-      fault: "a range is empty at or below the node's own tip",
-      arrange: (x: FakeNode) => {
-        x.getBlocksOverride = () => Promise.resolve([]);
       },
       read: (s: StickySource) =>
         s.getBlocks({ from: BlockNumber(3), limit: 2 }),
@@ -574,21 +701,74 @@ describe("StickySource passes", () => {
     },
   );
 
-  it("aborts a walk-back past the bound and sits the node out", async () => {
+  it("aborts a walk-back past the bound on block reads and sits the node out", async () => {
     const x = new FakeNode("x", prefix(main, 8));
-    const { store, source, pass } = setup({ nodes: [x], maxPruneDepth: 2 });
+    const { store, source, streamWith, pass } = setup({
+      nodes: [x],
+      maxPruneDepth: 2,
+    });
     await pass();
     const before = await store.getL2Tips();
 
-    // Disagrees with every stored hash down to genesis.
+    // Disagrees with every stored hash down to genesis. Reading the store
+    // directly leaves only the block-read bound in play.
     x.chain = await grow(base, 8);
     x.calls.length = 0;
-    await pass();
+    await pass(streamWith(store, store));
 
     expect(await store.getL2Tips()).toEqual(before);
     expect(source.lastError).toBeInstanceOf(NodeCheckError);
     expect(x.calls.filter((c) => c === "getBlock")).toHaveLength(2 + 2);
     expect(await source.elect()).toBeUndefined();
+  });
+
+  it("aborts a walk-back past the bound through heights the store has no hash for", async () => {
+    const x = new FakeNode("x", prefix(main, 4));
+    const { store, source, pass } = setup({ nodes: [x], maxPruneDepth: 2 });
+    // An interrupted first pass from block 10: no hash below it, finalized still 0.
+    await store.handleBlockStreamEvent({
+      type: "blocks-added",
+      blocks: main.blocks.slice(10, 12),
+    });
+    const before = await store.getL2Tips();
+
+    await pass();
+
+    expect(await store.getL2Tips()).toEqual(before);
+    expect(source.lastError).toBeInstanceOf(NodeCheckError);
+    expect(x.calls.filter((c) => c === "getBlock")).toHaveLength(2);
+    expect(await source.elect()).toBeUndefined();
+  });
+
+  it("fails the pass when a pinned read outlasts its deadline, and keeps the node electable", async () => {
+    const x = new FakeNode("x", prefix(main, 5));
+    const { store, source, pass } = setup({ nodes: [x] });
+    await pass();
+    x.chain = prefix(main, 8);
+    let reached: () => void = () => undefined;
+    const hanging = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    x.getBlocksOverride = () => {
+      reached();
+      return new Promise<never>(() => undefined);
+    };
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const stalled = pass();
+      await hanging;
+      await vi.advanceTimersByTimeAsync(60_000);
+      await stalled;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(source.lastError).toBeInstanceOf(TimeoutError);
+    expect((await store.getL2Tips()).proposed.number).toBe(5);
+
+    x.getBlocksOverride = undefined;
+    expect(await pass()).toBe(x.rpc);
+    expect((await store.getL2Tips()).proposed.number).toBe(8);
   });
 
   it("reads the genesis hash from block 0, and stops when a node does not serve it", async () => {
