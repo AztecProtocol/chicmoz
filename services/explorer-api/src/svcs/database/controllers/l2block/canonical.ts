@@ -76,7 +76,7 @@ type ChainBlock = {
   lastArchiveRoot: string | null;
 };
 
-type StoredBlock = ChainBlock & { bodyId: string };
+type StoredBlock = ChainBlock & { bodyId: string; created: boolean };
 
 type Change = {
   dbTx: DbTx;
@@ -482,12 +482,13 @@ const storeIfAbsent = async (
     .limit(1);
   if (!existing) {
     const bodyId = await store(change.dbTx, block, change.now);
-    return { ...node, canonical: false, bodyId };
+    return { ...node, canonical: false, bodyId, created: true };
   }
   const stored = {
     ...node,
     canonical: existing.orphanTimestamp === null,
     bodyId: existing.bodyId,
+    created: false,
   };
   if (existing.archiveRoot === node.archiveRoot) {
     return stored;
@@ -640,38 +641,47 @@ const setHasOrphanedParent = async (
 
 /**
  * `orphan_hasOrphanedParent` of an off-chain block: its stored parent is off
- * the chain too. Refreshed for the demoted blocks and for the off-chain
- * children of every block this call moved.
+ * the chain too. Refreshed for the blocks this call demoted or stored off the
+ * chain, and for the off-chain children of those and of the blocks it made
+ * canonical.
  */
-const refreshOrphanFlags = async (change: Change) => {
+const refreshOrphanFlags = async (change: Change, storedOff: HexString[]) => {
   const parent = alias(l2Block, "parent");
   const parentArchive = alias(archive, "parent_archive");
   const deadParent: HexString[] = [];
-  await inStatements(change, [...change.demoted.keys()], async (part) => {
-    const rows = await change.dbTx
-      .selectDistinct({ hash: l2Block.hash })
-      .from(l2Block)
-      .innerJoin(header, eq(header.blockHash, l2Block.hash))
-      .innerJoin(lastArchive, eq(lastArchive.fk, header.id))
-      .innerJoin(parentArchive, eq(parentArchive.root, lastArchive.root))
-      .innerJoin(
-        parent,
-        and(
-          eq(parent.hash, parentArchive.fk),
-          eq(parent.height, sql`${l2Block.height} - 1`),
-          eq(parent.version, l2Block.version),
-        ),
-      )
-      .where(
-        and(inArray(l2Block.hash, part), isNotNull(parent.orphan_timestamp)),
-      );
-    deadParent.push(...rows.map((r) => r.hash));
-  });
+  await inStatements(
+    change,
+    [...change.demoted.keys(), ...storedOff],
+    async (part) => {
+      const rows = await change.dbTx
+        .selectDistinct({ hash: l2Block.hash })
+        .from(l2Block)
+        .innerJoin(header, eq(header.blockHash, l2Block.hash))
+        .innerJoin(lastArchive, eq(lastArchive.fk, header.id))
+        .innerJoin(parentArchive, eq(parentArchive.root, lastArchive.root))
+        .innerJoin(
+          parent,
+          and(
+            eq(parent.hash, parentArchive.fk),
+            eq(parent.height, sql`${l2Block.height} - 1`),
+            eq(parent.version, l2Block.version),
+          ),
+        )
+        .where(
+          and(inArray(l2Block.hash, part), isNotNull(parent.orphan_timestamp)),
+        );
+      deadParent.push(...rows.map((r) => r.hash));
+    },
+  );
 
   const child = alias(l2Block, "child");
   const childHeader = alias(header, "child_header");
   const childLastArchive = alias(lastArchive, "child_last_archive");
-  const moved = [...change.demoted.keys(), ...change.promoted.keys()];
+  const moved = [
+    ...change.demoted.keys(),
+    ...change.promoted.keys(),
+    ...storedOff,
+  ];
   const liveParent: HexString[] = [];
   await inStatements(change, moved, async (part) => {
     const rows = await change.dbTx
@@ -705,7 +715,11 @@ const refreshOrphanFlags = async (change: Change) => {
 };
 
 /** The writes that follow the decision, in the same transaction. */
-const settle = async (change: Change, attached: ChicmozL2Block | undefined) => {
+const settle = async (
+  change: Change,
+  block: ChicmozL2Block,
+  { canonical, created }: { canonical: boolean; created: boolean },
+) => {
   if (change.demoted.size > 0) {
     await recordReorg(change);
   }
@@ -713,12 +727,14 @@ const settle = async (change: Change, attached: ChicmozL2Block | undefined) => {
   const mined = new Set(
     (await ownedTxs(change, [...change.promoted.keys()])).map((t) => t.txHash),
   );
-  attached?.body.txEffects.forEach((e) => mined.add(e.txHash));
+  if (canonical) {
+    block.body.txEffects.forEach((e) => mined.add(e.txHash));
+  }
   await inStatements(change, [...mined], (part) =>
     removePendingAndDroppedTx(change.dbTx, part),
   );
   await reviveRecords(change);
-  await refreshOrphanFlags(change);
+  await refreshOrphanFlags(change, created && !canonical ? [block.hash] : []);
   await inStatements(
     change,
     [...new Set([...change.walked.values(), ...change.repairs])],
@@ -760,7 +776,7 @@ const apply = async (
       if (canonical) {
         await storeBlockContracts(dbTx, contracts);
       }
-      await settle(change, canonical ? block : undefined);
+      await settle(change, block, { canonical, created: stored.created });
       logger.info(
         `🧢 Applied ${ordered ? "ordered" : "catch-up"} block ${block.height} (${block.hash}): ${canonical ? "canonical" : "off the chain"}; demoted ${change.demoted.size}, made canonical ${change.promoted.size}`,
       );

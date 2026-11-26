@@ -502,6 +502,38 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.repairOpen(7_001)).toBe(false);
   });
 
+  it("flags a new off-chain block whose stored parent is off the chain, whichever of the two arrives first", async () => {
+    const version = freshVersion();
+    const live = await buildChain(20_000n, 3, { version });
+    for (const block of live) {
+      await ordered(block);
+    }
+    const offChainPair = async () => {
+      const parent = await buildBlock(20_001n, [freshTxHash()], {
+        version,
+        parent: live[0],
+      });
+      const child = await buildBlock(20_002n, [freshTxHash()], {
+        version,
+        parent,
+      });
+      return { parent, child };
+    };
+    const parentFirst = await offChainPair();
+    const childFirst = await offChainPair();
+
+    await catchup(parentFirst.parent);
+    await catchup(parentFirst.child);
+    await catchup(childFirst.child);
+    await catchup(childFirst.parent);
+
+    expect(
+      await Promise.all(
+        [parentFirst.child, childFirst.child].map((b) => reads.stateOf(b.hash)),
+      ),
+    ).toEqual([{ hasOrphanedParent: true }, { hasOrphanedParent: true }]);
+  });
+
   it("brings back a live block the old code orphaned without demoting the chain above it", async () => {
     const version = freshVersion();
     const live = await buildChain(8_000n, 5, { version });
