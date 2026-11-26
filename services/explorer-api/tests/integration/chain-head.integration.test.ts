@@ -46,6 +46,7 @@ describe("the canonical chain on a real database", () => {
     event: NewBlockEvent,
   ) => Promise<{ deliveries: number; rebalances: number; beats: number }>;
   let holdChainLock: () => Promise<() => Promise<void>>;
+  let fulfilByHeight: (height: bigint) => Promise<void>;
   let walkBound: number;
 
   beforeAll(async () => {
@@ -55,6 +56,9 @@ describe("the canonical chain on a real database", () => {
     );
     const { WALK_BOUND, withChainLock } = await import(
       "../../src/svcs/database/controllers/l2block/canonical.js"
+    );
+    const { markOpenGapsFulfilledByHeight } = await import(
+      "../../src/svcs/database/controllers/l2block/missing-ranges.js"
     );
     const { l2Block } = await import(
       "../../src/svcs/database/schema/l2block/index.js"
@@ -247,6 +251,7 @@ describe("the canonical chain on a real database", () => {
         await held;
       };
     };
+    fulfilByHeight = markOpenGapsFulfilledByHeight;
   });
 
   afterAll(async () => {
@@ -500,6 +505,29 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.ownerOf(shared)).toBe(a1.hash);
     expect(await reads.isDropped(shared)).toBe(false);
     expect(await reads.repairOpen(7_001)).toBe(false);
+  });
+
+  it("keeps a repair open when a stale post-commit hook runs after a walk revived its height", async () => {
+    const version = freshVersion();
+    const [p, a] = await buildChain(19_000n, 2, { version });
+    const b = await buildBlock(19_001n, [freshTxHash()], {
+      version,
+      parent: p,
+    });
+    const next = await buildBlock(19_002n, [freshTxHash()], {
+      version,
+      parent: b,
+    });
+    await ordered(p);
+    await ordered(a);
+    await catchup(b);
+    await ordered(next);
+    expect(await reads.repairOpen(19_001)).toBe(true);
+
+    // `a`'s hook, delayed past the change that replaced it.
+    await fulfilByHeight(19_001n);
+
+    expect(await reads.repairOpen(19_001)).toBe(true);
   });
 
   it("flags a new off-chain block whose stored parent is off the chain, whichever of the two arrives first", async () => {

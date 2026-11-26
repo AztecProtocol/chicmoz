@@ -155,8 +155,8 @@ const CANDIDATE_GAP_LIMIT = 50;
 const TIP_BOUNDARY_REASON: L2BlockRangeRequestReason = "tip_boundary_mismatch";
 // One height whose block message must come back: the canonical block there
 // lacks it, or the height was cleared under a block whose parent is missing.
-// Requested whole, present or not, until a canonical attach from a block
-// message fulfils it (markOpenGapsFulfilledByHeight).
+// Requested whole, present or not, until a block message makes the block at
+// that height canonical (fulfilRepairHeight, inside that change).
 const REPAIR_REASON: L2BlockRangeRequestReason = "reorg_repair";
 
 export const recordRepairHeights = async (
@@ -172,6 +172,29 @@ export const recordRepairHeights = async (
     reason: REPAIR_REASON,
     executor,
   });
+};
+
+/**
+ * Closes the repair of `height`, in the transaction whose block message made
+ * the block there canonical. Repair rows carry no rollup version, so any
+ * version's block at the height closes it.
+ */
+export const fulfilRepairHeight = async (
+  executor: ReturnType<typeof db>,
+  height: bigint,
+) => {
+  await executor
+    .update(l2OpenGapTable)
+    .set({ status: "fulfilled", fulfilledAt: new Date(), lastError: null })
+    .where(
+      and(
+        eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
+        eq(l2OpenGapTable.reason, REPAIR_REASON),
+        eq(l2OpenGapTable.status, "open"),
+        eq(l2OpenGapTable.fromHeight, Number(height)),
+        eq(l2OpenGapTable.toHeight, Number(height)),
+      ),
+    );
 };
 
 /**
@@ -623,6 +646,7 @@ export const markOpenGapsFulfilledByHeight = async (height: bigint) => {
       and(
         eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
         eq(l2OpenGapTable.status, "open"),
+        ne(l2OpenGapTable.reason, REPAIR_REASON),
         lte(l2OpenGapTable.fromHeight, Number(height)),
         gte(l2OpenGapTable.toHeight, Number(height)),
       ),

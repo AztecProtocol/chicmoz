@@ -21,7 +21,7 @@ import {
 } from "../l2contract/store.js";
 import { removePendingAndDroppedTx } from "../l2Tx/remove-pending-and-dropped.js";
 import { type DbTx } from "../utils.js";
-import { recordRepairHeights } from "./missing-ranges.js";
+import { fulfilRepairHeight, recordRepairHeights } from "./missing-ranges.js";
 import { store, writeTxEffect } from "./store.js";
 
 // Every change to which blocks are canonical goes through this module.
@@ -740,6 +740,9 @@ const settle = async (
     [...new Set([...change.walked.values(), ...change.repairs])],
     (part) => recordRepairHeights(change.dbTx, part),
   );
+  if (canonical) {
+    await fulfilRepairHeight(change.dbTx, block.height);
+  }
 };
 
 const ownerSummary = (owners: TxOwner[]) =>

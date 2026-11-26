@@ -61,6 +61,7 @@ describe("open gap scheduling on a real database", () => {
     );
     const {
       buildMissingBlockRangeRequest,
+      fulfilRepairHeight,
       markOpenGapsFulfilledByHeight,
       recordRepairHeights,
     } = await import(
@@ -108,8 +109,8 @@ describe("open gap scheduling on a real database", () => {
         .where(eq(l2Block.hash, hashOf(height, CURRENT)));
     };
     repair = (height) => recordRepairHeights(db, [BigInt(height)]);
-    // What blockHandler does after a block message makes its block canonical.
-    fulfil = (height) => markOpenGapsFulfilledByHeight(BigInt(height));
+    // What a block message's change does when it makes its block canonical.
+    fulfil = (height) => fulfilRepairHeight(db, BigInt(height));
     seedGaps = async (rows) => {
       const now = Date.now();
       await db.insert(l2OpenGapTable).values(
