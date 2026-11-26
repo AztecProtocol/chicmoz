@@ -294,6 +294,45 @@ const demoteLinkedRun = async (
 };
 
 /**
+ * Demotes every other canonical block of the version up to `ceiling` that
+ * holds one of `block`'s txs, with its linked run up to `ceiling`: a tx is
+ * included once per chain, so no such holder is on the chain `block` is
+ * canonical on.
+ */
+const demoteHolders = async (
+  change: Change,
+  block: ChicmozL2Block,
+  ceiling: bigint,
+) => {
+  const holders = new Set(
+    (
+      await txOwners(
+        change.dbTx,
+        block.body.txEffects.map((e) => e.txHash),
+      )
+    )
+      .filter(
+        (o) => o.canonical && o.blockHash !== block.hash && o.height <= ceiling,
+      )
+      .map((o) => o.blockHash),
+  );
+  for (const hash of holders) {
+    const [holder] = (
+      await chainBlocks(change.dbTx).where(
+        and(
+          eq(l2Block.hash, hash),
+          eq(l2Block.version, change.version),
+          isNull(l2Block.orphan_timestamp),
+        ),
+      )
+    ).map(toChainBlock);
+    if (holder) {
+      await demoteLinkedRun(change, holder, ceiling);
+    }
+  }
+};
+
+/**
  * Brings back the stored, off-chain ancestors of a block that just became
  * canonical, demoting their competitors. Ends at a canonical parent; at a
  * missing one it clears that height, whose block cannot be the parent, and
@@ -327,6 +366,28 @@ const reviveAncestors = async (change: Change, start: ChainBlock) => {
     await promote(change, parent, { walked: true });
     child = parent;
   }
+};
+
+/** Asks for every height below `height` that this change left without a canonical block. */
+const requestEmptied = async (change: Change, height: bigint) => {
+  const emptied = [
+    ...new Set([...change.demoted.values()].filter((h) => h < height)),
+  ];
+  const occupied = new Set<bigint>();
+  await inStatements(change, emptied, async (part) => {
+    const rows = await change.dbTx
+      .selectDistinct({ height: l2Block.height })
+      .from(l2Block)
+      .where(
+        and(
+          eq(l2Block.version, change.version),
+          inArray(l2Block.height, part),
+          isNull(l2Block.orphan_timestamp),
+        ),
+      );
+    rows.forEach((row) => occupied.add(row.height));
+  });
+  emptied.filter((h) => !occupied.has(h)).forEach((h) => change.repairs.add(h));
 };
 
 const demoteAbove = async (change: Change, ceiling: bigint) => {
@@ -715,10 +776,11 @@ const apply = async (
 };
 
 /**
- * An ordered block is canonical at its height. It replaces the block there,
- * that block's linked descendants and every canonical holder of its txs
- * above it (a tx is included once per chain), brings back its stored
- * ancestors, and demotes every canonical block above `tip`.
+ * An ordered block is canonical at its height. It replaces the block there
+ * with that block's linked descendants, and every other canonical holder of
+ * its txs with theirs; brings back its stored ancestors; asks for the heights
+ * below it that this leaves empty; and demotes every canonical block above
+ * `tip`.
  */
 export const applyOrderedBlock = (
   incoming: IncomingBlock,
@@ -742,31 +804,13 @@ export const applyOrderedBlock = (
         for (const replaced of await canonicalAt(change, height)) {
           await demoteLinkedRun(change, replaced, ceiling);
         }
-        const txHashes = incoming.block.body.txEffects.map((e) => e.txHash);
-        const holders = new Map(
-          (await txOwners(change.dbTx, txHashes))
-            .filter(
-              (o) => o.canonical && o.height > height && o.blockHash !== hash,
-            )
-            .map((o) => [o.blockHash, o]),
-        );
-        for (const holder of holders.values()) {
-          const [run] = (
-            await chainBlocks(change.dbTx).where(
-              and(
-                eq(l2Block.hash, holder.blockHash),
-                eq(l2Block.version, change.version),
-                isNull(l2Block.orphan_timestamp),
-              ),
-            )
-          ).map(toChainBlock);
-          if (run) {
-            await demoteLinkedRun(change, run, ceiling);
-          }
-        }
+      }
+      await demoteHolders(change, incoming.block, ceiling);
+      if (!stored.canonical) {
         await promote(change, stored, { walked: false });
         await reviveAncestors(change, stored);
       }
+      await requestEmptied(change, height);
       await demoteAbove(change, ceiling);
       return true;
     },

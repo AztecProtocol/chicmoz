@@ -33,7 +33,7 @@ describe("block conflicts on a real database", () => {
     await api?.close();
   });
 
-  it("skips a block whose tx a canonical block below holds, and keeps the block at its height", async () => {
+  it("skips a block whose tx its canonical parent holds, and keeps the block at its height", async () => {
     const t = freshTxHash();
     const below = await buildBlock(100n, [t]);
     const current = await buildBlock(101n, [freshTxHash()], { parent: below });

@@ -535,6 +535,42 @@ describe("the canonical chain on a real database", () => {
     ]);
   });
 
+  it("demotes a stale canonical holder of an ordered block's tx below it, and requests the heights that leaves empty", async () => {
+    const version = freshVersion();
+    const x = freshTxHash();
+    const a0 = await buildBlock(15_000n, [freshTxHash()], { version });
+    const a1 = await buildBlock(15_001n, [x], { version, parent: a0 });
+    const a2 = await buildBlock(15_002n, [freshTxHash()], {
+      version,
+      parent: a1,
+    });
+    const a3 = await buildBlock(15_003n, [freshTxHash()], {
+      version,
+      parent: a2,
+    });
+    for (const block of [a0, a1, a2, a3]) {
+      await ordered(block);
+    }
+    const b1 = await buildBlock(15_001n, [freshTxHash()], {
+      version,
+      parent: a0,
+    });
+    const b2 = await buildBlock(15_002n, [freshTxHash()], {
+      version,
+      parent: b1,
+    });
+    const b3 = await buildBlock(15_003n, [x], { version, parent: b2 });
+
+    await ordered(b3);
+
+    expect(await reads.chainOf(version)).toEqual(heads([a0, b3]));
+    expect(await reads.ownerOf(x)).toBe(b3.hash);
+    expect([
+      await reads.repairOpen(15_001),
+      await reads.repairOpen(15_002),
+    ]).toEqual([true, true]);
+  });
+
   it("treats a parent lookup that finds two blocks as a missing parent", async () => {
     const version = freshVersion();
     const [p] = await buildChain(11_000n, 1, { version });
