@@ -5,12 +5,16 @@ import {
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { type JobState } from "../../src/svcs/job-manager/backend.js";
 import { createAwsBatchBackend } from "../../src/svcs/job-manager/backends/aws-batch.js";
 import { createK8sBackend } from "../../src/svcs/job-manager/backends/k8s.js";
 import { jobName } from "../../src/svcs/job-manager/naming.js";
-import { buildCompileScript } from "../../src/svcs/job-manager/scripts.js";
+import {
+  buildCompileScript,
+  buildReaderScript,
+} from "../../src/svcs/job-manager/scripts.js";
 
 const mocks = vi.hoisted(() => {
   // environment.ts parses these at import; the aws-batch backend refuses to start without them.
@@ -306,8 +310,17 @@ describe("memory kill", () => {
 const STAND_IN_BASE_IMAGE =
   "redis:7.2-alpine@sha256:2f66de68111e64c3927859f158f8e666066dae2b97d9f82770a6f37a5aa1c335";
 
-const docker = (args: string[], input?: string) =>
-  spawnSync("docker", args, { encoding: "utf8", input, timeout: 120_000 });
+const docker = (
+  args: string[],
+  { input, timeout = 120_000 }: { input?: string; timeout?: number } = {},
+) =>
+  spawnSync("docker", args, {
+    encoding: "utf8",
+    input,
+    timeout,
+    // A job's output carries its whole artifact, several MB.
+    maxBuffer: 256 * 1024 * 1024,
+  });
 
 const dockerAvailable =
   spawnSync("docker", ["info"], { stdio: "ignore", timeout: 10_000 }).status ===
@@ -332,10 +345,9 @@ describe.skipIf(!dockerAvailable && process.env.GITHUB_ACTIONS !== "true")(
         .match(/^ENTRYPOINT\s.*$/gim)
         ?.at(-1);
       expect(entrypoint).toBeDefined();
-      const build = docker(
-        ["build", "--quiet", "--tag", image, "-"],
-        `FROM ${STAND_IN_BASE_IMAGE}\n${entrypoint}\n`,
-      );
+      const build = docker(["build", "--quiet", "--tag", image, "-"], {
+        input: `FROM ${STAND_IN_BASE_IMAGE}\n${entrypoint}\n`,
+      });
       expect(build.status, build.stderr).toBe(0);
     }, 180_000);
 
@@ -394,5 +406,113 @@ describe.skipIf(!dockerAvailable && process.env.GITHUB_ACTIONS !== "true")(
         placeholder: { status: 0, stdout: "chicmoz-compiler-placeholder\n" },
       });
     }, 60_000);
+  },
+);
+
+// An image built from Dockerfile.compile-contracts for the Aztec version
+// ExplorerShowcase pins, e.g. contract-compiler:6.0.0 from
+// scripts/build_contract_compiler.sh. Building one pulls a 2 GB Aztec image,
+// so unset, the block is skipped.
+const compilerImage = process.env.CONTRACT_COMPILER_IMAGE ?? "";
+
+type Artifact = { functions: { name: string; verification_key?: string }[] };
+
+const verificationKeys = ({ functions }: Artifact) =>
+  Object.fromEntries(
+    functions.flatMap(({ name, verification_key: key }) =>
+      key ? [[name, key]] : [],
+    ),
+  );
+
+describe.skipIf(!compilerImage)(
+  "AWS Batch compile job in the compiler image, with no network",
+  () => {
+    const contract = fileURLToPath(
+      new URL(
+        "../../../event-cannon/src/contract-projects/ExplorerShowcase",
+        import.meta.url,
+      ),
+    );
+    // The job clones this volume's repository instead of GitHub.
+    const source = `chicmoz-compile-source-${randomUUID()}`;
+    const containers: string[] = [];
+
+    afterAll(() => {
+      if (containers.length > 0) {
+        docker(["rm", "--force", ...containers]);
+      }
+      docker(["volume", "rm", "--force", source]);
+    });
+
+    const runOffline = (args: string[], timeout?: number) => {
+      const name = `chicmoz-compile-test-${randomUUID()}`;
+      containers.push(name);
+      return docker(
+        ["run", "--rm", "--name", name, "--network", "none", ...args],
+        { timeout },
+      );
+    };
+
+    it("compiles a contract and derives its private functions' verification keys", async () => {
+      // Without target/, the job compiles from source instead of reusing the committed artifact.
+      const seeded = runOffline([
+        "--volume",
+        `${contract}:/contract:ro`,
+        "--volume",
+        `${source}:/source`,
+        compilerImage,
+        "cp -R /contract/. /source && rm -rf /source/target && cd /source && git init -q && git add -A && git -c user.name=test -c user.email=test@localhost commit -qm source",
+      ]);
+      expect(seeded.status, seeded.stderr).toBe(0);
+
+      stubBatch();
+      const backend = createAwsBatchBackend();
+      await backend.init();
+      const state: JobState = {
+        ...jobState(),
+        githubUrl: "/source",
+        gitRef: undefined,
+        subPath: undefined,
+        compilerImage,
+      };
+      await backend.launch(state, {
+        compileScript: buildCompileScript(state.gitRef, state.subPath),
+        readerScript: buildReaderScript(),
+      });
+      const [submit] = sentInputs<SubmitJobCommandInput>(
+        "SubmitJobCommand",
+      ).filter((input) => input.jobName === state.backendJobName);
+
+      const job = runOffline(
+        [
+          "--volume",
+          `${source}:/source:ro`,
+          ...(submit?.containerOverrides?.environment ?? []).flatMap(
+            ({ name = "", value = "" }) => ["--env", `${name}=${value}`],
+          ),
+          compilerImage,
+          ...(submit?.containerOverrides?.command ?? []),
+        ],
+        600_000,
+      );
+      expect(
+        job.status,
+        `${job.stdout.slice(-4000)}\n${job.stderr.slice(-4000)}`,
+      ).toBe(0);
+
+      // Keys derived from the wrong CRS points would differ from the committed ones.
+      const artifact =
+        /===ARTIFACT_START===\n([\s\S]*?)\n===ARTIFACT_END===/.exec(
+          job.stdout,
+        )?.[1];
+      expect(artifact).toBeDefined();
+      const committed = readFileSync(
+        `${contract}/target/explorer_showcase-ExplorerShowcase.json`,
+        "utf8",
+      );
+      expect(verificationKeys(JSON.parse(artifact ?? "") as Artifact)).toEqual(
+        verificationKeys(JSON.parse(committed) as Artifact),
+      );
+    }, 660_000);
   },
 );

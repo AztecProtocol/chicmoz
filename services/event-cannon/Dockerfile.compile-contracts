@@ -56,5 +56,24 @@ RUN git clone --depth 1 --branch ${NARGO_AZTEC_VERSION} \
   https://github.com/noir-lang/sha256.git \
   /root/nargo/github.com/noir-lang/sha256/v0.3.0
 
+# bb derives verification keys from the BN254 CRS and downloads missing points
+# over plain HTTP; shipping them lets compile jobs derive keys offline. bb 4.x
+# to 6.x read uncompressed points from $CRS_PATH/bn254_g1.dat, one per row of
+# a function's circuit (a power of two). A 2^22-row key needs more than the
+# orchestrator's default 4 GiB job memory, so 2^21 points (128 MiB) cover
+# every key a job can derive. Override both together, raising them with that
+# limit.
+ARG BB_CRS_POINTS=2097152
+ARG BB_CRS_SHA256=2bb84462a0bdad2f6e6dd6182c7779c30aac703115e28f32ca2cc3b57c140622
+ENV CRS_PATH=/usr/src/bb-crs
+RUN mkdir -p "${CRS_PATH}" && \
+  for host in crs.aztec-cdn.foundation crs.aztec-labs.com; do \
+    curl -fsS --max-filesize "$((BB_CRS_POINTS * 64))" \
+      -r "0-$((BB_CRS_POINTS * 64 - 1))" -o "${CRS_PATH}/bn254_g1.dat" \
+      "https://${host}/g1.dat" && break; \
+  done && \
+  echo "${BB_CRS_SHA256}  ${CRS_PATH}/bn254_g1.dat" | sha256sum -c - && \
+  chmod 0444 "${CRS_PATH}/bn254_g1.dat"
+
 # The compilation entrypoint is configured by the K8s Job command/args
 ENTRYPOINT ["/bin/sh", "-c"]
