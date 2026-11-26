@@ -1,3 +1,6 @@
+import { TreeLeafIndex } from "@aztec-labs/foundation/branded-types";
+import { Fr } from "@aztec-labs/foundation/curves/bn254";
+import { AppendOnlyTreeSnapshot } from "@aztec-labs/stdlib/trees";
 import { type Heartbeat } from "@chicmoz-pkg/message-bus";
 import { type NewBlockEvent } from "@chicmoz-pkg/message-registry";
 import { deliver } from "@chicmoz/test-harness";
@@ -41,7 +44,8 @@ describe("the canonical chain on a real database", () => {
     from: bigint;
     count: number;
     parent?: BuiltBlock;
-  }) => Promise<void>;
+    offChain?: true;
+  }) => Promise<Pick<BuiltBlock, "archive">>;
   let throughBroker: (
     event: NewBlockEvent,
   ) => Promise<{ deliveries: number; rebalances: number; beats: number }>;
@@ -93,9 +97,10 @@ describe("the canonical chain on a real database", () => {
           ),
         );
     };
-    // Canonical blocks with only the rows a link lookup reads, inserted in
-    // bulk: delivering thousands of blocks would take minutes.
-    bareChain = async ({ version, from, count, parent }) => {
+    // Linked blocks, canonical unless `offChain`, with only the rows a link
+    // lookup reads, inserted in bulk: delivering thousands of blocks would
+    // take minutes. Returns the top block, as a parent for a built block.
+    bareChain = async ({ version, from, count, parent, offChain }) => {
       const to = from + BigInt(count - 1);
       const tag = version.toString(16).padStart(8, "0");
       const hashOf = (n: SQL) =>
@@ -104,8 +109,9 @@ describe("the canonical chain on a real database", () => {
         sql`'0x' || ${tag}::text || 'ff' || lpad(to_hex(${n}), 54, '0')`;
       const n = sql`n`;
       const heights = sql`generate_series(${from}::bigint, ${to}::bigint) AS n`;
+      const orphanedAt = offChain ? sql`${Date.now()}::bigint` : sql`NULL`;
       await db.execute(
-        sql`INSERT INTO "l2Block" ("hash", "height", "version") SELECT ${hashOf(n)}, n, ${version}::bigint FROM ${heights}`,
+        sql`INSERT INTO "l2Block" ("hash", "height", "version", "orphan_timestamp", "orphan_hasOrphanedParent") SELECT ${hashOf(n)}, n, ${version}::bigint, ${orphanedAt}, ${offChain ? sql`false` : sql`NULL`} FROM ${heights}`,
       );
       await db.execute(
         sql`INSERT INTO "archive" ("root", "next_available_leaf_index", "block_hash") SELECT ${rootOf(n)}, 0, ${hashOf(n)} FROM ${heights}`,
@@ -123,6 +129,13 @@ describe("the canonical chain on a real database", () => {
           FROM "header" h JOIN "l2Block" b ON b."hash" = h."block_hash"
           WHERE b."version" = ${version}::bigint AND ${height} BETWEEN ${from}::bigint AND ${to}::bigint AND b."hash" = ${hashOf(height)}`,
       );
+      const top = `0x${tag}ff${to.toString(16).padStart(54, "0")}`;
+      return {
+        archive: new AppendOnlyTreeSnapshot(
+          Fr.fromHexString(top),
+          TreeLeafIndex(0),
+        ),
+      };
     };
     const kafka = new Kafka({
       clientId: `${api.namespace}-chain-walk`,
@@ -865,6 +878,43 @@ describe("the canonical chain on a real database", () => {
       expect(chain.slice(2).map((b) => b.height)).toEqual([
         from + BigInt(walkBound) + 2n,
       ]);
+    }, 300_000);
+
+    it("stops a walk down at the bound, clearing and requesting the height below it, where the parent's catch-up then joins", async () => {
+      const version = freshVersion();
+      const from = 400_000n;
+      const [base] = await buildChain(from - 1n, 1, { version });
+      const [parent, competitor] = await Promise.all(
+        [0, 1].map(() =>
+          buildBlock(from, [freshTxHash()], { version, parent: base }),
+        ),
+      );
+      await ordered(base);
+      await ordered(competitor);
+      const top = await bareChain({
+        version,
+        from: from + 1n,
+        count: walkBound,
+        parent,
+        offChain: true,
+      });
+      const head = await buildBlock(
+        from + BigInt(walkBound) + 1n,
+        [freshTxHash()],
+        { version, parent: top },
+      );
+
+      await ordered(head);
+      expect(
+        await Promise.all(
+          [competitor, parent].map((b) => reads.stateOf(b.hash)),
+        ),
+      ).toEqual([{ hasOrphanedParent: false }, "absent"]);
+      expect(await reads.repairOpen(Number(from))).toBe(true);
+
+      await catchup(parent);
+      expect(await reads.stateOf(parent.hash)).toBe("canonical");
+      expect(await reads.repairOpen(Number(from))).toBe(false);
     }, 300_000);
 
     it("throws, changing nothing, on more canonical blocks above a tip than the bound, and heartbeats through demoting exactly the bound", async () => {

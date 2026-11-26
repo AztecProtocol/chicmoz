@@ -337,17 +337,13 @@ const demoteHolders = async (
 /**
  * Brings back the stored, off-chain ancestors of a block that just became
  * canonical, demoting their competitors. Ends at a canonical parent; at a
- * missing one it clears that height, whose block cannot be the parent, and
- * asks for the parent.
+ * missing one, or after WALK_BOUND blocks, it clears that height, whose block
+ * cannot be the parent, and asks for the parent.
  */
 const reviveAncestors = async (change: Change, start: ChainBlock) => {
   let child = start;
   for (let steps = 0; child.height > 1n; steps++) {
     const below = child.height - 1n;
-    if (steps === WALK_BOUND) {
-      change.repairs.add(below);
-      return;
-    }
     await step(change);
     const parents = await storedParents(change, child);
     if (parents.length > 1) {
@@ -361,7 +357,7 @@ const reviveAncestors = async (change: Change, start: ChainBlock) => {
       return;
     }
     await demote(change, await canonicalAt(change, below));
-    if (!parent) {
+    if (!parent || steps === WALK_BOUND) {
       change.repairs.add(below);
       return;
     }
