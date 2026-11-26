@@ -10,7 +10,7 @@ import {
 } from "@chicmoz-pkg/microservice-base";
 import { backOff } from "exponential-backoff";
 import { KafkaJSProtocolError } from "kafkajs";
-import { MessageBus } from "./class.js";
+import { type Heartbeat, MessageBus } from "./class.js";
 import {
   KAFKA_CONNECTION,
   KAFKA_SASL_PASSWORD,
@@ -59,6 +59,15 @@ export const publishMessage = async (
   await mb.publish<ChicmozMessageBusPayload>(topic, payload);
 };
 
+export const publishKeyedMessage = async (
+  topic: ChicmozMessageBusTopic,
+  key: string,
+  payload: ChicmozMessageBusPayload,
+) => {
+  checkReady();
+  await mb.publishKeyed<ChicmozMessageBusPayload>(topic, key, payload);
+};
+
 const _startSubscribe = async (eventHandler: EventHandler) => {
   checkReady();
   await mb.subscribe(eventHandler.groupId, eventHandler.topic, eventHandler.cb);
@@ -68,7 +77,12 @@ const _startSubscribe = async (eventHandler: EventHandler) => {
 export type EventHandler = {
   groupId: string;
   topic: ChicmozMessageBusTopic;
-  cb: (message: ChicmozMessageBusPayload) => Promise<void>;
+  // The bus always passes `heartbeat`; it is optional so tests can call `cb`
+  // without one.
+  cb: (
+    message: ChicmozMessageBusPayload,
+    heartbeat?: Heartbeat,
+  ) => Promise<void>;
 };
 
 export const startSubscribe = async (

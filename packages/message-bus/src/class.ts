@@ -4,6 +4,7 @@ import autoBind from "auto-bind";
 import { BSON } from "bson";
 import kafkaJS, {
   Consumer,
+  type EachMessagePayload,
   Kafka,
   KafkaConfig,
   Message,
@@ -20,9 +21,17 @@ export interface MBOptions {
   saslConfig: SASLOptions;
   ssl?: boolean;
 }
+
+// KafkaJS sends at most one heartbeat per interval (3 s by default), so a
+// handler can call this freely. It throws when the group rebalances; let that
+// propagate so the message is redelivered.
+export type Heartbeat = EachMessagePayload["heartbeat"];
+
+type TopicCallback = (event: object, heartbeat: Heartbeat) => Promise<void>;
+
 export type MBConsumer = {
   consumer: Consumer;
-  topicCallbacks: Record<string, (event: object) => Promise<void>>;
+  topicCallbacks: Record<string, TopicCallback>;
 };
 
 export class MessageBus {
@@ -132,19 +141,27 @@ export class MessageBus {
   }
 
   async publish<T>(topic: string, ...messages: T[]) {
+    await this.produce(topic, messages);
+  }
+
+  // KafkaJS hashes the key over the topic's partition count, so messages with
+  // one key stay on one partition, in order, only while that count holds and
+  // each call is awaited before the next.
+  async publishKeyed<T>(topic: string, key: string, ...messages: T[]) {
+    await this.produce(topic, messages, key);
+  }
+
+  private async produce<T>(topic: string, messages: T[], key?: string) {
     if (this.#shutdown) {
       throw new Error("MessageBus is already shutdown");
     }
 
     await this.ensureProducerConnected();
 
-    const kafkaMessages: Message[] = [];
-    for (const m of messages) {
-      // Serialize the data and create a Buffer
-      const serialized = BSON.serialize({ data: m });
-      // Ensure we're using a Buffer as required by the Message interface
-      kafkaMessages.push({ value: Buffer.from(serialized) });
-    } // double check
+    const kafkaMessages: Message[] = messages.map((m) => ({
+      key,
+      value: Buffer.from(BSON.serialize({ data: m })),
+    }));
 
     await this.#producer!.send({ topic, messages: kafkaMessages });
   }
@@ -152,7 +169,9 @@ export class MessageBus {
   async subscribe<T>(
     groupId: string,
     topic: string,
-    cb: ((event: T) => Promise<void>) | ((event: T) => void),
+    cb:
+      | ((event: T, heartbeat: Heartbeat) => Promise<void>)
+      | ((event: T, heartbeat: Heartbeat) => void),
   ) {
     this.logger.info(`Kafka (sub): connecting to consumer group ${groupId}`);
     if (!this.#consumers[groupId]) {
@@ -166,7 +185,7 @@ export class MessageBus {
     });
     this.#consumers[groupId]!.topicCallbacks = {
       ...this.#consumers[groupId]?.topicCallbacks,
-      [topic]: cb as unknown as (event: object) => Promise<void>,
+      [topic]: cb as unknown as TopicCallback,
     };
   }
 
@@ -254,15 +273,13 @@ export class MessageBus {
         }
         const cb = this.#consumers[groupId]?.topicCallbacks[topic];
         if (cb) {
-          // Send a heartbeat before invoking the handler so the broker knows
-          // the consumer is still alive during long-running DB operations.
-          // Without this, the broker may consider the consumer dead after the
-          // session timeout, trigger a group rebalance, and reset the offset —
-          // causing the same messages to be replayed indefinitely.
+          // The broker evicts a member silent past the session timeout (KafkaJS
+          // default 30 s), and its partitions resume from their last commit. A
+          // handler that can run that long calls the heartbeat it is passed.
           await heartbeat();
           try {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            await cb(data);
+            await cb(data, heartbeat);
           } catch (e) {
             // Rethrow so kafkajs does NOT resolve this offset. Swallowing
             // here acknowledged messages whose handler (typically a database
