@@ -24,7 +24,8 @@ import {
 } from "./endpoints.js";
 import { createTopic } from "./kafka.js";
 import { L1_CHAIN_ID, startAnvil, startAztecNode } from "./network.js";
-import { freePorts } from "./ports.js";
+import { releasePorts } from "./port-registry.js";
+import { claimRunPorts } from "./ports.js";
 import { createProcessGroups, startTimeOf } from "./processes.js";
 import {
   SMOKE_NETWORK,
@@ -204,6 +205,8 @@ export const run = async (mode: Mode): Promise<number> => {
       } finally {
         removeTmpDir(tmp.node);
         removeTmpDir(tmp.wallet);
+        // After the stops, so no listed port is still bound by this run.
+        await releasePorts(runId);
       }
       mark("torn down");
       return stuck.length === 0;
@@ -249,7 +252,14 @@ export const run = async (mode: Mode): Promise<number> => {
       abort.signal.throwIfAborted();
     }
 
-    const ports = config.ports ?? (await freePorts());
+    const ports = await track(
+      claimRunPorts({
+        runId,
+        ownerPid: process.pid,
+        worktree: REPO_ROOT,
+        fixed: config.ports,
+      }),
+    );
     const anvilUrl = `http://127.0.0.1:${ports.anvil}`;
     const aztecNodeUrl = `http://127.0.0.1:${ports.aztec}`;
     const explorerApiUrl = `http://127.0.0.1:${ports.explorerApi}`;

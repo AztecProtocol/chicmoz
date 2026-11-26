@@ -1,5 +1,11 @@
 import { readFileSync } from "node:fs";
 import { type Server, createServer } from "node:net";
+import {
+  PortClaimConflict,
+  type RegistryOptions,
+  claimPorts,
+  registeredPorts,
+} from "./port-registry.js";
 
 export const PORT_NAMES = [
   "anvil",
@@ -85,13 +91,23 @@ export const portBelow = (floor: number, span = 1, random = Math.random) =>
   MIN_PORT + Math.floor(random() * (floor - span - MIN_PORT + 1));
 
 /**
- * Free ports, all held until every one is chosen. Where the kernel's
- * ephemeral range is readable they are random ports below it, which
- * outgoing connections never take; elsewhere the OS assigns them. Another
- * listener can still take one before our child binds it; the child then dies
- * and the run fails naming it.
+ * Free ports, all held until every one is chosen and `reserve` has run.
+ * Where the kernel's ephemeral range is readable they are random ports below
+ * it, which outgoing connections never take; elsewhere the OS assigns them.
+ * Ports in `skip` are never chosen. A process that ignores the host registry
+ * can still take one before our child binds it; the child then dies and the
+ * run fails naming it.
  */
-export const freePorts = async (floor = ephemeralFloor()): Promise<Ports> => {
+export const freePorts = async (
+  floor = ephemeralFloor(),
+  {
+    skip = new Set<number>(),
+    reserve = () => Promise.resolve(),
+  }: {
+    skip?: ReadonlySet<number>;
+    reserve?: (ports: Ports) => Promise<void>;
+  } = {},
+): Promise<Ports> => {
   const held: Server[] = [];
   const hold = async (port: number) => {
     const server = await listen(port);
@@ -99,18 +115,25 @@ export const freePorts = async (floor = ephemeralFloor()): Promise<Ports> => {
     return portOf(server);
   };
   const single = async (span = 1) => {
-    if (floor === undefined) {
-      return hold(0);
-    }
     for (let attempt = 0; attempt < 50; attempt++) {
       try {
-        return await hold(portBelow(floor, span));
+        // A skipped port the OS hands out stays held, so it is not handed out again.
+        const port = await hold(
+          floor === undefined ? 0 : portBelow(floor, span),
+        );
+        if (!skip.has(port)) {
+          return port;
+        }
       } catch {
         // In use, or one we already hold: draw again.
         continue;
       }
     }
-    throw new Error(`no free port between ${MIN_PORT} and ${floor}`);
+    throw new Error(
+      floor === undefined
+        ? "no free port the host registry does not list"
+        : `no free port between ${MIN_PORT} and ${floor}`,
+    );
   };
   try {
     const [anvil, aztec, aztecAdmin, aztecP2p, explorerApi] = [
@@ -121,26 +144,66 @@ export const freePorts = async (floor = ephemeralFloor()): Promise<Ports> => {
       await single(),
     ];
     for (let attempt = 0; attempt < 20; attempt++) {
+      // A ws whose ws + 1 is taken stays held, so it is not offered again.
       const ws = await single(2);
+      if (skip.has(ws + 1)) {
+        continue;
+      }
       try {
         await hold(ws + 1);
-        return check({
-          anvil,
-          aztec,
-          aztecAdmin,
-          aztecP2p,
-          explorerApi,
-          ws,
-          wsHealth: ws + 1,
-        });
       } catch {
-        // ws + 1 is taken; keep ws held so it is not offered again.
+        continue;
       }
+      const ports = check({
+        anvil,
+        aztec,
+        aztecAdmin,
+        aztecP2p,
+        explorerApi,
+        ws,
+        wsHealth: ws + 1,
+      });
+      await reserve(ports);
+      return ports;
     }
     throw new Error("no free adjacent port pair for the websocket publisher");
   } finally {
     await Promise.all(
       held.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
     );
+  }
+};
+
+/**
+ * This run's ports, claimed in the host registry for as long as `ownerPid`
+ * lives: `fixed` as given, otherwise free ones no registry line lists.
+ */
+export const claimRunPorts = async (
+  {
+    runId,
+    ownerPid,
+    worktree,
+    fixed,
+  }: { runId: string; ownerPid: number; worktree: string; fixed?: Ports },
+  options: RegistryOptions = {},
+): Promise<Ports> => {
+  const reserve = (ports: Ports) =>
+    claimPorts({ runId, ports, ownerPid, worktree }, options);
+  if (fixed) {
+    await reserve(fixed);
+    return fixed;
+  }
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await freePorts(undefined, {
+        skip: registeredPorts(options),
+        reserve,
+      });
+    } catch (e) {
+      // Another agent claimed one between our read and our claim: draw again.
+      if (!(e instanceof PortClaimConflict) || attempt === 4) {
+        throw e;
+      }
+    }
   }
 };

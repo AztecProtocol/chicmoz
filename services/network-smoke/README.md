@@ -14,14 +14,14 @@ yarn harness ls | down <id>                     # compose projects, as for integ
 
 Needs Linux (`/proc`), Docker with the compose plugin, Node 24 with npm, and foundry at the version in `toolchain/foundry-version` (`anvil` and `forge` on `PATH`, or in `FOUNDRY_BIN_DIR`). The first run installs the Aztec toolchain from `toolchain/package-lock.json` with `npm ci --ignore-scripts` (about 1.2 GB) and reuses it while the lock is unchanged. Later runs take about a minute.
 
-| Variable                      | Default                                                  | Meaning                                                                        |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `NETWORK_SMOKE_DIR`           | `<repo>/.network-smoke`                                  | run directories                                                                |
-| `NETWORK_SMOKE_TOOLCHAIN_DIR` | `$XDG_CACHE_HOME/chicmoz-network-smoke` (`~/.cache/...`) | one installed toolchain per lock hash; delete old `aztec-*` dirs at will       |
-| `NETWORK_SMOKE_PORTS`         | random free ports below the kernel's ephemeral range     | `anvil,aztec,aztecAdmin,aztecP2p,explorerApi,ws,wsHealth`; `wsHealth = ws + 1` |
-| `FOUNDRY_BIN_DIR`             | `PATH`                                                   | directory holding `anvil` and `forge`                                          |
+| Variable                      | Default                                                             | Meaning                                                                        |
+| ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `NETWORK_SMOKE_DIR`           | `<repo>/.network-smoke`                                             | run directories                                                                |
+| `NETWORK_SMOKE_TOOLCHAIN_DIR` | `$XDG_CACHE_HOME/chicmoz-network-smoke` (`~/.cache/...`)            | one installed toolchain per lock hash; delete old `aztec-*` dirs at will       |
+| `NETWORK_SMOKE_PORTS`         | free ports below the ephemeral range, unlisted in the host registry | `anvil,aztec,aztecAdmin,aztecP2p,explorerApi,ws,wsHealth`; `wsHealth = ws + 1` |
+| `FOUNDRY_BIN_DIR`             | `PATH`                                                              | directory holding `anvil` and `forge`                                          |
 
-Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose project and databases, and its own process groups, so parallel runs on one host do not collide. Teardown stops only the run's own groups and project, on success, failure, Ctrl-C or SIGTERM.
+Each run gets an id (`ns` + 10 hex) used as its Kafka namespace, its own compose project and databases, and its own process groups, so parallel runs on one host do not collide. Its ports are claimed in the host's port registry, `~/.agents/ports.md`, which other tools on the host read and write under the same lock (`src/port-registry.ts`); the claim lasts while the runner lives. Teardown stops only the run's own groups and project and releases its ports, on success, failure, Ctrl-C or SIGTERM.
 
 ## In CI
 

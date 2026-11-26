@@ -3,6 +3,7 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { downProject } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
+import { releasePorts } from "./port-registry.js";
 import { ownerAlive, readPgids, stopGroup } from "./processes.js";
 import { RUN_ID_PATTERN, type RunRecord, run } from "./run.js";
 import { removeTmpDir, tmpDirs } from "./tmp.js";
@@ -60,6 +61,7 @@ const down = async (runId: string) => {
     for (const dir of Object.values(tmpDirs(runId, runDir))) {
       removeTmpDir(dir);
     }
+    await releasePorts(runId);
   }
   if (stuck.length > 0) {
     throw new Error(`run ${runId} is not down: process groups survived`);
