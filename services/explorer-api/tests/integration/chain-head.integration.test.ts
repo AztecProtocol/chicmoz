@@ -46,6 +46,7 @@ describe("the canonical chain on a real database", () => {
     event: NewBlockEvent,
   ) => Promise<{ deliveries: number; rebalances: number; beats: number }>;
   let holdChainLock: () => Promise<() => Promise<void>>;
+  let lockWaiters: () => Promise<number>;
   let fulfilByHeight: (height: bigint) => Promise<void>;
   let walkBound: number;
 
@@ -250,6 +251,14 @@ describe("the canonical chain on a real database", () => {
         release();
         await held;
       };
+    };
+    // Lock requests waiting in this file's database, where the chain lock is
+    // the only advisory lock taken.
+    lockWaiters = async () => {
+      const { rows } = await db.execute<{ waiting: number }>(
+        sql`SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+      );
+      return rows[0]?.waiting ?? 0;
     };
     fulfilByHeight = markOpenGapsFulfilledByHeight;
   });
@@ -758,35 +767,42 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.stateOf(block.hash)).toBe("absent");
   });
 
-  it("leaves one canonical block when the block and catch-up consumers store one height at once", async () => {
-    // Ten heights at once, so that without the lock some height's two
-    // transactions overlap.
-    const races = await Promise.all(
-      Array.from({ length: 10 }, async () => {
-        const version = freshVersion();
-        const [p] = await buildChain(13_000n, 1, { version });
-        const [fromStream, fromCatchup] = await Promise.all(
-          [0, 1].map(() =>
-            buildBlock(13_001n, [freshTxHash()], { version, parent: p }),
-          ),
-        );
-        return { version, p, fromStream, fromCatchup };
-      }),
+  it("serializes the block and catch-up consumers storing one height on the chain lock", async () => {
+    const version = freshVersion();
+    const [p] = await buildChain(13_000n, 1, { version });
+    const [fromStream, fromCatchup] = await Promise.all(
+      [0, 1].map(() =>
+        buildBlock(13_001n, [freshTxHash()], { version, parent: p }),
+      ),
     );
-    for (const { p } of races) {
-      await ordered(p);
-    }
+    const above = await buildBlock(13_002n, [freshTxHash()], {
+      version,
+      parent: fromCatchup,
+    });
+    await ordered(p);
+    await ordered(above);
 
-    await Promise.all(
-      races.flatMap(({ fromStream, fromCatchup }) => [
-        ordered(fromStream),
-        catchup(fromCatchup, { final: true }),
-      ]),
-    );
-
-    for (const { version, p, fromStream } of races) {
-      expect(await reads.chainOf(version)).toEqual(heads([p, fromStream]));
+    const release = await holdChainLock();
+    const finished: string[] = [];
+    const delivered = Promise.all([
+      ordered(fromStream).then(() => finished.push("block")),
+      catchup(fromCatchup).then(() => finished.push("catch-up")),
+    ]);
+    try {
+      const deadline = Date.now() + 5_000;
+      while ((await lockWaiters()) < 2) {
+        if (Date.now() > deadline) {
+          throw new Error("the consumers never waited on the chain lock");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(finished).toEqual([]);
+    } finally {
+      await release();
     }
+    await delivered;
+
+    expect(await reads.chainOf(version)).toEqual(heads([p, fromStream]));
   });
 
   describe("bounds", () => {
