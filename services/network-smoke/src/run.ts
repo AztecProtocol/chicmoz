@@ -20,6 +20,7 @@ import { readConfig } from "./config.js";
 import {
   ENDPOINTS_ENV,
   type Endpoints,
+  type PruneEndpoints,
   type ScriptedEndpoints,
 } from "./endpoints.js";
 import { createTopic } from "./kafka.js";
@@ -32,6 +33,7 @@ import {
 import { releasePorts } from "./port-registry.js";
 import { claimRunPorts } from "./ports.js";
 import { createProcessGroups, startTimeOf } from "./processes.js";
+import { type RpcTap, startRpcTap } from "./rpc-tap.js";
 import {
   SMOKE_NETWORK,
   type ServiceName,
@@ -77,6 +79,8 @@ const MODES: Record<
     vitestConfig: string;
     extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
     blockPartitions?: number;
+    /** The listener reads the node through `rpc-tap.ts`, which records its tip reads. */
+    tapListener?: boolean;
   }
 > = {
   network: {
@@ -99,6 +103,7 @@ const MODES: Record<
     vitestConfig: "vitest.prune.config.ts",
     extraEnv: NO_REPAIR,
     blockPartitions: BLOCK_PARTITIONS,
+    tapListener: true,
   },
 };
 
@@ -134,8 +139,14 @@ export const run = async (mode: Mode): Promise<number> => {
   if (platform() !== "linux") {
     throw new Error("the network smoke run needs Linux (/proc)");
   }
-  const { node, services, vitestConfig, extraEnv, blockPartitions } =
-    MODES[mode];
+  const {
+    node,
+    services,
+    vitestConfig,
+    extraEnv,
+    blockPartitions,
+    tapListener,
+  } = MODES[mode];
   const missing = missingBuilds(services);
   if (missing.length > 0) {
     throw new Error(`run \`yarn build\` first; missing ${missing.join(", ")}`);
@@ -175,6 +186,7 @@ export const run = async (mode: Mode): Promise<number> => {
   };
   let stack: Stack | undefined;
   let stackRemoved = false;
+  let tap: RpcTap | undefined;
 
   process.on("exit", () => {
     groups.killAllSync();
@@ -239,6 +251,7 @@ export const run = async (mode: Mode): Promise<number> => {
       } finally {
         removeTmpDir(tmp.node);
         removeTmpDir(tmp.wallet);
+        await tap?.close();
         // After the stops, so no listed port is still bound by this run.
         await releasePorts(runId);
       }
@@ -391,13 +404,22 @@ export const run = async (mode: Mode): Promise<number> => {
     const [infraStack] = await Promise.all([infra, chain]);
     abort.signal.throwIfAborted();
 
+    const rpcTapFile = join(logDir, "rpc-tap.jsonl");
+    if (tapListener) {
+      // The launcher serves no admin API; the tap takes that port.
+      tap = await startRpcTap({
+        port: ports.aztecAdmin,
+        upstream: aztecNodeUrl,
+        file: rpcTapFile,
+      });
+    }
     startServices(groups, services, {
       stack: infraStack,
       ports,
       runId,
       anvilUrl: node === "scripted" ? undefined : anvilUrl,
       extraEnv,
-      aztecNodeUrl,
+      aztecNodeUrl: tap?.url ?? aztecNodeUrl,
     });
     const alive = () => services.map((name) => deathOf(name)()).find(Boolean);
     await waitUntil("explorer-api", () => httpOk(`${explorerApiUrl}/health`), {
@@ -422,10 +444,15 @@ export const run = async (mode: Mode): Promise<number> => {
       explorerApiUrl,
       consumerLogs: [...services],
     };
-    const endpoints: Endpoints | ScriptedEndpoints =
+    const endpoints: Endpoints | PruneEndpoints | ScriptedEndpoints =
       node === "scripted"
         ? { ...common, controlUrl }
-        : { ...common, anvilUrl, wsUrl: `ws://127.0.0.1:${ports.ws}` };
+        : {
+            ...common,
+            anvilUrl,
+            wsUrl: `ws://127.0.0.1:${ports.ws}`,
+            ...(tap ? { rpcTapFile } : {}),
+          };
     const vitestBin = join(
       dirname(createRequire(import.meta.url).resolve("vitest/package.json")),
       "vitest.mjs",

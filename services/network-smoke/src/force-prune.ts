@@ -154,6 +154,8 @@ export type ForcedPrune = {
   /** The node's hashes after the prune, or after the replacement when expected. */
   after: Map<number, string>;
   timings: { triggerToPruneMs: number; pruneToReplacementMs?: number };
+  /** Epoch ms: the warp's start, and when the watch saw the prune and the replacement. */
+  at: { warp: number; prune: number; replacement?: number };
 };
 
 /**
@@ -224,7 +226,7 @@ export const forceEpochPrune = async ({
 
   const epoch = await rollup.epochOfCheckpoint(l1.proven + 1);
   const targetEpoch = epoch + (await rollup.proofSubmissionEpochs()) + 1;
-  const at = Date.now();
+  const warpedAt = Date.now();
   await rollup.cheat.advanceToEpoch(EpochNumber(targetEpoch));
   log(
     `doomed ${doomed.join(",")}; warped from epoch ${epoch} to ${targetEpoch}`,
@@ -239,8 +241,8 @@ export const forceEpochPrune = async ({
     doomed.includes(e.height);
   let pruneAt: number | undefined;
   let replacedAt: number | undefined;
-  while (Date.now() < at + timeoutMs) {
-    const since = watch.events.filter((e) => e.at >= at);
+  while (Date.now() < warpedAt + timeoutMs) {
+    const since = watch.events.filter((e) => e.at >= warpedAt);
     pruneAt ??= since.find(doomedGone)?.at;
     replacedAt ??= since.find(replaced)?.at;
     if (
@@ -269,9 +271,10 @@ export const forceEpochPrune = async ({
     removed: doomed.filter((h) => after.get(h) !== before.get(h)),
     after,
     timings: {
-      triggerToPruneMs: pruneAt - at,
+      triggerToPruneMs: pruneAt - warpedAt,
       pruneToReplacementMs:
         replacedAt === undefined ? undefined : replacedAt - pruneAt,
     },
+    at: { warp: warpedAt, prune: pruneAt, replacement: replacedAt },
   };
 };
