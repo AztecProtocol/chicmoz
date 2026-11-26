@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { brokerReads } from "./broker.js";
 import { readScriptedEndpoints } from "./endpoints.js";
@@ -22,6 +22,9 @@ import {
 const endpoints = readScriptedEndpoints();
 const control = scriptControl(endpoints.controlUrl);
 const api = explorerReads(endpoints.explorerApiUrl);
+const broker = brokerReads(endpoints.broker);
+
+afterAll(() => broker.close());
 
 // Two of the listener's 1 s polls per state.
 const STEP_MS = 2_000;
@@ -54,15 +57,22 @@ const snapshot = async (
 
 type Snapshot = Awaited<ReturnType<typeof snapshot>>;
 
+/** The API once it has consumed every record and stopped changing; a scenario that never gets there fails. */
 const settled = async (read: () => Promise<Snapshot>, label: string) => {
   const { value, settled: done } = await settle(read, {
     gapMs: SETTLE_GAP_MS,
     timeoutMs: SETTLE_TIMEOUT_MS,
     progress: async () => (await control.status()).tipReads,
+    consumed: broker.apiConsumed,
   });
   process.stdout.write(
-    `${label}, ${done ? "settled" : `still changing after ${SETTLE_TIMEOUT_MS / 1000} s`}:\n${JSON.stringify(value, null, 2)}\n`,
+    `${label}, ${done ? "settled" : "not settled"}:\n${JSON.stringify(value, null, 2)}\n`,
   );
+  if (!done) {
+    throw new Error(
+      `${label}: not settled within ${SETTLE_TIMEOUT_MS / 1000} s; the API's lag: ${JSON.stringify(await broker.lag(endpoints.broker.apiGroupPrefix))}`,
+    );
+  }
   return value;
 };
 
@@ -338,18 +348,13 @@ describe("the block topic, after both prunes", () => {
   // Spaced steps reach the API in order from any partition; only a single
   // partition holds the records in the order they were sent.
   it("holds every block record in one of its partitions", async () => {
-    const broker = brokerReads(endpoints.broker);
-    try {
-      const partitions = await broker.recordsPerPartition(
-        endpoints.broker.blockTopic,
-      );
-      expect(partitions.length, "partitions").toBeGreaterThan(1);
-      expect(
-        partitions.filter((p) => p.records > 0),
-        "partitions holding records",
-      ).toHaveLength(1);
-    } finally {
-      await broker.close();
-    }
+    const partitions = await broker.recordsPerPartition(
+      endpoints.broker.blockTopic,
+    );
+    expect(partitions.length, "partitions").toBeGreaterThan(1);
+    expect(
+      partitions.filter((p) => p.records > 0),
+      "partitions holding records",
+    ).toHaveLength(1);
   });
 });

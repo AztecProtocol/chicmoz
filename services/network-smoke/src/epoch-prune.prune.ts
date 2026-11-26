@@ -4,6 +4,7 @@ import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
 import { TxHash } from "@aztec-labs/aztec.js/tx";
 import { chicmozL2BlockLightSchema } from "@chicmoz-pkg/types";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { brokerReads } from "./broker.js";
 import { readPruneEndpoints } from "./endpoints.js";
 import {
   type BlockRef,
@@ -27,6 +28,7 @@ import { type WsClient, type WsFrame, connectWs } from "./ws-client.js";
 const endpoints = readPruneEndpoints();
 const node = createAztecNodeClient(endpoints.aztecNodeUrl);
 const api = explorerReads(endpoints.explorerApiUrl);
+const broker = brokerReads(endpoints.broker);
 
 // Longer than the API's 5 s block cache.
 const SETTLE_GAP_MS = 6_000;
@@ -151,13 +153,18 @@ const outcome = async ({
 
 type Outcome = Awaited<ReturnType<typeof outcome>>;
 
+/** The API once it has consumed every record and stopped changing; a scenario that never gets there fails. */
 const settled = async (args: Parameters<typeof outcome>[0]) => {
   const { value, settled: done } = await settle(() => outcome(args), {
     gapMs: SETTLE_GAP_MS,
     timeoutMs: SETTLE_TIMEOUT_MS,
+    progress: () => readTipReads(endpoints.rpcTapFile).length,
+    consumed: broker.apiConsumed,
   });
   if (!done) {
-    log(`the API was still changing after ${SETTLE_TIMEOUT_MS / 1000} s`);
+    throw new Error(
+      `the API did not settle within ${SETTLE_TIMEOUT_MS / 1000} s: lag ${JSON.stringify(await broker.lag(endpoints.broker.apiGroupPrefix))}, last read ${JSON.stringify(value)}`,
+    );
   }
   return value;
 };
@@ -193,6 +200,7 @@ afterAll(async () => {
   await watch?.stop();
   await sender?.stop();
   ws?.close();
+  await broker.close();
 });
 
 describe("a prune of blocks with txs, which the node mines again at once in a replacing block", () => {

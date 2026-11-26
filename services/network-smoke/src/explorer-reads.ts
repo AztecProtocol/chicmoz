@@ -109,9 +109,11 @@ export const explorerReads = (apiUrl: string) => {
 
 /**
  * Reads `snapshot` until two reads `gapMs` apart are equal, with `progress`
- * (a counter of the source's polls) grown between them, or until
- * `timeoutMs`. A gap longer than the API's cache keeps two equal reads from
- * being one cache entry read twice.
+ * (a counter of the listener's tip reads) grown between them and `consumed`
+ * true just before the second, or until `timeoutMs`. Tip reads prove the
+ * listener polled, not that the API consumed what it sent: `consumed` covers
+ * that. A gap longer than the API's cache keeps two equal reads from being
+ * one cache entry read twice.
  */
 export const settle = async <T>(
   snapshot: () => Promise<T>,
@@ -119,7 +121,13 @@ export const settle = async <T>(
     gapMs,
     timeoutMs,
     progress,
-  }: { gapMs: number; timeoutMs: number; progress?: () => Promise<number> },
+    consumed,
+  }: {
+    gapMs: number;
+    timeoutMs: number;
+    progress?: () => Promise<number> | number;
+    consumed?: () => Promise<boolean>;
+  },
 ) => {
   const deadline = Date.now() + timeoutMs;
   let mark = await progress?.();
@@ -127,9 +135,11 @@ export const settle = async <T>(
   let settled = false;
   while (!settled && Date.now() < deadline) {
     await sleep(gapMs);
+    const caughtUp = (await consumed?.()) ?? true;
     const next = await snapshot();
     const nextMark = await progress?.();
     settled =
+      caughtUp &&
       JSON.stringify(next) === JSON.stringify(value) &&
       (mark === undefined || (nextMark ?? 0) > mark);
     value = next;

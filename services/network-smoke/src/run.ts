@@ -451,6 +451,11 @@ export const run = async (mode: Mode): Promise<number> => {
         username: infraStack.env.KAFKA_SASL_USERNAME,
         password: infraStack.env.KAFKA_SASL_PASSWORD,
         blockTopic,
+        // getConsumerGroupId's ids: `<service>_<network>_<handler>`.
+        apiGroupPrefix: withKafkaNamespace(
+          `explorer-api_${SMOKE_NETWORK}_`,
+          runId,
+        ),
       },
     };
     const endpoints: Endpoints | PruneEndpoints | ScriptedEndpoints =
