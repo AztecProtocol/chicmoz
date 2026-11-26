@@ -77,7 +77,7 @@ COMPARE_NODE_URL=<node JSON-RPC> COMPARE_API_URL=<API base URL> node scripts/com
 - `reorgs`: each `/l2/reorgs` record whose dead root block is still on the node's chain.
 - `watch`: `sample` every minute, `reorgs` every 10 minutes and `window` every hour, until stopped. It also reports a height whose API hash and node hash both changed as a witnessed prune.
 
-Each check prints one JSON line, with the first mismatch and the count; a one-shot check exits 1 on a mismatch. The URLs can hold an API key, so they are never printed, and errors are printed with them redacted.
+Each check prints one JSON line, with the first mismatch and the count; a one-shot check exits 1 on a mismatch. `COMPARE_API_URL` is a base URL without a query. The URLs can hold an API key, so they are never printed: a failed node call prints only its operation and HTTP status (the SDK's message names the host and can quote the server's error body), a failed API call its path and status, and every line is printed with each part of both URLs redacted.
 
 ## Reading a failure
 

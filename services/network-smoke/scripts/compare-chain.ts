@@ -14,11 +14,14 @@
  *   since its last sample is reported as a witnessed prune.
  *
  * Each check prints one JSON line; a one-shot check exits 1 when it finds a
- * mismatch. The URLs can hold credentials: they are read from the
- * environment and never printed, and errors are printed with them redacted.
+ * mismatch. COMPARE_API_URL is a base URL without a query. The URLs can hold
+ * credentials: they are read from the environment and never printed. A
+ * failed node call prints only its operation and HTTP status, and every line
+ * is printed with the URLs' parts redacted.
  */
 import { BlockNumber } from "@aztec-labs/aztec.js/fields";
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { defaultFetch } from "@aztec-labs/foundation/json-rpc/client";
 import { setLogLevel } from "@aztec-labs/foundation/log";
 import {
   chicmozL2BlockLightSchema,
@@ -48,18 +51,32 @@ if (!env.success) {
 }
 const { COMPARE_NODE_URL: nodeUrl, COMPARE_API_URL: apiUrl } = env.data;
 
-// A base path, a query or a password can carry a key, so each is redacted
-// on its own as well as the whole URL and its host.
+const decoded = (part: string) => {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+};
+
+// A base path, a query, a user or a password can carry a key, so each is
+// redacted on its own as well as the whole URL; the host and the hostname
+// too, since an error can name either.
 const secrets = [nodeUrl, apiUrl]
   .flatMap((u) => {
-    const { href, host, pathname, search, password } = new URL(u);
+    const { href, host, hostname, pathname, search, username, password } =
+      new URL(u);
     return [
       u,
       href,
       host,
+      hostname,
       pathname.length > 1 ? pathname : "",
       search,
+      username,
+      decoded(username),
       password,
+      decoded(password),
     ];
   })
   .filter((s) => s.length > 0)
@@ -74,19 +91,50 @@ const print = (line: Record<string, unknown>) =>
 
 // The SDK's client logs a failed request with the node's full URL.
 setLogLevel("silent");
-const node = createAztecNodeClient(nodeUrl);
+// One attempt per read: a check reports a failed read, and `watch` reads
+// again on its next round.
+const node = createAztecNodeClient(nodeUrl, { fetch: defaultFetch });
+
+const HTTP_STATUS = /^Error (\d{3}) from server /;
+
+/**
+ * The SDK's message names the host, its cause's hostname and the server's
+ * error body, which can echo a key; only the operation and the status leave.
+ */
+const nodeCall = async <T>(operation: string, call: () => Promise<T>) => {
+  try {
+    return await call();
+  } catch (e) {
+    const status = HTTP_STATUS.exec((e as Error).message)?.[1];
+    throw new Error(
+      `node ${operation} failed${status ? `: HTTP ${status}` : ""}`,
+    );
+  }
+};
 
 const api = async (path: string): Promise<unknown> => {
-  const res = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
-    signal: AbortSignal.timeout(15_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    // fetch's message can quote the URL.
+    throw new Error(`API ${path}: request failed`);
+  }
   if (!res.ok) {
     throw new Error(`API ${path}: HTTP ${res.status}`);
   }
-  return res.json();
+  try {
+    return (await res.json()) as unknown;
+  } catch {
+    throw new Error(`API ${path}: not JSON`);
+  }
 };
 
 type Tips = Awaited<ReturnType<typeof node.getChainTips>>;
+
+const chainTips = () => nodeCall("getChainTips", () => node.getChainTips());
 
 const tipsView = (t: Tips) => ({
   proposed: Number(t.proposed.number),
@@ -123,9 +171,8 @@ const apiHashes = async (from: number, to: number, gapMs = 0) => {
 const nodeHashes = async (from: number, to: number) => {
   const hashes = new Map<number, string>();
   for (let start = from; start <= to; start += NODE_PAGE) {
-    const blocks = await node.getBlocks(
-      BlockNumber(start),
-      Math.min(NODE_PAGE, to - start + 1),
+    const blocks = await nodeCall("getBlocks", () =>
+      node.getBlocks(BlockNumber(start), Math.min(NODE_PAGE, to - start + 1)),
     );
     for (const b of blocks) {
       hashes.set(Number(b.number), b.hash.toString().toLowerCase());
@@ -137,10 +184,10 @@ const nodeHashes = async (from: number, to: number) => {
 type Mismatch = { height: number; api: string[]; node: string | null };
 
 const compare = async (from: number, to: number, gapMs = 0) => {
-  const before = tipsView(await node.getChainTips());
+  const before = tipsView(await chainTips());
   const fromApi = await apiHashes(from, to, gapMs);
   const fromNode = await nodeHashes(from, to);
-  const after = tipsView(await node.getChainTips());
+  const after = tipsView(await chainTips());
   const mismatches: Mismatch[] = [];
   for (let height = from; height <= to; height++) {
     const a = fromApi.get(height) ?? [];
@@ -189,7 +236,7 @@ const sample = async () => {
 };
 
 const windowCheck = async () => {
-  const tips = tipsView(await node.getChainTips());
+  const tips = tipsView(await chainTips());
   return compare(Math.max(1, tips.finalized), tips.proposed, WINDOW_GAP_MS);
 };
 
