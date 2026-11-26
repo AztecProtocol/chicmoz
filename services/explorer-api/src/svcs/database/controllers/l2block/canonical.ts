@@ -46,9 +46,10 @@ const LOCK_NAMESPACE = 1_815_307_112;
 const ROWS_PER_STATEMENT = 1_000;
 
 /**
- * Runs `fn` in one transaction that first takes the network's chain lock:
- * every chain mutation, and every write that depends on one, serializes on
- * it. A lock wait over 10 s throws, so the message is redelivered.
+ * Runs `fn` in one transaction that first takes the network's chain lock,
+ * which every chain change takes; the dropped- and pending-tx handlers write
+ * without it. `lock_timeout` bounds every lock wait in the transaction, this
+ * one included: a wait over 10 s throws, so the message is redelivered.
  */
 export const withChainLock = <T>(fn: (dbTx: DbTx) => Promise<T>): Promise<T> =>
   db().transaction(async (dbTx) => {
@@ -714,7 +715,6 @@ const refreshOrphanFlags = async (change: Change, storedOff: HexString[]) => {
   await setHasOrphanedParent(change, liveParent, false);
 };
 
-/** The writes that follow the decision, in the same transaction. */
 const settle = async (
   change: Change,
   block: ChicmozL2Block,
@@ -750,10 +750,6 @@ const ownerSummary = (owners: TxOwner[]) =>
     .map((o) => `${o.txHash} in active block ${o.height} (${o.blockHash})`)
     .join(", ");
 
-/**
- * Stores the block if absent, lets `decide` move the chain, then attaches
- * the block's txs and contracts when it ends canonical.
- */
 const apply = async (
   { block, contracts }: IncomingBlock,
   heartbeat: Heartbeat,

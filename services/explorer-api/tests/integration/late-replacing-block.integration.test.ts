@@ -19,8 +19,7 @@ const word = (n: number): HexString => `0x${n.toString(16).padStart(64, "0")}`;
 // A block at a height the chain replaced can stay stored while the replacing
 // chain's next blocks are stored above it. Every canonical block of the
 // version above an ordered block's tip is demoted, so the cases use
-// ascending, disjoint heights, in file order. it.fails marks the current
-// behaviour; drop it once fixed.
+// ascending, disjoint heights, in file order.
 describe("a replaced block that stays stored on a real database", () => {
   let api: ExplorerApiForTest;
   let store: (b: BuiltBlock) => Promise<void>;
