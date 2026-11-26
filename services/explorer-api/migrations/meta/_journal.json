@@ -267,6 +267,20 @@
       "when": 1779960000010,
       "tag": "0037_reset_open_gap_request_history",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779960000011,
+      "tag": "0038_block_link_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1779960000012,
+      "tag": "0039_l2_reorg",
+      "breakpoints": true
     }
   ]
 }

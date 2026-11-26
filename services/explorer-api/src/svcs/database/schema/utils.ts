@@ -39,6 +39,7 @@ export const generateTreeTable = (
     object
   >,
   indexName?: string,
+  rootIndexName?: string,
 ) =>
   pgTable(
     name,
@@ -51,6 +52,9 @@ export const generateTreeTable = (
     (table) => ({
       ...(indexName
         ? { fkIdx: index(indexName).on(table.fk) }
+        : {}),
+      ...(rootIndexName
+        ? { rootIdx: index(rootIndexName).on(table.root) }
         : {}),
     }),
   );

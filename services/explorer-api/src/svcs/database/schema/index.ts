@@ -5,6 +5,7 @@ export * from "./dropped-tx/index.js";
 export * from "./l2/chain-info.js";
 export * from "./l2/rollup-version-observation.js";
 export * from "./l2/open-gap.js";
+export * from "./l2/reorg.js";
 export * from "./l2/tips.js";
 export * from "./l2block/index.js";
 export * from "./l2contract/index.js";

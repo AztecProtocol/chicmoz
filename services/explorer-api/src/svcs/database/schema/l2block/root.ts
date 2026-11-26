@@ -40,4 +40,5 @@ export const archive = generateTreeTable(
     .notNull()
     .references(() => l2Block.hash, { onDelete: "cascade" }),
   "archive_block_hash_idx",
+  "archive_root_idx",
 );

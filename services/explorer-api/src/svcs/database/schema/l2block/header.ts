@@ -35,6 +35,7 @@ export const lastArchive = generateTreeTable(
     .notNull()
     .references(() => header.id, { onDelete: "cascade" }),
   "last_archive_header_id_idx",
+  "last_archive_root_idx",
 );
 
 export const state = pgTable(
