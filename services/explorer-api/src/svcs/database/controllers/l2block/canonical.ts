@@ -837,7 +837,10 @@ export const applyOrderedBlock = (
  * the holders of its txs there go, its stored ancestors come back and the
  * heights left empty are asked for, as for an ordered block; or, with
  * `final` (at or below the serving node's own finalized tip), when the
- * canonical block below, if any, is its parent.
+ * canonical block below, if any, is its parent. A canonical block with a
+ * canonical child linked to it, as one a walk brought back, has the same
+ * authority: the holders of its txs below it go, and the heights left empty
+ * are asked for.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
@@ -846,6 +849,15 @@ export const applyCatchupBlock = (
 ): Promise<ChainOutcome> =>
   apply(incoming, heartbeat, { ordered: false }, async (change, stored) => {
     if (stored.canonical) {
+      const children = await canonicalChildren(
+        change,
+        [stored],
+        stored.height + 1n,
+      );
+      if (children.length > 0) {
+        await demoteHolders(change, incoming.block, stored.height - 1n);
+        await requestEmptied(change, stored.height);
+      }
       return true;
     }
     if ((await canonicalAt(change, stored.height)).length > 0) {

@@ -789,6 +789,52 @@ describe("the canonical chain on a real database", () => {
     ]).toEqual([true, true]);
   });
 
+  it("demotes a stale canonical holder of a tx below a block a walk made canonical when its catch-up arrives, requesting the heights that leaves empty and closing the block's repair", async () => {
+    const version = freshVersion();
+    const x = freshTxHash();
+    const a0 = await buildBlock(23_000n, [freshTxHash()], { version });
+    const a1 = await buildBlock(23_001n, [x], { version, parent: a0 });
+    const a2 = await buildBlock(23_002n, [freshTxHash()], {
+      version,
+      parent: a1,
+    });
+    const a3 = await buildBlock(23_003n, [freshTxHash()], {
+      version,
+      parent: a2,
+    });
+    for (const block of [a0, a1, a2, a3]) {
+      await ordered(block);
+    }
+    const b1 = await buildBlock(23_001n, [freshTxHash()], {
+      version,
+      parent: a0,
+    });
+    const b2 = await buildBlock(23_002n, [freshTxHash()], {
+      version,
+      parent: b1,
+    });
+    const b3 = await buildBlock(23_003n, [x], { version, parent: b2 });
+    const b4 = await buildBlock(23_004n, [freshTxHash()], {
+      version,
+      parent: b3,
+    });
+    await catchup(b3);
+    await ordered(b4);
+    expect(await reads.chainOf(version)).toEqual(heads([a0, a1, b3, b4]));
+    expect(await reads.repairOpen(23_003)).toBe(true);
+
+    await catchup(b3);
+
+    expect(await reads.chainOf(version)).toEqual(heads([a0, b3, b4]));
+    expect(await reads.ownerOf(x)).toBe(b3.hash);
+    expect(await reads.stateOf(a1.hash)).toEqual({ hasOrphanedParent: false });
+    expect([
+      await reads.repairOpen(23_001),
+      await reads.repairOpen(23_002),
+      await reads.repairOpen(23_003),
+    ]).toEqual([true, true, false]);
+  });
+
   it("treats a parent lookup that finds two blocks as a missing parent", async () => {
     const version = freshVersion();
     const [p] = await buildChain(11_000n, 1, { version });
