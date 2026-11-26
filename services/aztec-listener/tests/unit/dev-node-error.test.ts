@@ -23,6 +23,9 @@ vi.mock("../../src/svcs/poller/network-client/index.js", () => ({
     },
   }),
 }));
+vi.mock("../../src/svcs/poller/pollers/block_poller/index.js", () => ({
+  init: vi.fn(),
+}));
 
 describe("development start", () => {
   // Missing either field makes explorer-api's handler fail on every delivery.

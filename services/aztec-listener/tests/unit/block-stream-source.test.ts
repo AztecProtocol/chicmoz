@@ -820,7 +820,7 @@ describe("StickySource passes", () => {
     expect((await store.getL2Tips()).proposed.number).toBe(8);
   });
 
-  it("sets a node aside whose pass serves another block 0 than the store's genesis block", async () => {
+  it("sets a node aside and alerts when its pass serves another block 0 than the store's genesis block", async () => {
     const x = new FakeNode("x", prefix(main, 4));
     x.servedChain = await grow(await genesisChain(), 4);
     const { store, source, pass } = setup({ nodes: [x] });
@@ -828,6 +828,9 @@ describe("StickySource passes", () => {
     expect(await pass()).toBe(x.rpc);
 
     expect(source.lastError).toBeInstanceOf(NodeCheckError);
+    expect(logger.error).toHaveBeenCalledWith(
+      "Node x has another genesis block than the block stream's",
+    );
     expect((await store.getL2Tips()).proposed.number).toBe(0);
     expect(await source.elect()).toBeUndefined();
   });

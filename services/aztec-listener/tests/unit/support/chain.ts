@@ -80,6 +80,7 @@ export const checkpointHash = (n: number) =>
 export class FakeNode {
   readonly rpc: RpcNode;
   tiers = { checkpointed: 0, proven: 0, finalized: 0 };
+  rollupVersion = ROLLUP_VERSION;
   unreachable = false;
   probes = 0;
   headerReads = 0;
@@ -139,7 +140,15 @@ export class FakeNode {
     );
   }
 
-  getBlock(param: BlockParameter): Promise<BlockResponse | undefined> {
+  getNodeInfo() {
+    this.calls.push("getNodeInfo");
+    return Promise.resolve({ rollupVersion: this.rollupVersion });
+  }
+
+  getBlock(
+    param: BlockParameter,
+    options?: { includeTransactions?: boolean },
+  ): Promise<BlockResponse | undefined> {
     this.calls.push("getBlock");
     if (this.getBlockOverride !== undefined) {
       return this.getBlockOverride(param);
@@ -156,7 +165,7 @@ export class FakeNode {
     if (height < 0 || height >= chain.blocks.length) {
       return Promise.resolve(undefined);
     }
-    return respond(chain.blocks[height], false);
+    return respond(chain.blocks[height], options?.includeTransactions === true);
   }
 
   getBlocks(from: number, limit: number): Promise<BlockResponse[] | undefined> {

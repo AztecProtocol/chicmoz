@@ -17,11 +17,9 @@ import {
 } from "../../environment.js";
 import { onCatchupBlock } from "../emitted/index.js";
 import { logger } from "../../logger.js";
-import {
-  getBlock,
-  getLatestProposedHeight,
-  getLatestProvenHeight,
-} from "../../svcs/poller/network-client/index.js";
+import { openAttestedReader } from "../../svcs/poller/network-client/attested-reads.js";
+import { getRpcNode } from "../../svcs/poller/network-client/pool.js";
+import { streamRollupVersion } from "../../svcs/poller/pollers/block_poller/index.js";
 
 const inFlightRequests = new Set<string>();
 
@@ -93,8 +91,10 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     );
     return;
   }
-  const proposedHeight = toSafeHeight(await getLatestProposedHeight());
-  const provenHeight = toSafeHeight(await getLatestProvenHeight());
+  // One node answers the whole request, so its tips attest the blocks it serves.
+  const reader = await openAttestedReader(getRpcNode(), streamRollupVersion());
+  const proposedHeight = toSafeHeight(reader.tips.proposed.number);
+  const provenHeight = toSafeHeight(reader.tips.proven.block.number);
   const maxBlocks = Math.min(
     event.maxBlocks ?? L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
     L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
@@ -118,18 +118,19 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     }
 
     for (let height = range.from; height <= range.to && publishedBlocks < maxBlocks; height++) {
-      const block = await getBlock(height);
-      if (!block) {
+      const read = await reader.getBlock(height);
+      if (!read) {
         failedHeights++;
         logger.warn(`Requested catchup block ${height} not found for ${event.requestId}`);
         continue;
       }
       await onCatchupBlock(
-        block,
+        read.block,
         range.statusHint,
         {
           requestId: event.requestId,
           catchupReason: event.reason === "tip_boundary_mismatch" ? "reorg_repair" : event.reason,
+          ...(read.final ? { final: true as const } : {}),
         },
       );
       publishedBlocks++;

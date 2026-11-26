@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Environment from "../../src/environment.js";
+import { type StreamChain } from "../../src/svcs/poller/pollers/block_poller/index.js";
 
 describe("full-sweep catchup config", () => {
   const originalEnv = process.env;
@@ -16,7 +18,7 @@ describe("full-sweep catchup config", () => {
     delete process.env.AZTEC_ENABLE_FULL_SWEEP_CATCHUP;
 
     const { AZTEC_ENABLE_FULL_SWEEP_CATCHUP } = await import(
-      "../../src/environment.js",
+      "../../src/environment.js"
     );
 
     expect(AZTEC_ENABLE_FULL_SWEEP_CATCHUP).toBe(false);
@@ -26,113 +28,94 @@ describe("full-sweep catchup config", () => {
     process.env.AZTEC_ENABLE_FULL_SWEEP_CATCHUP = "true";
 
     const { AZTEC_ENABLE_FULL_SWEEP_CATCHUP } = await import(
-      "../../src/environment.js",
+      "../../src/environment.js"
     );
 
     expect(AZTEC_ENABLE_FULL_SWEEP_CATCHUP).toBe(true);
   });
 });
 
-describe("block poller full-sweep behavior", () => {
-  const logger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  };
-  const getBlockHeights = vi.fn();
-  const storeBlockHeights = vi.fn();
-  const storeProcessedProposedBlockHeight = vi.fn();
-  const storeProcessedProvenBlockHeight = vi.fn();
-  const getBlock = vi.fn();
-  const getLatestProposedHeight = vi.fn();
-  const getLatestProvenHeight = vi.fn();
+describe("block poller full sweep", () => {
+  const node = { name: "pool-node", url: "http://pool-node.invalid" };
   const onCatchupBlock = vi.fn();
-  const onBlock = vi.fn();
-  const handleProvenTransactions = vi.fn();
+  const openAttestedReader = vi.fn();
+  const storeProcessedProposedBlockHeight = vi.fn();
 
   const importPoller = async (fullSweepEnabled: boolean) => {
     vi.resetModules();
-    vi.doMock("../../src/environment.js", () => ({
+    vi.doMock("../../src/environment.js", async (importOriginal) => ({
+      ...(await importOriginal<typeof Environment>()),
       AZTEC_ENABLE_FULL_SWEEP_CATCHUP: fullSweepEnabled,
-      AZTEC_DISABLE_LISTEN_FOR_PROPOSED_BLOCKS: false,
-      AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS: false,
-      BLOCK_POLL_INTERVAL_MS: 60_000,
-      CATCHUP_POLL_WAIT_TIME_MS: 0,
     }));
-    vi.doMock("../../src/logger.js", () => ({ logger }));
-    vi.doMock("../../src/svcs/database/heights.controller.js", () => ({
-      getBlockHeights,
-      storeBlockHeights,
-      storeProcessedProposedBlockHeight,
-      storeProcessedProvenBlockHeight,
-    }));
-    vi.doMock("../../src/svcs/poller/network-client/index.js", () => ({
-      getBlock,
-      getLatestProposedHeight,
-      getLatestProvenHeight,
+    vi.doMock("../../src/logger.js", () => ({
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     }));
     vi.doMock("../../src/events/emitted/index.js", () => ({
-      onBlock,
       onCatchupBlock,
+      onOrderedBlock: vi.fn(),
     }));
-    vi.doMock(
-      "../../src/svcs/poller/pollers/block_poller/handle-proven-block-txs.js",
-      () => ({ handleProvenTransactions }),
-    );
-
+    vi.doMock("../../src/svcs/database/heights.controller.js", () => ({
+      storeProcessedProposedBlockHeight,
+    }));
+    vi.doMock("../../src/svcs/poller/network-client/attested-reads.js", () => ({
+      openAttestedReader,
+    }));
+    vi.doMock("../../src/svcs/poller/network-client/pool.js", () => ({
+      getOnlineRpcNodes: () => [node],
+      getRpcNode: () => node,
+    }));
     return import("../../src/svcs/poller/pollers/block_poller/index.js");
   };
 
+  // No node is eligible, so the pass reads nothing; the store's tip runs from `tips`.
+  const idleChain = (...tips: number[]) =>
+    ({
+      rollupVersion: 7,
+      store: {
+        getL2Tips: () =>
+          Promise.resolve({ proposed: { number: tips.shift() ?? 3 } }),
+      },
+      source: { elect: () => Promise.resolve(undefined) },
+      publisher: {},
+    }) as unknown as StreamChain;
+
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
-    getLatestProposedHeight.mockResolvedValue(5);
-    getLatestProvenHeight.mockResolvedValue(5);
-    getBlockHeights.mockResolvedValue({
-      processedProposedBlockHeight: 5,
-      processedProvenBlockHeight: 5,
-      chainProposedBlockHeight: 5,
-      chainProvenBlockHeight: 5,
+    // The node reader attests block 1 only.
+    openAttestedReader.mockResolvedValue({
+      getBlock: (height: number) =>
+        Promise.resolve({ block: { height }, final: height === 1 }),
     });
-    storeBlockHeights.mockResolvedValue(undefined);
-    getBlock.mockResolvedValue({ number: 1 });
-    onCatchupBlock.mockResolvedValue(undefined);
-    onBlock.mockResolvedValue(undefined);
-    handleProvenTransactions.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.resetModules();
   });
 
-  it("does not call full-sweep catchup when disabled", async () => {
-    const poller = await importPoller(false);
+  it("sweeps nothing when disabled", async () => {
+    const { runPass } = await importPoller(false);
 
-    poller.startPolling();
-    await vi.waitFor(() => expect(storeBlockHeights).toHaveBeenCalled());
+    await runPass(idleChain());
 
-    expect(getBlock).not.toHaveBeenCalled();
+    expect(openAttestedReader).not.toHaveBeenCalled();
     expect(onCatchupBlock).not.toHaveBeenCalled();
-    expect(logger.info).toHaveBeenCalledWith(
-      "Full-sweep catchup is disabled; request-driven reconciliation is the primary missing-block repair path.",
-    );
-
-    poller.stopPolling();
   });
 
-  it("keeps manual full-sweep catchup working when enabled", async () => {
-    const poller = await importPoller(true);
+  it("sweeps one block per pass that leaves the tip, below the store's tip, marking final what the node's reader attests", async () => {
+    const { runPass } = await importPoller(true);
 
-    poller.startPolling();
-    await vi.waitFor(() => expect(onCatchupBlock).toHaveBeenCalled());
+    for (let pass = 0; pass < 3; pass++) {
+      await runPass(idleChain());
+    }
+    await runPass(idleChain(3, 4));
 
-    expect(getBlock).toHaveBeenCalledWith(1);
-    expect(logger.info).toHaveBeenCalledWith(
-      "Full-sweep catchup is enabled; listener will sweep historical blocks when live head is idle.",
-    );
-
-    poller.stopPolling();
+    expect(openAttestedReader).toHaveBeenCalledTimes(3);
+    expect(openAttestedReader).toHaveBeenCalledWith(node, 7);
+    expect(onCatchupBlock.mock.calls).toEqual([
+      [{ height: 1 }, "proposed", { final: true }],
+      [{ height: 2 }, "proposed", {}],
+      [{ height: 1 }, "proposed", { final: true }],
+    ]);
+    expect(storeProcessedProposedBlockHeight).toHaveBeenCalledWith(4);
   });
 });

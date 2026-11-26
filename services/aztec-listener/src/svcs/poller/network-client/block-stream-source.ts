@@ -23,6 +23,7 @@ import {
   AZTEC_STREAM_STALL_ALERT_MS,
 } from "../../../environment.js";
 import { logger } from "../../../logger.js";
+import { withDeadline } from "./deadline.js";
 import {
   type OpenElectionReader,
   boundedElectionReaders,
@@ -117,24 +118,6 @@ const tipsFault = (
     };
   }
   return undefined;
-};
-
-const withDeadline = async <T>(
-  work: Promise<T>,
-  ms: number,
-  error: () => Error,
-): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(error()), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 };
 
 /**
@@ -406,7 +389,7 @@ export class StickySource implements L2BlockStreamSource {
   async pinnedRead<K extends keyof AztecNode>(
     fnName: K,
     args: Parameters<AztecNode[K]>,
-  ) {
+  ): Promise<Awaited<ReturnType<AztecNode[K]>>> {
     const pin = this.pin;
     if (pin === undefined) {
       throw new AbortError();
@@ -486,7 +469,11 @@ export class StickySource implements L2BlockStreamSource {
     }
     await this.check(pin.node, blockDataFault(query, response.header));
     if ("number" in query && query.number === BlockNumber.ZERO) {
-      await this.check(pin.node, this.genesisFault(response.header));
+      const fault = await this.genesisFault(response.header);
+      if (fault !== undefined) {
+        logger.error(`Node ${pin.node.name} ${fault}`);
+        this.fail(pin.node, fault);
+      }
     }
     return {
       header: response.header,
@@ -524,7 +511,7 @@ export class StickySource implements L2BlockStreamSource {
     pin: Pin,
     fnName: K,
     args: Parameters<AztecNode[K]>,
-  ) {
+  ): Promise<Awaited<ReturnType<AztecNode[K]>>> {
     const result = await withDeadline(
       callNodeFunction(fnName, args, pin.node),
       PINNED_READ_TIMEOUT_MS,

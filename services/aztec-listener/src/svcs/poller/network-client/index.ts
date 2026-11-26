@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { deriveStorageSlotInMap } from "@aztec-labs/stdlib/hash";
 import {
   ChicmozChainInfo,
   ChicmozL2RpcNode,
@@ -30,10 +29,7 @@ import {
   getRpcNodeFromNodeInfo,
 } from "./utils.js";
 import { AztecNode, NodeInfo } from "@aztec-labs/aztec.js/node";
-import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
-import { Fr } from "@aztec-labs/aztec.js/fields";
 import { L2Block } from "@aztec-labs/aztec.js/block";
-import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol";
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { getAllPendingTxs } from "./pending-txs.js";
 
@@ -104,18 +100,6 @@ export const callNodeFunction = async <K extends keyof AztecNode>(
 
 const sleep = async (ms: number) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
-};
-
-const toSafeAztecBlockNumber = (value: bigint): number => {
-  const blockNumber = Number(value);
-
-  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
-    throw new Error(
-      `Block number ${value.toString()} cannot be represented safely as a number`,
-    );
-  }
-
-  return blockNumber;
 };
 
 export const init = async () => {
@@ -233,16 +217,8 @@ export const getBlocks = async (fromHeight: number, toHeight: number) => {
   return blocks;
 };
 
-export const getLatestProposedHeight = async () => {
-  return callNodeFunction("getBlockNumber");
-};
-
 export const getLatestProvenHeight = async () => {
   return await callNodeFunction("getBlockNumber", ["proven"]);
-};
-
-export const getL2Tips = async () => {
-  return await callNodeFunction("getChainTips");
 };
 
 export const getPendingTxs = async () => {
@@ -250,20 +226,4 @@ export const getPendingTxs = async () => {
   return getAllPendingTxs((limit, after) =>
     callNodeFunction("getPendingTxs", [limit, after], node),
   );
-};
-
-export const getBalanceOf = async (
-  blockNumber: bigint | "latest",
-  address: AztecAddress,
-) => {
-  const slot = await deriveStorageSlotInMap(new Fr(1), address);
-  const blockParam =
-    blockNumber === "latest"
-      ? "latest"
-      : BlockNumber(toSafeAztecBlockNumber(blockNumber));
-  return callNodeFunction("getPublicStorageAt", [
-    blockParam,
-    ProtocolContractAddress.FeeJuice,
-    slot,
-  ]);
 };

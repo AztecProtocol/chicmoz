@@ -14,9 +14,8 @@ import type * as NetworkClient from "../../src/svcs/poller/network-client/index.
 import type * as Pool from "../../src/svcs/poller/network-client/pool.js";
 import { mockLogger, mockTxsController } from "../mocks/index.js";
 
-const { publish, getL2Tips, pool } = vi.hoisted(() => ({
+const { publish, pool } = vi.hoisted(() => ({
   publish: vi.fn<(topic: string, payload: unknown) => Promise<void>>(),
-  getL2Tips: vi.fn<() => Promise<unknown>>(),
   pool: { nodes: [] as Pool.RpcNode[] },
 }));
 
@@ -29,9 +28,6 @@ vi.mock("../../src/svcs/database/index.js", () => ({
   txsController: mockTxsController,
 }));
 vi.mock("../../src/logger.js", () => ({ logger: mockLogger }));
-vi.mock("../../src/svcs/poller/network-client/index.js", () => ({
-  getL2Tips,
-}));
 vi.mock(
   "../../src/svcs/poller/network-client/pool.js",
   async (importOriginal) => ({
@@ -145,22 +141,17 @@ describe("aztec-listener producer frames", () => {
 
     for (const source of FIXTURE_SOURCES) {
       for (const name of listFixtures(source, "l2-tips")) {
-        // The poller skips tips equal to the last ones it published.
+        // The publisher skips tips equal to the last ones it published.
         vi.resetModules();
-        const poller = await import(
+        const { publishTipsIfDue } = await import(
           "../../src/svcs/poller/pollers/l2-tips-poller.js"
         );
-        getL2Tips.mockResolvedValueOnce(
-          L2TipsSchema.parse(loadFixture(source, "l2-tips", name).data.result),
+        const tips = L2TipsSchema.parse(
+          loadFixture(source, "l2-tips", name).data.result,
         );
-        mockLogger.error.mockClear();
-        await record({ [`${source}/l2-tips`]: "L2_TIPS_EVENT" }, async () => {
-          poller.startPolling();
-          await flush();
-          poller.stopPolling();
-          // The poller logs a failed poll instead of throwing.
-          expect(mockLogger.error).not.toHaveBeenCalled();
-        });
+        await record({ [`${source}/l2-tips`]: "L2_TIPS_EVENT" }, () =>
+          publishTipsIfDue(tips),
+        );
       }
     }
 

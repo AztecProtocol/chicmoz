@@ -32,46 +32,6 @@ const toSafeBlockNumber = (value: bigint): number => {
   return blockNumber;
 };
 
-export const onBlock = async (
-  block: L2Block,
-  statusHint: L2BlockStatusHint,
-) => {
-  const height = BigInt(block.header.globalVariables.blockNumber.toString());
-  const heightNumber = toSafeBlockNumber(height);
-  const statusHintStr =
-    statusHint === "proposed"
-      ? "🦊 publishing proposed block"
-      : "🐴 publishing proven block";
-  logger.info(
-    `${statusHintStr} ${height} (hash: ${(await block.hash()).toString()})...`,
-  );
-  const blockBuffer = block.toBuffer() as Uint8Array;
-  const blockStr = Buffer.from(blockBuffer).toString("hex");
-  await publishMessage("NEW_BLOCK_EVENT", {
-    block: blockStr,
-    statusHint,
-    blockNumber: heightNumber,
-  });
-  const potentiallyIncludedTxs = await txsController.getTxs([
-    "pending",
-    "suspected_dropped",
-  ]);
-  const blockTxHashes = block.body.txEffects.map((effect) =>
-    effect.txHash.toString(),
-  );
-
-  for (const potentialTx of potentiallyIncludedTxs) {
-    const txFoundInBlock = blockTxHashes.includes(potentialTx.txHash);
-    if (txFoundInBlock) {
-      const newState = statusHint;
-      await txsController.storeOrUpdate(potentialTx, newState);
-      logger.info(
-        `✅ Transaction ${potentialTx.txHash} found in block ${height}, updated to ${newState}`,
-      );
-    }
-  }
-};
-
 /**
  * Sends a block of the ordered stream, keyed by the network so the topic
  * keeps the send order. `tip` is the proposed tip of the pass that sends it.
@@ -113,7 +73,10 @@ export const onOrderedBlock = async (block: L2Block, tip: number) => {
 export const onCatchupBlock = async (
   block: L2Block,
   statusHint: L2BlockStatusHint,
-  metadata: Pick<CatchupBlockEvent, "requestId" | "catchupReason"> = {},
+  metadata: Pick<
+    CatchupBlockEvent,
+    "requestId" | "catchupReason" | "final"
+  > = {},
 ) => {
   const blockNumber = BigInt(
     block.header.globalVariables.blockNumber.toString(),

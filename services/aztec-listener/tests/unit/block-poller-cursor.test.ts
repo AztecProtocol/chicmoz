@@ -1,100 +1,196 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { type L2Block } from "@aztec-labs/stdlib/block";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  type ProvenSideWorkDeps,
+  runProvenSideWork,
+} from "../../src/svcs/poller/pollers/block_poller/proven-side-work.js";
 
-const node = vi.hoisted(() => ({
-  tip: 5,
-  processedProposed: 5,
-  failOnce: new Set<number>(),
-  delivered: [] as number[],
-  pollsFinished: 0,
+type StoredTx = { txHash: string; feePayer: string; txState: string };
+
+const db = vi.hoisted(() => ({
+  txs: new Map<string, StoredTx>(),
+  published: [] as Record<string, unknown>[],
+}));
+const logger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
 }));
 
-vi.mock("../../src/environment.js", () => ({
-  AZTEC_ENABLE_FULL_SWEEP_CATCHUP: false,
-  AZTEC_DISABLE_LISTEN_FOR_PROPOSED_BLOCKS: false,
-  AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS: false,
-  BLOCK_POLL_INTERVAL_MS: 60_000,
-  CATCHUP_POLL_WAIT_TIME_MS: 0,
-}));
-vi.mock("../../src/logger.js", () => ({
-  logger: {
-    debug: () => undefined,
-    info: (message: string) => {
-      if (message.startsWith("🐱 waiting")) {
-        node.pollsFinished++;
+vi.mock("../../src/logger.js", () => ({ logger }));
+vi.mock("../../src/svcs/database/index.js", () => ({
+  txsController: {
+    getTxsByHashes: (hashes: string[]) =>
+      Promise.resolve(
+        hashes.flatMap((hash) => {
+          const tx = db.txs.get(hash);
+          return tx === undefined ? [] : [{ ...tx }];
+        }),
+      ),
+    storeOrUpdateState: (hash: string, txState: string) => {
+      const tx = db.txs.get(hash);
+      if (tx !== undefined) {
+        tx.txState = txState;
       }
+      return Promise.resolve();
     },
-    warn: () => undefined,
-    error: () => undefined,
   },
 }));
-vi.mock("../../src/svcs/database/heights.controller.js", () => ({
-  getBlockHeights: () =>
-    Promise.resolve({
-      processedProposedBlockHeight: node.processedProposed,
-      processedProvenBlockHeight: 5,
-      chainProposedBlockHeight: 0,
-      chainProvenBlockHeight: 0,
-    }),
-  storeBlockHeights: (heights: { processedProposedBlockHeight: number }) => {
-    node.processedProposed = heights.processedProposedBlockHeight;
+vi.mock("../../src/svcs/message-bus/index.js", () => ({
+  publishMessage: (_: string, payload: Record<string, unknown>) => {
+    db.published.push(payload);
     return Promise.resolve();
   },
-  storeProcessedProposedBlockHeight: (height: number) => {
-    node.processedProposed = height;
-    return Promise.resolve();
-  },
-  storeProcessedProvenBlockHeight: () => Promise.resolve(),
 }));
-vi.mock("../../src/svcs/poller/network-client/index.js", () => ({
-  getBlock: (height: number) => Promise.resolve({ height }),
-  getLatestProposedHeight: () => Promise.resolve(node.tip),
-  getLatestProvenHeight: () => Promise.resolve(5),
-}));
-vi.mock("../../src/events/emitted/index.js", () => ({
-  onBlock: ({ height }: { height: number }) => {
-    if (node.failOnce.delete(height)) {
-      return Promise.reject(new Error("publish rejected"));
-    }
-    node.delivered.push(height);
-    return Promise.resolve();
-  },
-  onCatchupBlock: () => Promise.resolve(),
-}));
-vi.mock(
-  "../../src/svcs/poller/pollers/block_poller/handle-proven-block-txs.js",
-  () => ({ handleProvenTransactions: () => Promise.resolve() }),
-);
 
-afterEach(() => {
-  vi.useRealTimers();
+const PAYER = `0x${"11".repeat(32)}`;
+
+// The side work reads a block's number, tx hashes, hash and fee recipient.
+const blockAt = (n: number, txHashes: string[] = []) =>
+  ({
+    number: n,
+    body: {
+      txEffects: txHashes.map((hash) => ({ txHash: { toString: () => hash } })),
+    },
+    header: {
+      globalVariables: {
+        blockNumber: n,
+        feeRecipient: { toString: () => "0xfee" },
+      },
+    },
+    hash: () => Promise.resolve(`block-${n}`),
+  }) as unknown as L2Block;
+
+/** A pinned node serving `blocks`, whose balance reads fail at the heights in `failing` once each. */
+const sourceOf = (blocks: L2Block[], failing = new Set<number>()) => {
+  const ranges: { from: number; limit: number }[] = [];
+  const source = {
+    getBlocks: ({ from, limit }: { from: number; limit: number }) => {
+      ranges.push({ from, limit });
+      return Promise.resolve(blocks.slice(from - 1, from - 1 + limit));
+    },
+    // The fee juice balance at a block is its height.
+    pinnedRead: (_: string, [block]: unknown[]) => {
+      const height = Number(String(block).slice("block-".length));
+      return failing.delete(height)
+        ? Promise.reject(new Error("storage read failed"))
+        : Promise.resolve({ toBigInt: () => BigInt(height) });
+    },
+  } as unknown as ProvenSideWorkDeps["source"];
+  return { source, ranges };
+};
+
+const cursorAt = (start: number) => {
+  const cursor = { value: start };
+  return {
+    cursor,
+    readCursor: () => Promise.resolve(cursor.value),
+    storeCursor: (height: number) => {
+      cursor.value = height;
+      return Promise.resolve();
+    },
+  };
+};
+
+const balances = () =>
+  db.published.map(
+    ({ contractAddress, balance, sourceTxHash, blockNumber }) => ({
+      contractAddress,
+      balance,
+      sourceTxHash,
+      blockNumber,
+    }),
+  );
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  db.txs.clear();
+  db.published.length = 0;
 });
 
-// A cursor stored past a block whose publish failed leaves that block to
-// reconciliation; only the real poll loop shows the store follows the publish.
-describe("block poller cursor", () => {
-  it("re-polls a proposed block whose publish failed before marking it processed", async () => {
-    vi.useFakeTimers();
-    const poller = await import(
-      "../../src/svcs/poller/pollers/block_poller/index.js"
+describe("proven side work", () => {
+  it("runs a 201-block proven advance over two passes, moving the cursor past each block", async () => {
+    const { source, ranges } = sourceOf(
+      Array.from({ length: 201 }, (_, i) => blockAt(i + 1)),
     );
-    const pollFinished = (count: number) =>
-      vi.waitFor(() => expect(node.pollsFinished).toBe(count));
+    const { cursor, ...cursors } = cursorAt(0);
+    const run = () => runProvenSideWork({ source, provenTip: 201, ...cursors });
 
-    poller.startPolling(); // the first poll is a catch-up run; nothing to do
-    try {
-      await pollFinished(1);
-      node.tip = 7;
-      node.failOnce.add(6);
-      await vi.advanceTimersByTimeAsync(60_000);
-      await pollFinished(2);
-      expect(node.processedProposed).toBe(5);
-      await vi.advanceTimersByTimeAsync(60_000);
-      await pollFinished(3);
-    } finally {
-      poller.stopPolling();
-    }
+    await run();
+    expect(cursor.value).toBe(200);
+    await run();
+    expect(cursor.value).toBe(201);
 
-    expect(node.delivered).toEqual([6, 7]);
-    expect(node.processedProposed).toBe(7);
+    expect(ranges.every(({ limit }) => limit <= 10)).toBe(true);
+    expect(ranges.at(-1)).toEqual({ from: 201, limit: 1 });
+  });
+
+  it("stops at a block that fails and runs it again on the next pass", async () => {
+    db.txs.set("tx-2", {
+      txHash: "tx-2",
+      feePayer: PAYER,
+      txState: "proposed",
+    });
+    const { source } = sourceOf(
+      [blockAt(1), blockAt(2, ["tx-2"]), blockAt(3)],
+      new Set([2]),
+    );
+    const { cursor, ...cursors } = cursorAt(0);
+    const run = () => runProvenSideWork({ source, provenTip: 3, ...cursors });
+
+    await run();
+    expect(cursor.value).toBe(1);
+    expect(db.published).toEqual([]);
+    expect(db.txs.get("tx-2")?.txState).toBe("proposed");
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+
+    await run();
+    expect(cursor.value).toBe(3);
+    expect(balances()).toEqual([
+      {
+        contractAddress: PAYER,
+        balance: "2",
+        sourceTxHash: "tx-2",
+        blockNumber: "2",
+      },
+    ]);
+    expect(db.txs.get("tx-2")?.txState).toBe("proven");
+  });
+
+  it("moves its cursor down to a lower proven tip, where a new rollup version's heights start over", async () => {
+    const { source } = sourceOf([blockAt(1), blockAt(2), blockAt(3)]);
+    const { cursor, ...cursors } = cursorAt(50);
+
+    await runProvenSideWork({ source, provenTip: 2, ...cursors });
+    expect(cursor.value).toBe(2);
+    await runProvenSideWork({ source, provenTip: 3, ...cursors });
+    expect(cursor.value).toBe(3);
+  });
+
+  it("sends the same updates when its cursor moves back over a block whose txs it marked proven", async () => {
+    db.txs.set("tx-1", { txHash: "tx-1", feePayer: PAYER, txState: "pending" });
+    const { source } = sourceOf([blockAt(1, ["tx-1"]), blockAt(2)]);
+    const { cursor, ...cursors } = cursorAt(0);
+    const run = () => runProvenSideWork({ source, provenTip: 2, ...cursors });
+
+    await run();
+    const first = balances();
+    expect(db.txs.get("tx-1")?.txState).toBe("proven");
+    // As a stored prune or a proof that moved back leaves it.
+    cursor.value = 0;
+    db.published.length = 0;
+    await run();
+
+    expect(balances()).toEqual(first);
+    expect(first).toEqual([
+      {
+        contractAddress: PAYER,
+        balance: "1",
+        sourceTxHash: "tx-1",
+        blockNumber: "1",
+      },
+    ]);
+    expect(cursor.value).toBe(2);
   });
 });

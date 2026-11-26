@@ -3,6 +3,7 @@ import {
   rpcNodePoolSchema,
   type L2NetworkId,
 } from "@chicmoz-pkg/types";
+import { MAX_RPC_BLOCKS_LEN } from "@aztec-labs/stdlib/interfaces/api-limit";
 import { z } from "zod";
 
 /**
@@ -21,10 +22,6 @@ export const BLOCK_POLL_INTERVAL_MS = z.coerce
   .number()
   .default(3000)
   .parse(process.env.BLOCK_POLL_INTERVAL_MS);
-export const CATCHUP_POLL_WAIT_TIME_MS = z.coerce
-  .number()
-  .default(100)
-  .parse(process.env.CATCHUP_POLL_WAIT_TIME_MS);
 export const TX_POLL_INTERVAL_MS = z.coerce
   .number()
   .default(4000) // NOTE: https://github.com/aztec-scan/chicmoz/issues/430#issuecomment-2841287541
@@ -33,10 +30,6 @@ export const CHAIN_INFO_POLL_INTERVAL_MS = z.coerce
   .number()
   .default(30000)
   .parse(process.env.CHAIN_INFO_POLL_INTERVAL_MS);
-export const L2_TIPS_POLL_INTERVAL_MS = z.coerce
-  .number()
-  .default(5000)
-  .parse(process.env.L2_TIPS_POLL_INTERVAL_MS);
 export const L2_TIPS_HEARTBEAT_INTERVAL_MS = z.coerce
   .number()
   .default(60000)
@@ -93,6 +86,20 @@ export const AZTEC_NODE_PROBE_TIMEOUT_MS = z.coerce
   .positive()
   .default(2_000)
   .parse(process.env.AZTEC_NODE_PROBE_TIMEOUT_MS);
+export const AZTEC_BLOCK_STREAM_BATCH_SIZE = z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(MAX_RPC_BLOCKS_LEN)
+  .default(10)
+  .parse(process.env.AZTEC_BLOCK_STREAM_BATCH_SIZE);
+/** The most proven blocks one pass runs the fee-juice balance work on. */
+export const AZTEC_PROVEN_SIDE_WORK_MAX = z.coerce
+  .number()
+  .int()
+  .positive()
+  .default(200)
+  .parse(process.env.AZTEC_PROVEN_SIDE_WORK_MAX);
 export const L2_BLOCK_RANGE_REQUEST_MAX_RANGES = z.coerce
   .number()
   .int()
@@ -187,8 +194,6 @@ CHAIN_INFO_POLL_INTERVAL_MS:                               ${CHAIN_INFO_POLL_INT
   }s
 AZTEC_LISTEN_FOR_L2_TIPS:                                  ${AZTEC_LISTEN_FOR_L2_TIPS ? "✅" : "❌"
   }
-L2_TIPS_POLL_INTERVAL_MS:                                  ${L2_TIPS_POLL_INTERVAL_MS / 1000
-  }s
 L2_TIPS_HEARTBEAT_INTERVAL_MS:                             ${L2_TIPS_HEARTBEAT_INTERVAL_MS / 1000
   }s
 AZTEC_ENABLE_FULL_SWEEP_CATCHUP:                           ${AZTEC_ENABLE_FULL_SWEEP_CATCHUP ? "✅" : "❌"
@@ -196,6 +201,8 @@ AZTEC_ENABLE_FULL_SWEEP_CATCHUP:                           ${AZTEC_ENABLE_FULL_S
 AZTEC_MAX_PRUNE_DEPTH:                                     ${AZTEC_MAX_PRUNE_DEPTH}
 AZTEC_STREAM_STALL_ALERT_MS:                               ${AZTEC_STREAM_STALL_ALERT_MS / 1000}s
 AZTEC_NODE_PROBE_TIMEOUT_MS:                               ${AZTEC_NODE_PROBE_TIMEOUT_MS / 1000}s
+AZTEC_BLOCK_STREAM_BATCH_SIZE:                             ${AZTEC_BLOCK_STREAM_BATCH_SIZE}
+AZTEC_PROVEN_SIDE_WORK_MAX:                                ${AZTEC_PROVEN_SIDE_WORK_MAX}
 MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS:                        ${MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS}
 L2_BLOCK_RANGE_REQUEST_MAX_RANGES:                         ${L2_BLOCK_RANGE_REQUEST_MAX_RANGES}
 L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS:                         ${L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS}

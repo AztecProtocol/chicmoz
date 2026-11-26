@@ -1,32 +1,31 @@
 import { L2Block } from "@aztec-labs/aztec.js/block";
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol";
+import { type BlockHash } from "@aztec-labs/stdlib/block";
+import { deriveStorageSlotInMap } from "@aztec-labs/stdlib/hash";
 import { logger } from "../../../../logger.js";
 import { txsController } from "../../../database/index.js";
 import { publishMessage } from "../../../message-bus/index.js";
-import { getBalanceOf } from "../../network-client/index.js";
+
+/** Reads a public storage slot as of `block`. */
+export type ReadPublicStorage = (
+  block: BlockHash,
+  contract: AztecAddress,
+  slot: Fr,
+) => Promise<Fr>;
+
+export type ProvenBlockOutcome = { ok: true } | { ok: false; error: Error };
 
 type StoredTx = Awaited<ReturnType<typeof txsController.getTxs>>[number];
-type BalanceFetchSuccess = {
-  status: "fulfilled";
-  addr: string;
-  sourceTxHash: string;
-  balance: Awaited<ReturnType<typeof getBalanceOf>>;
-};
-type BalanceFetchFailure = {
-  status: "rejected";
-  addr: string;
-  sourceTxHash: string;
-  reason: unknown;
-};
 
 const BALANCE_FETCH_CONCURRENCY = 8;
 
-// Collect all unique addresses across all proven txs in the block.
-// Maps address → first txHash that introduced it (used as sourceTxHash).
-const collectUniqueAddresses = (provenTxs: StoredTx[]): Map<string, string> => {
+// Maps each address to the first tx that names it (the event's sourceTxHash).
+const collectUniqueAddresses = (txs: StoredTx[]): Map<string, string> => {
   const addressToTxHash = new Map<string, string>();
 
-  for (const tx of provenTxs) {
+  for (const tx of txs) {
     const candidates: (string | null | undefined)[] = [
       tx.feePayer,
       tx.initiator,
@@ -43,135 +42,106 @@ const collectUniqueAddresses = (provenTxs: StoredTx[]): Map<string, string> => {
   return addressToTxHash;
 };
 
-const fetchBalances = async (
-  blockNumber: bigint,
-  addressToTxHash: Map<string, string>,
-) => {
-  const entries = [...addressToTxHash.entries()];
-  const results: Array<BalanceFetchSuccess | BalanceFetchFailure> = [];
-  let nextIndex = 0;
+// The fee juice contract keeps balances in a map at storage slot 1.
+const readFeeJuiceBalance = async (
+  readStorage: ReadPublicStorage,
+  block: BlockHash,
+  address: AztecAddress,
+) =>
+  readStorage(
+    block,
+    ProtocolContractAddress.FeeJuice,
+    await deriveStorageSlotInMap(new Fr(1), address),
+  );
 
+const fetchBalances = async (
+  readStorage: ReadPublicStorage,
+  block: BlockHash,
+  addresses: string[],
+) => {
+  const balances = new Map<string, Fr>();
+  let nextIndex = 0;
+  // One failed read fails the block, so the other workers stop reading.
+  let failed = false;
   await Promise.all(
     Array.from(
-      { length: Math.min(BALANCE_FETCH_CONCURRENCY, entries.length) },
+      { length: Math.min(BALANCE_FETCH_CONCURRENCY, addresses.length) },
       async () => {
-        while (nextIndex < entries.length) {
-          const currentIndex = nextIndex++;
-          const [addr, sourceTxHash] = entries[currentIndex];
-
+        while (!failed && nextIndex < addresses.length) {
+          const addr = addresses[nextIndex++];
           try {
-            const balance = await getBalanceOf(
-              blockNumber,
-              AztecAddress.fromStringUnsafe(addr),
+            balances.set(
+              addr,
+              await readFeeJuiceBalance(
+                readStorage,
+                block,
+                AztecAddress.fromStringUnsafe(addr),
+              ),
             );
-            results[currentIndex] = {
-              status: "fulfilled",
-              addr,
-              sourceTxHash,
-              balance,
-            };
-          } catch (reason) {
-            results[currentIndex] = {
-              status: "rejected",
-              addr,
-              sourceTxHash,
-              reason,
-            };
+          } catch (e) {
+            failed = true;
+            throw e;
           }
         }
       },
     ),
   );
-
-  return results;
+  return balances;
 };
 
-export const handleProvenTransactions = async (block: L2Block) => {
+/**
+ * Publishes the fee juice balance, as of `block`, of every address its stored
+ * txs name, then marks those txs proven. It handles every stored tx of the
+ * block, whatever its state, so a block run again after a prune or a proof
+ * that moved back sends the same updates. Any failure fails the whole block.
+ */
+export const handleProvenTransactions = async (
+  block: L2Block,
+  readStorage: ReadPublicStorage,
+): Promise<ProvenBlockOutcome> => {
   try {
-    const notProvenTxs = await txsController.getTxs([
-      "pending",
-      "dropped",
-      "proposed",
+    const hashes = block.body.txEffects.map((txEffect) =>
+      txEffect.txHash.toString(),
+    );
+    const stored = new Map(
+      (await txsController.getTxsByHashes(hashes)).map((tx) => [tx.txHash, tx]),
+    );
+    // In block order: an address's source tx is the block's first to name it.
+    const txs = hashes.flatMap((hash) => stored.get(hash) ?? []);
+    if (txs.length === 0) {
+      return { ok: true };
+    }
+    const blockNumber = block.header.globalVariables.blockNumber.toString();
+    const addressToTxHash = collectUniqueAddresses(txs);
+    logger.info(
+      `📋 Fetching fee-juice balances for ${addressToTxHash.size} addresses named by ${txs.length} txs in block ${blockNumber}`,
+    );
+    const balances = await fetchBalances(readStorage, await block.hash(), [
+      ...addressToTxHash.keys(),
     ]);
-    if (notProvenTxs.length === 0) {
-      return;
+
+    for (const [addr, sourceTxHash] of addressToTxHash) {
+      const balance = balances.get(addr)?.toBigInt() ?? 0n;
+      if (balance === 0n) {
+        logger.debug(`⏭️ Skipping zero balance for ${addr}`);
+        continue;
+      }
+      await publishMessage("CONTRACT_INSTANCE_BALANCE_EVENT", {
+        contractAddress: addr,
+        balance: balance.toString(),
+        timestamp: new Date().getTime(),
+        sourceTxHash,
+        feeRecipient: block.header.globalVariables.feeRecipient.toString(),
+        blockNumber,
+      });
+      logger.info(`💰 Snapshotted balance for ${addr}`);
     }
 
-    const provenTxHashes = block.body.txEffects.map((txEffect) => {
-      const hash = txEffect.txHash;
-      return hash.toString();
-    });
-
-    const provenPendingTxs = provenTxHashes
-      .map((txHash) => {
-        const tx = notProvenTxs.find((tx) => tx.txHash === txHash);
-        if (!tx) {
-          return undefined;
-        }
-        logger.info(`🔍 ${txHash} found in pending or dropped txs`);
-        return tx;
-      })
-      .filter((tx) => tx !== undefined);
-
-    if (provenPendingTxs.length === 0) {
-      return;
+    for (const tx of txs) {
+      await txsController.storeOrUpdateState(tx.txHash, "proven");
     }
-
-    const blockNumber = BigInt(
-      block.header.globalVariables.blockNumber.toString(),
-    );
-    logger.info(
-      `🎯 Found ${provenPendingTxs.length} proven pending txs in block ${blockNumber}`,
-    );
-
-    // Step 1 — collect all unique addresses across the entire block
-    const addressToTxHash = collectUniqueAddresses(provenPendingTxs);
-    logger.info(
-      `📋 Fetching fee-juice balances for ${addressToTxHash.size} unique addresses in block ${blockNumber}`,
-    );
-
-    // Step 2 — fetch balances with bounded concurrency
-    const balanceResults = await fetchBalances(blockNumber, addressToTxHash);
-
-    // Step 3 — publish Kafka events for successful balance fetches
-    await Promise.all(
-      balanceResults.map(async (result) => {
-        if (result.status === "rejected") {
-          logger.error(
-            `Failed to fetch balance for ${result.addr} (sourceTxHash: ${result.sourceTxHash}, block: ${blockNumber.toString()}): ${String(result.reason)}`,
-          );
-          return;
-        }
-        const { addr, sourceTxHash, balance } = result;
-        const balanceBigInt = balance.toBigInt();
-        if (balanceBigInt === 0n) {
-          logger.debug(`⏭️ Skipping zero balance for ${addr}`);
-          return;
-        }
-        await publishMessage("CONTRACT_INSTANCE_BALANCE_EVENT", {
-          contractAddress: addr,
-          balance: balanceBigInt.toString(),
-          timestamp: new Date().getTime(),
-          sourceTxHash,
-          feeRecipient: block.header.globalVariables.feeRecipient.toString(),
-          blockNumber: blockNumber.toString(),
-        });
-        logger.info(`💰 Snapshotted balance for ${addr}`);
-      }),
-    );
-
-    // Step 4 — update tx states in parallel
-    await Promise.all(
-      provenPendingTxs.map(async (provenTx) => {
-        try {
-          await txsController.storeOrUpdateState(provenTx.txHash, "proven");
-          logger.info(`✅ Updated tx ${provenTx.txHash} to proven state`);
-        } catch (error) {
-          logger.error(`Error updating tx ${provenTx.txHash} state:`, error);
-        }
-      }),
-    );
+    return { ok: true };
   } catch (error) {
-    logger.error("Error handling proven transactions:", error);
+    return { ok: false, error: error as Error };
   }
 };

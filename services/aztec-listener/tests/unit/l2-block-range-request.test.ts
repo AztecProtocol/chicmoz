@@ -10,9 +10,12 @@ vi.mock("../../src/environment.js", () => ({
   L2_BLOCK_RANGE_REQUEST_QUEUE_MIN_TIME_MS: 0,
 }));
 
-vi.mock("../../src/events/emitted/index.js", () => ({
+const { onCatchupBlock, openAttestedReader } = vi.hoisted(() => ({
   onCatchupBlock: vi.fn(),
+  openAttestedReader: vi.fn(),
 }));
+
+vi.mock("../../src/events/emitted/index.js", () => ({ onCatchupBlock }));
 
 vi.mock("../../src/logger.js", () => ({
   logger: {
@@ -23,15 +26,21 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
-vi.mock("../../src/svcs/poller/network-client/index.js", () => ({
-  getBlock: vi.fn(),
-  getLatestProposedHeight: vi.fn(),
-  getLatestProvenHeight: vi.fn(),
+vi.mock("../../src/svcs/poller/network-client/attested-reads.js", () => ({
+  openAttestedReader,
+}));
+vi.mock("../../src/svcs/poller/network-client/pool.js", () => ({
+  getRpcNode: () => ({ name: "pool-node" }),
+}));
+vi.mock("../../src/svcs/poller/pollers/block_poller/index.js", () => ({
+  streamRollupVersion: () => 7,
 }));
 
-const { clampRangeRequest, getL2BlockRangeRequestDedupKey } = await import(
-  "../../src/events/received/on-l2-block-range-request.js"
-);
+const {
+  clampRangeRequest,
+  getL2BlockRangeRequestDedupKey,
+  l2BlockRangeRequestHandler,
+} = await import("../../src/events/received/on-l2-block-range-request.js");
 
 describe("L2 block range request helpers", () => {
   it("clamps ranges to max width and chain tips", () => {
@@ -94,5 +103,38 @@ describe("L2 block range request helpers", () => {
 
     expect(first).toBe(second);
     expect(first).toBe("SANDBOX:cadence:1-3-proposed");
+  });
+});
+
+describe("L2 block range request", () => {
+  it("answers from one node, clamped to its tips, with final on the blocks its reader attests", async () => {
+    openAttestedReader.mockResolvedValue({
+      tips: { proposed: { number: 3 }, proven: { block: { number: 2 } } },
+      getBlock: (height: number) =>
+        Promise.resolve({ block: { height }, final: height === 1 }),
+    });
+
+    await l2BlockRangeRequestHandler.cb(
+      {
+        requestId: "request-3",
+        requestedAt: Date.now(),
+        reason: "cadence",
+        ranges: [{ from: 1, to: 5 }],
+      },
+      () => Promise.resolve(),
+    );
+
+    expect(openAttestedReader).toHaveBeenCalledWith({ name: "pool-node" }, 7);
+    expect(onCatchupBlock.mock.calls).toEqual(
+      [1, 2, 3].map((height) => [
+        { height },
+        "proposed",
+        {
+          requestId: "request-3",
+          catchupReason: "cadence",
+          ...(height === 1 ? { final: true } : {}),
+        },
+      ]),
+    );
   });
 });
