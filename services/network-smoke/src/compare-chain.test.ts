@@ -11,7 +11,12 @@ const SCRIPT = fileURLToPath(
 const KEYS = ["usr-5c1e", "pwd-5c1e", "pth-5c1e", "qry-5c1e"];
 const [USER, PASSWORD, PATH, QUERY] = KEYS;
 
-const run = (check: "sample" | "window", nodeUrl: string, apiUrl: string) =>
+const run = (
+  check: "sample" | "window",
+  nodeUrl: string,
+  apiUrl: string,
+  env: Record<string, string> = {},
+) =>
   new Promise<{ code: number; output: string }>((resolve) =>
     execFile(
       process.execPath,
@@ -21,6 +26,7 @@ const run = (check: "sample" | "window", nodeUrl: string, apiUrl: string) =>
           ...process.env,
           COMPARE_NODE_URL: nodeUrl,
           COMPARE_API_URL: apiUrl,
+          ...env,
         },
         timeout: 30_000,
       },
@@ -103,5 +109,30 @@ describe("compare-chain on a failing node or API", () => {
       (await run("window", setups[1].node, setups[1].api)).output,
       "the status, from the SDK's message",
     ).toContain("node getChainTips failed: HTTP 500");
+  }, 60_000);
+
+  it("gives up on a node or an API that never answers", async () => {
+    const silent = createServer(() => {
+      // Never answers.
+    });
+    const port = await listen(silent);
+    const url = `http://127.0.0.1:${port}`;
+    try {
+      for (const [check, failed] of [
+        ["window", "node getChainTips failed: timed out"],
+        ["sample", "API /l2/latest-height: timed out"],
+      ] as const) {
+        const started = Date.now();
+        const { code, output } = await run(check, url, url, {
+          COMPARE_TIMEOUT_MS: "500",
+        });
+        expect.soft(code, `${check}: exit code`).toBe(2);
+        expect.soft(output, `${check}: diagnostic`).toContain(failed);
+        expect.soft(Date.now() - started, `${check}: ms`).toBeLessThan(20_000);
+      }
+    } finally {
+      silent.closeAllConnections();
+      silent.close();
+    }
   }, 60_000);
 });

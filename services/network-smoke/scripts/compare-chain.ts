@@ -10,18 +10,20 @@
  *   tip, one API call every 2 s.
  * - `reorgs`: each `/l2/reorgs` record whose dead root the node still has.
  * - `watch`: `sample` every 60 s, `reorgs` every 10 min and `window` every
- *   hour, until stopped. A height whose API hash and node hash both changed
- *   since its last sample is reported as a witnessed prune.
+ *   hour, until stopped. A height where the API and the node agree on a
+ *   hash other than the one they last agreed on, both in samples that are
+ *   not blind, is reported as a witnessed prune.
  *
  * Each check prints one JSON line; a one-shot check exits 1 when it finds a
- * mismatch. COMPARE_API_URL is a base URL without a query. The URLs can hold
+ * mismatch. COMPARE_API_URL is a base URL without a query; each request to
+ * either side gives up after COMPARE_TIMEOUT_MS (15 s). The URLs can hold
  * credentials: they are read from the environment and never printed. A
- * failed node call prints only its operation and HTTP status, and every line
- * is printed with the URLs' parts redacted.
+ * failed node call prints only its operation and its HTTP status or timeout,
+ * and every line is printed with the URLs' parts redacted.
  */
 import { BlockNumber } from "@aztec-labs/aztec.js/fields";
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
-import { defaultFetch } from "@aztec-labs/foundation/json-rpc/client";
+import { jsonStringify } from "@aztec-labs/foundation/json-rpc";
 import { setLogLevel } from "@aztec-labs/foundation/log";
 import {
   chicmozL2BlockLightSchema,
@@ -41,15 +43,20 @@ const env = z
   .object({
     COMPARE_NODE_URL: z.string().url(),
     COMPARE_API_URL: z.string().url(),
+    COMPARE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   })
   .safeParse(process.env);
 if (!env.success) {
   process.stderr.write(
-    "compare-chain: set COMPARE_NODE_URL (an Aztec node's JSON-RPC) and COMPARE_API_URL (the explorer API's base URL)\n",
+    "compare-chain: set COMPARE_NODE_URL (an Aztec node's JSON-RPC) and COMPARE_API_URL (the explorer API's base URL); COMPARE_TIMEOUT_MS, if set, is a positive integer\n",
   );
   process.exit(2);
 }
-const { COMPARE_NODE_URL: nodeUrl, COMPARE_API_URL: apiUrl } = env.data;
+const {
+  COMPARE_NODE_URL: nodeUrl,
+  COMPARE_API_URL: apiUrl,
+  COMPARE_TIMEOUT_MS: timeoutMs,
+} = env.data;
 
 const decoded = (part: string) => {
   try {
@@ -89,26 +96,55 @@ const print = (line: Record<string, unknown>) =>
     `${redact(JSON.stringify({ at: new Date().toISOString(), ...line }))}\n`,
   );
 
-// The SDK's client logs a failed request with the node's full URL.
-setLogLevel("silent");
-// One attempt per read: a check reports a failed read, and `watch` reads
-// again on its next round.
-const node = createAztecNodeClient(nodeUrl, { fetch: defaultFetch });
-
-const HTTP_STATUS = /^Error (\d{3}) from server /;
+const timedOut = (e: unknown) => (e as Error).name === "TimeoutError";
 
 /**
- * The SDK's message names the host, its cause's hostname and the server's
- * error body, which can echo a key; only the operation and the status leave.
+ * The SDK client's transport, with a deadline its own fetch has no way to
+ * set, and one attempt per read: a check reports a failed read, and `watch`
+ * reads again on its next round. Its errors are fixed text.
+ */
+const nodeFetch = async (
+  host: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+) => {
+  let res: Response;
+  try {
+    res = await fetch(host, {
+      method: "POST",
+      body: jsonStringify(body),
+      headers: { "content-type": "application/json", ...extraHeaders },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    throw new Error(timedOut(e) ? "timed out" : "request failed");
+  }
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  try {
+    return { response: (await res.json()) as unknown, headers: res.headers };
+  } catch (e) {
+    throw new Error(timedOut(e) ? "timed out" : "not JSON");
+  }
+};
+
+// The SDK's client logs a failed request with the node's full URL.
+setLogLevel("silent");
+const node = createAztecNodeClient(nodeUrl, { fetch: nodeFetch });
+
+const NODE_FAILURE = /^(HTTP \d{3}|timed out)$/;
+
+/**
+ * A node error can carry the server's own message, which can echo a key;
+ * only the operation and a status or a timeout leave.
  */
 const nodeCall = async <T>(operation: string, call: () => Promise<T>) => {
   try {
     return await call();
   } catch (e) {
-    const status = HTTP_STATUS.exec((e as Error).message)?.[1];
-    throw new Error(
-      `node ${operation} failed${status ? `: HTTP ${status}` : ""}`,
-    );
+    const detail = NODE_FAILURE.exec((e as Error).message)?.[1];
+    throw new Error(`node ${operation} failed${detail ? `: ${detail}` : ""}`);
   }
 };
 
@@ -116,19 +152,21 @@ const api = async (path: string): Promise<unknown> => {
   let res: Response;
   try {
     res = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
+  } catch (e) {
     // fetch's message can quote the URL.
-    throw new Error(`API ${path}: request failed`);
+    throw new Error(
+      `API ${path}: ${timedOut(e) ? "timed out" : "request failed"}`,
+    );
   }
   if (!res.ok) {
     throw new Error(`API ${path}: HTTP ${res.status}`);
   }
   try {
     return (await res.json()) as unknown;
-  } catch {
-    throw new Error(`API ${path}: not JSON`);
+  } catch (e) {
+    throw new Error(`API ${path}: ${timedOut(e) ? "timed out" : "not JSON"}`);
   }
 };
 
@@ -259,40 +297,48 @@ const watch = async () => {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => (stopped = true));
   }
-  const last = new Map<number, { api: string[]; node: string | null }>();
+  // A failed check is reported and skips only itself.
+  const attempt = async (check: string, work: () => Promise<unknown>) => {
+    try {
+      await work();
+    } catch (e) {
+      print({ check, error: (e as Error).message });
+    }
+  };
+  // Per height, the hash the API and the node last agreed on.
+  const agreed = new Map<number, string>();
   let lastReorgs = 0;
   let lastWindow = 0;
   while (!stopped) {
     const started = Date.now();
-    try {
+    await attempt("sample", async () => {
       const s = await sample();
       report("sample", s);
+      if (s.blind) {
+        return;
+      }
       for (let height = s.from; height <= s.to; height++) {
-        const now = {
-          api: s.fromApi.get(height) ?? [],
-          node: s.fromNode.get(height) ?? null,
-        };
-        const prev = last.get(height);
-        if (
-          prev &&
-          !s.blind &&
-          prev.node !== now.node &&
-          JSON.stringify(prev.api) !== JSON.stringify(now.api)
-        ) {
-          print({ check: "prune-witnessed", height, before: prev, after: now });
+        const onApi = s.fromApi.get(height) ?? [];
+        const onNode = s.fromNode.get(height);
+        if (onNode === undefined || onApi.length !== 1 || onApi[0] !== onNode) {
+          continue;
         }
-        last.set(height, now);
+        const before = agreed.get(height);
+        if (before !== undefined && before !== onNode) {
+          print({ check: "prune-witnessed", height, before, after: onNode });
+        }
+        agreed.set(height, onNode);
       }
-      if (started - lastReorgs >= 10 * MINUTE) {
-        lastReorgs = started;
-        await reorgs();
-      }
-      if (started - lastWindow >= 60 * MINUTE) {
-        lastWindow = started;
-        report("window", await windowCheck());
-      }
-    } catch (e) {
-      print({ check: "error", error: (e as Error).message });
+    });
+    if (started - lastReorgs >= 10 * MINUTE) {
+      lastReorgs = started;
+      await attempt("reorgs", reorgs);
+    }
+    if (started - lastWindow >= 60 * MINUTE) {
+      lastWindow = started;
+      await attempt("window", async () =>
+        report("window", await windowCheck()),
+      );
     }
     while (!stopped && Date.now() - started < MINUTE) {
       await new Promise((r) => setTimeout(r, 500));

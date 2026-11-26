@@ -84,9 +84,9 @@ COMPARE_NODE_URL=<node JSON-RPC> COMPARE_API_URL=<API base URL> node scripts/com
 - `sample`: the API's top 40 heights against the node's hashes. It reads the node's tips before and after, and marks the sample `blind` if they moved.
 - `window`: every height from the node's finalized tip to its proposed tip, one API call every 2 s.
 - `reorgs`: each `/l2/reorgs` record whose dead root block is still on the node's chain.
-- `watch`: `sample` every minute, `reorgs` every 10 minutes and `window` every hour, until stopped. It also reports a height whose API hash and node hash both changed as a witnessed prune.
+- `watch`: `sample` every minute, `reorgs` every 10 minutes and `window` every hour, until stopped. A failed check is reported and skips only itself. It reports a witnessed prune at a height where the API and the node agree on a hash other than the one they last agreed on there; only samples that are not blind count.
 
-Each check prints one JSON line, with the first mismatch and the count; a one-shot check exits 1 on a mismatch. `COMPARE_API_URL` is a base URL without a query. The URLs can hold an API key, so they are never printed: a failed node call prints only its operation and HTTP status (the SDK's message names the host and can quote the server's error body), a failed API call its path and status, and every line is printed with each part of both URLs redacted.
+Each check prints one JSON line, with the first mismatch and the count; a one-shot check exits 1 on a mismatch and 2 when a call fails. `COMPARE_API_URL` is a base URL without a query. Each request to either side gives up after `COMPARE_TIMEOUT_MS` (15 s by default), and a node read gets one attempt. The URLs can hold an API key, so they are never printed: a failed node call prints only its operation and its HTTP status or timeout (the SDK's message names the host and can quote the server's error body), a failed API call its path and status, and every line is printed with each part of both URLs redacted.
 
 ## Reading a failure
 
