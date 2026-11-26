@@ -444,6 +444,34 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.repairOpen(17_001)).toBe(true);
   });
 
+  it("puts back an ordered block that a stale catch-up undid once the next ordered block arrives, listing one reorg", async () => {
+    const version = freshVersion();
+    const [a1, a2, a3, a4] = await buildChain(24_001n, 4, { version });
+    const [b2, b3] = await buildChain(24_002n, 2, { version, parent: a1 });
+    for (const block of [a1, a2, a4]) {
+      await ordered(block);
+    }
+    // A4 stays canonical across the gap at 24_003, above B2.
+    await ordered(b2, 24_004);
+    // A3 links to A4, so it brings A2 back and demotes B2.
+    await catchup(a3);
+    expect(await reads.chainOf(version)).toEqual(heads([a1, a2, a3, a4]));
+
+    await ordered(b3, 24_004);
+
+    expect(await reads.chainOf(version)).toEqual(heads([a1, b2, b3]));
+    expect(
+      await Promise.all([a2, a3, a4].map((b) => reads.stateOf(b.hash))),
+    ).toEqual([
+      { hasOrphanedParent: false },
+      { hasOrphanedParent: true },
+      { hasOrphanedParent: true },
+    ]);
+    expect(await reads.listed([a2, a3, a4, b2, b3])).toEqual([
+      { orphanedBlockHash: a2.hash, height: 24_002n, nbrOfOrphanedBlocks: 3 },
+    ]);
+  });
+
   it("walks repairs back from an ordered block far above the head, one per attach, until they meet the old chain", async () => {
     const version = freshVersion();
     const [a0, a1] = await buildChain(18_000n, 2, { version });
