@@ -68,8 +68,8 @@ export type StickySourceConfig = {
 
 /** What every snapshot of one pass is checked against. */
 type PassBounds = { finalized: L2BlockId; floor: number | undefined };
-/** `proposed` is the tip the election's probe showed. */
-type Pin = { node: RpcNode; bounds: PassBounds; proposed: L2BlockId };
+/** `tips` are what the election's probe showed. */
+type Pin = { node: RpcNode; bounds: PassBounds; tips: L2Tips };
 type Bench = { until: number } | { tip: L2BlockId };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
@@ -252,6 +252,11 @@ export class StickySource implements L2BlockStreamSource {
     return this.pin?.node;
   }
 
+  /** The tips the pinned node's election probe showed. */
+  get pinnedTips(): L2Tips | undefined {
+    return this.pin?.tips;
+  }
+
   get lastTips(): L2Tips | undefined {
     return this.latestTips;
   }
@@ -343,7 +348,7 @@ export class StickySource implements L2BlockStreamSource {
         } (${describeTips(before?.tips)})`,
       );
     }
-    this.pin = { node: next.node, bounds, proposed: next.tips.proposed };
+    this.pin = { node: next.node, bounds, tips: next.tips };
     return next.node;
   }
 
@@ -384,28 +389,29 @@ export class StickySource implements L2BlockStreamSource {
   }
 
   getBlockData(query: BlockQuery): Promise<BlockData | undefined> {
-    return this.recorded(async () => {
+    return this.recorded(() => {
       this.walkStep(++this.blockReads, "block reads");
-      const { pin, result: response } = await this.pinnedCall("getBlock", [
-        query,
-      ]);
-      if (response === undefined) {
-        const tip = this.latestTips?.proposed.number;
-        if ("number" in query && tip !== undefined && query.number <= tip) {
-          // A height its snapshot covers: the stream aborts the pass, as on an empty range.
-          this.bench(pin, "new tip");
-        }
-        return undefined;
-      }
-      await this.check(pin.node, blockDataFault(query, response.header));
-      return {
-        header: response.header,
-        archive: response.archive,
-        blockHash: response.hash,
-        checkpointNumber: response.checkpointNumber,
-        indexWithinCheckpoint: response.indexWithinCheckpoint,
-      };
+      return this.readBlockData(query);
     });
+  }
+
+  /** The pinned node's block at `height`, read outside the walk bound. */
+  pinnedBlockData(height: number): Promise<BlockData | undefined> {
+    return this.recorded(() =>
+      this.readBlockData({ number: BlockNumber(height) }),
+    );
+  }
+
+  /** Calls the pinned node under the pinned reads' deadline; a failure benches no node. */
+  async pinnedRead<K extends keyof AztecNode>(
+    fnName: K,
+    args: Parameters<AztecNode[K]>,
+  ) {
+    const pin = this.pin;
+    if (pin === undefined) {
+      throw new AbortError();
+    }
+    return this.boundedCall(pin, fnName, args);
   }
 
   getBlocks(query: BlocksQuery): Promise<L2Block[]> {
@@ -464,6 +470,40 @@ export class StickySource implements L2BlockStreamSource {
     }
   }
 
+  private async readBlockData(
+    query: BlockQuery,
+  ): Promise<BlockData | undefined> {
+    const { pin, result: response } = await this.pinnedCall("getBlock", [
+      query,
+    ]);
+    if (response === undefined) {
+      const tip = this.latestTips?.proposed.number;
+      if ("number" in query && tip !== undefined && query.number <= tip) {
+        // A height its snapshot covers: the stream aborts the pass, as on an empty range.
+        this.bench(pin, "new tip");
+      }
+      return undefined;
+    }
+    await this.check(pin.node, blockDataFault(query, response.header));
+    if ("number" in query && query.number === BlockNumber.ZERO) {
+      await this.check(pin.node, this.genesisFault(response.header));
+    }
+    return {
+      header: response.header,
+      archive: response.archive,
+      blockHash: response.hash,
+      checkpointNumber: response.checkpointNumber,
+      indexWithinCheckpoint: response.indexWithinCheckpoint,
+    };
+  }
+
+  private async genesisFault(header: BlockHeader) {
+    const genesis = await this.deps.store.getL2BlockHash(BlockNumber.ZERO);
+    return (await header.hash()).toString() === genesis
+      ? undefined
+      : "has another genesis block than the block stream's";
+  }
+
   private async pinnedCall<K extends keyof AztecNode>(
     fnName: K,
     args: Parameters<AztecNode[K]>,
@@ -473,28 +513,36 @@ export class StickySource implements L2BlockStreamSource {
       throw new AbortError();
     }
     try {
-      const result = await withDeadline(
-        callNodeFunction(fnName, args, pin.node),
-        PINNED_READ_TIMEOUT_MS,
-        () =>
-          new TimeoutError(
-            `Node ${pin.node.name} did not answer ${String(fnName)} within ${
-              PINNED_READ_TIMEOUT_MS / 1000
-            } s`,
-          ),
-      );
-      // The RPC client resolves a null answer to undefined, whatever the
-      // method's type; only a block lookup may answer nothing.
-      if (result === undefined && fnName !== "getBlock") {
-        throw new Error(
-          `Node ${pin.node.name} answered ${String(fnName)} with nothing`,
-        );
-      }
-      return { pin, result };
+      return { pin, result: await this.boundedCall(pin, fnName, args) };
     } catch (e) {
       this.bench(pin, "cooldown");
       throw e;
     }
+  }
+
+  private async boundedCall<K extends keyof AztecNode>(
+    pin: Pin,
+    fnName: K,
+    args: Parameters<AztecNode[K]>,
+  ) {
+    const result = await withDeadline(
+      callNodeFunction(fnName, args, pin.node),
+      PINNED_READ_TIMEOUT_MS,
+      () =>
+        new TimeoutError(
+          `Node ${pin.node.name} did not answer ${String(fnName)} within ${
+            PINNED_READ_TIMEOUT_MS / 1000
+          } s`,
+        ),
+    );
+    // The RPC client resolves a null answer to undefined, whatever the
+    // method's type; only a block lookup may answer nothing.
+    if (result === undefined && fnName !== "getBlock") {
+      throw new Error(
+        `Node ${pin.node.name} answered ${String(fnName)} with nothing`,
+      );
+    }
+    return result;
   }
 
   private async pinnedBlockHash(height: number): Promise<string | undefined> {
@@ -551,7 +599,7 @@ export class StickySource implements L2BlockStreamSource {
       pin.node.url,
       until === "cooldown"
         ? { until: this.now() + SET_ASIDE_MS }
-        : { tip: pin.proposed },
+        : { tip: pin.tips.proposed },
     );
     if (this.pin === pin) {
       this.pin = undefined;

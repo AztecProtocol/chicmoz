@@ -11,9 +11,11 @@ import type {
   L2BlockStatusHint,
   L2TipsEvent,
 } from "@chicmoz-pkg/message-registry";
+import { L2_NETWORK_ID } from "../../environment.js";
 import { logger } from "../../logger.js";
 import { txsController } from "../../svcs/database/index.js";
 import {
+  publishKeyedMessage,
   publishMessage,
   publishMessageSync,
 } from "../../svcs/message-bus/index.js";
@@ -41,9 +43,7 @@ export const onBlock = async (
       ? "🦊 publishing proposed block"
       : "🐴 publishing proven block";
   logger.info(
-    `${statusHintStr} ${height} (hash: ${(
-      await block.hash()
-    ).toString()})...`,
+    `${statusHintStr} ${height} (hash: ${(await block.hash()).toString()})...`,
   );
   const blockBuffer = block.toBuffer() as Uint8Array;
   const blockStr = Buffer.from(blockBuffer).toString("hex");
@@ -67,6 +67,44 @@ export const onBlock = async (
       await txsController.storeOrUpdate(potentialTx, newState);
       logger.info(
         `✅ Transaction ${potentialTx.txHash} found in block ${height}, updated to ${newState}`,
+      );
+    }
+  }
+};
+
+/**
+ * Sends a block of the ordered stream, keyed by the network so the topic
+ * keeps the send order. `tip` is the proposed tip of the pass that sends it.
+ */
+export const onOrderedBlock = async (block: L2Block, tip: number) => {
+  const height = BigInt(block.header.globalVariables.blockNumber.toString());
+  const heightNumber = toSafeBlockNumber(height);
+  logger.info(
+    `🦊 publishing block ${height} (hash: ${(
+      await block.hash()
+    ).toString()}, tip ${tip})...`,
+  );
+  const blockBuffer = block.toBuffer() as Uint8Array;
+  const blockStr = Buffer.from(blockBuffer).toString("hex");
+  await publishKeyedMessage("NEW_BLOCK_EVENT", L2_NETWORK_ID, {
+    block: blockStr,
+    statusHint: "proposed",
+    blockNumber: heightNumber,
+    ordered: { tip },
+  });
+  const potentiallyIncludedTxs = await txsController.getTxs([
+    "pending",
+    "suspected_dropped",
+  ]);
+  const blockTxHashes = block.body.txEffects.map((effect) =>
+    effect.txHash.toString(),
+  );
+
+  for (const potentialTx of potentiallyIncludedTxs) {
+    if (blockTxHashes.includes(potentialTx.txHash)) {
+      await txsController.storeOrUpdate(potentialTx, "proposed");
+      logger.info(
+        `✅ Transaction ${potentialTx.txHash} found in block ${height}, updated to proposed`,
       );
     }
   }
