@@ -130,10 +130,23 @@ describe("PostgresL2TipsStore", () => {
       proven: await tipOf(b2, 2),
     });
     const afterPrune = await view(postgres);
-    expect(afterPrune).toEqual(await view(memory));
+    const memoryAfterPrune = await view(memory);
+    expect(afterPrune).toEqual(memoryAfterPrune);
     expect(afterPrune.tips.proposed.number).toBe(3);
     expect(afterPrune.tips.checkpointed.block.number).toBe(3);
     expect(afterPrune.tips.proven.block.number).toBe(2);
+    // The prune kept the hashes above its target.
+    expect(
+      await Promise.all(
+        [5, 6].map((height) => postgres.holdsHashAtOrAbove(height)),
+      ),
+    ).toEqual(
+      [5, 6].map((height) =>
+        memoryAfterPrune.hashes
+          .slice(height)
+          .some((hash) => hash !== undefined),
+      ),
+    );
 
     await apply({ type: "blocks-added", blocks: replacing });
     await apply({

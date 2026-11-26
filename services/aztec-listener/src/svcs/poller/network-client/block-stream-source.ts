@@ -48,6 +48,7 @@ export type ElectionStore = Pick<
   "getL2Tips" | "getL2BlockHash"
 > & {
   otherVersionStored(): Promise<boolean>;
+  holdsHashAtOrAbove(height: number): Promise<boolean>;
 };
 
 export type StickySourceDeps = {
@@ -270,7 +271,7 @@ export class StickySource implements L2BlockStreamSource {
     this.latestError = undefined;
     const bounds: PassBounds = {
       finalized: stored.finalized.block,
-      floor: await this.bootstrapFloor(stored),
+      floor: await this.bootstrapFloor(),
     };
     const now = this.now();
     const probes = await Promise.all(
@@ -600,7 +601,6 @@ export class StickySource implements L2BlockStreamSource {
       this.finalizedMatches.set(url, finalized);
       return undefined;
     }
-    this.finalizedMatches.delete(url);
     return hash === undefined
       ? {
           kind: "missing",
@@ -611,10 +611,10 @@ export class StickySource implements L2BlockStreamSource {
 
   // Proven blocks move back only on an L1 reorg, so a first tip at or above
   // the old listener's proven height removes at most the unproven blocks. The
-  // floor holds until this version's proposed or finalized tip reaches it. A
-  // reorg below it can come only before the finalized tip gets there; a
-  // restart after one brings the floor back until a node is at it again.
-  private async bootstrapFloor(stored: L2Tips): Promise<number | undefined> {
+  // floor holds until the stream has crossed it, which a stored hash at or
+  // above it proves: a prune keeps the hashes above its target, and
+  // finalization deletes only below the lowest live tip.
+  private async bootstrapFloor(): Promise<number | undefined> {
     if (!this.floorLifted) {
       // A store of another version means the API holds no block of this one;
       // that assumes no rollback to the old listener across a version change.
@@ -624,8 +624,7 @@ export class StickySource implements L2BlockStreamSource {
       return undefined;
     }
     const floor = await this.deps.legacyProvenHeight();
-    this.floorLifted =
-      stored.proposed.number >= floor || stored.finalized.block.number >= floor;
+    this.floorLifted = await this.deps.store.holdsHashAtOrAbove(floor);
     return this.floorLifted ? undefined : floor;
   }
 

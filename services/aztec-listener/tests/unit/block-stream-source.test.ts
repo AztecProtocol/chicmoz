@@ -246,6 +246,22 @@ type Setup = {
 
 type Pass = () => Promise<RpcNode | undefined>;
 
+/** The SDK's memory store with the Postgres store's two extra reads. */
+const testStore = (otherVersionStored: () => boolean) => {
+  const memory = new L2TipsMemoryStore(genesis);
+  return Object.assign(memory, {
+    otherVersionStored: () => Promise.resolve(otherVersionStored()),
+    holdsHashAtOrAbove: async (height: number) => {
+      for (let n = Math.max(height, 1); n < main.blocks.length; n++) {
+        if ((await memory.getL2BlockHash(BlockNumber(n))) !== undefined) {
+          return true;
+        }
+      }
+      return false;
+    },
+  });
+};
+
 const setup = ({
   nodes,
   online = nodes,
@@ -253,9 +269,7 @@ const setup = ({
   legacyProvenHeight = 0,
   otherVersionStored = () => true,
 }: Setup) => {
-  const store = Object.assign(new L2TipsMemoryStore(genesis), {
-    otherVersionStored: () => Promise.resolve(otherVersionStored()),
-  });
+  const store = testStore(otherVersionStored);
   const clock = { now: 1_000_000 };
   const world = { online };
   /** A source over the same store, as after a restart. */
@@ -473,7 +487,7 @@ describe("StickySource election", () => {
     expect(await source.elect()).toBe(a.rpc);
   });
 
-  it("keeps the floor across a restart until this version's proposed tip reaches it", async () => {
+  it("keeps the floor after a restart while the stream has stored only blocks below it", async () => {
     const a = new FakeNode("a", prefix(main, 12));
     const b = new FakeNode("b", prefix(main, 9));
     const { store, world, pass, fresh } = setup({
@@ -489,47 +503,32 @@ describe("StickySource election", () => {
         : Promise.reject(new Error("connection reset"));
     expect(await pass()).toBe(a.rpc);
     expect((await store.getL2Tips()).proposed.number).toBe(5);
+
     world.online = [b];
     expect(await fresh().elect()).toBeUndefined();
-
-    a.getBlocksOverride = undefined;
-    world.online = [a];
-    expect(await pass()).toBe(a.rpc);
-    expect((await store.getL2Tips()).proposed.number).toBe(12);
-    world.online = [b];
-    expect(await fresh().elect()).toBe(b.rpc);
   });
 
-  it("lifts the floor once the store is finalized at or above it", async () => {
-    // Below the floor, yet finalized at the store's block.
-    const odd = new FakeNode("odd", prefix(main, 9));
-    odd.probeTipsOverride = () => ({
-      ...tipsOf(odd.chain, { checkpointed: 9, proven: 8, finalized: 8 }),
-      proposed: { number: BlockNumber(6), hash: main.hashes[6] },
-    });
-    const { store, source } = setup({
-      nodes: [odd],
-      legacyProvenHeight: 7,
+  it("lifts the floor after a restart once the stream has crossed it, a prune below it since included", async () => {
+    const a = new FakeNode("a", prefix(main, 12));
+    const b = new FakeNode("b", prefix(main, 9));
+    const { store, world, pass, fresh } = setup({
+      nodes: [a, b],
+      online: [a],
+      legacyProvenHeight: 10,
       otherVersionStored: () => false,
     });
-    // Built by hand: a pass's prune stops at the finalized tip.
-    const tip = (n: number) => ({
-      block: { number: BlockNumber(n), hash: main.hashes[n] },
-      checkpoint: { number: CheckpointNumber(n), hash: checkpointHash(n) },
+    await pass();
+    // A chain that left ours after block 6 and ends below the floor.
+    a.chain = await grow(prefix(main, 6), 8);
+    expect(await pass()).toBe(a.rpc);
+    expect((await store.getL2Tips()).proposed).toEqual({
+      number: 8,
+      hash: a.chain.hashes[8],
     });
-    await store.handleBlockStreamEvent({
-      type: "blocks-added",
-      blocks: main.blocks.slice(1, 10),
-    });
-    await store.handleBlockStreamEvent({ type: "chain-finalized", ...tip(8) });
-    await store.handleBlockStreamEvent({
-      type: "chain-pruned",
-      block: tip(5).block,
-      checkpointed: tip(5),
-      proven: tip(5),
-    });
+    expect(await store.getL2BlockHash(BlockNumber(10))).toBe(main.hashes[10]);
 
-    expect(await source.elect()).toBe(odd.rpc);
+    world.online = [b];
+    expect(await fresh().elect()).toBe(b.rpc);
   });
 
   it("leaves out a node that drips its tips past the deadline or sends more than 64 KiB, and follows another", async () => {
@@ -563,9 +562,7 @@ describe("StickySource election", () => {
         instance: {} as AztecNode,
       }));
       const source = new StickySource({
-        store: Object.assign(new L2TipsMemoryStore(genesis), {
-          otherVersionStored: () => Promise.resolve(true),
-        }),
+        store: testStore(() => true),
         legacyProvenHeight: () => Promise.resolve(0),
         nodes: () => [slow, big, good],
         openReader: boundedElectionReaders(300),

@@ -8,7 +8,7 @@ import {
   type L2BlockTag,
   L2TipsStoreBase,
 } from "@aztec-labs/stdlib/block";
-import { and, eq, lt, ne } from "drizzle-orm";
+import { and, eq, gte, lt, ne } from "drizzle-orm";
 import {
   l2BlockStreamHashTable as hashes,
   l2BlockStreamTipTable as tips,
@@ -29,6 +29,21 @@ export class PostgresL2TipsStore extends L2TipsStoreBase {
       .select({ tag: tips.tag })
       .from(tips)
       .where(ne(tips.rollupVersion, this.rollupVersion))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /** Whether this version's store holds a block hash at `height` or above. */
+  public async holdsHashAtOrAbove(height: number): Promise<boolean> {
+    const rows = await db()
+      .select({ blockNumber: hashes.blockNumber })
+      .from(hashes)
+      .where(
+        and(
+          eq(hashes.rollupVersion, this.rollupVersion),
+          gte(hashes.blockNumber, height),
+        ),
+      )
       .limit(1);
     return rows.length > 0;
   }
