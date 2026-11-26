@@ -103,9 +103,11 @@
     "drizzle.config.js",
     "scripts/**/*",
     "tests/**/*",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.integration.config.ts"
   ],
-  // Characterization tests import @chicmoz/test-harness, which build:packages
-  // does not build; they type-check through their own tsconfig.json.
-  "exclude": ["tests/characterization"]
+  // Integration and characterization tests import @chicmoz/test-harness, which
+  // build:packages does not build; they type-check through their own
+  // tsconfig.json.
+  "exclude": ["tests/integration", "tests/characterization"]
 }

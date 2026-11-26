@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: ["**/node_modules/**", "**/build/**"],
+    exclude: ["**/node_modules/**", "**/build/**", "**/*.integration.test.ts"],
     environment: "node",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
