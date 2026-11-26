@@ -237,9 +237,10 @@ export const run = async (mode: Mode): Promise<number> => {
       const stuck = await groups.stopAll();
       if (stuck.length > 0) {
         process.stderr.write(
-          `network-smoke: still running after SIGKILL: ${stuck.join(", ")}\n`,
+          `network-smoke: still running after SIGKILL: ${stuck.join(", ")}; the run's ports stay claimed until this runner exits, and \`down ${runId}\` stops what is left\n`,
         );
       }
+      let released = false;
       try {
         if (stack) {
           if (failed) {
@@ -252,11 +253,13 @@ export const run = async (mode: Mode): Promise<number> => {
         removeTmpDir(tmp.node);
         removeTmpDir(tmp.wallet);
         await tap?.close();
-        // After the stops, so no listed port is still bound by this run.
-        await releasePorts(runId);
+        // Only once every group stopped: a survivor may still bind a port.
+        if (stuck.length === 0) {
+          released = await releasePorts(runId);
+        }
       }
       mark("torn down");
-      return stuck.length === 0;
+      return stuck.length === 0 && released;
     })());
 
   let signalled = false;

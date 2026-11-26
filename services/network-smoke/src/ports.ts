@@ -66,6 +66,35 @@ const portOf = (server: Server) => {
   return address.port;
 };
 
+const closeAll = (servers: Server[]) =>
+  Promise.all(
+    servers.map(
+      (s) => new Promise<void>((resolve) => s.close(() => resolve())),
+    ),
+  );
+
+/** Binds every fixed port, all held until `reserve` has run; one in use fails the claim. */
+const holdFixed = async (
+  ports: Ports,
+  reserve: (ports: Ports) => Promise<void>,
+) => {
+  const held: Server[] = [];
+  try {
+    for (const [name, port] of Object.entries(ports)) {
+      try {
+        held.push(await listen(port));
+      } catch (e) {
+        throw new Error(
+          `fixed port ${port} (${name}) is in use: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`,
+        );
+      }
+    }
+    await reserve(ports);
+  } finally {
+    await closeAll(held);
+  }
+};
+
 const MIN_PORT = 10_000;
 
 /** The kernel's ephemeral floor from `ip_local_port_range`'s text, if usable. */
@@ -168,15 +197,16 @@ export const freePorts = async (
     }
     throw new Error("no free adjacent port pair for the websocket publisher");
   } finally {
-    await Promise.all(
-      held.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
-    );
+    await closeAll(held);
   }
 };
 
 /**
  * This run's ports, claimed in the host registry for as long as `ownerPid`
- * lives: `fixed` as given, otherwise free ones no registry line lists.
+ * lives: `fixed` as given, otherwise free ones no registry line lists. Both
+ * kinds are bound while the claim is made, so a port that a process outside
+ * the registry still holds, such as a stopped run's surviving child, is
+ * never claimed.
  */
 export const claimRunPorts = async (
   {
@@ -190,7 +220,7 @@ export const claimRunPorts = async (
   const reserve = (ports: Ports) =>
     claimPorts({ runId, ports, ownerPid, worktree }, options);
   if (fixed) {
-    await reserve(fixed);
+    await holdFixed(fixed, reserve);
     return fixed;
   }
   for (let attempt = 0; ; attempt++) {

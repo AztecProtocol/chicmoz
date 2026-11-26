@@ -30,6 +30,7 @@ const down = async (runId: string) => {
     );
   }
   const stuck: number[] = [];
+  let released = false;
   try {
     for (const pgid of readPgids(runDir).reverse()) {
       if (!(await stopGroup(pgid, runId))) {
@@ -61,10 +62,18 @@ const down = async (runId: string) => {
     for (const dir of Object.values(tmpDirs(runId, runDir))) {
       removeTmpDir(dir);
     }
-    await releasePorts(runId);
+    // Only once every group stopped: a survivor may still bind a port.
+    released = stuck.length === 0 && (await releasePorts(runId));
   }
   if (stuck.length > 0) {
-    throw new Error(`run ${runId} is not down: process groups survived`);
+    throw new Error(
+      `run ${runId} is not down: process groups survived, so its port claims stay listed (their runner is gone, so other tools may reap them)`,
+    );
+  }
+  if (!released) {
+    throw new Error(
+      `run ${runId} is not down: its port claims could not be released`,
+    );
   }
   process.stdout.write(`run ${runId} is down\n`);
 };

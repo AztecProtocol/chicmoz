@@ -236,7 +236,11 @@ export const claimPorts = async (
   }
 };
 
-/** Drops this run's rows. Never throws: a registry problem must not change a run's verdict. */
+/**
+ * Drops this run's rows. Never throws, so teardown goes on; false, with the
+ * reason on stderr, when the registry could not be rewritten, and the
+ * caller's teardown then is not clean.
+ */
 export const releasePorts = async (
   runId: string,
   options: RegistryOptions = {},
