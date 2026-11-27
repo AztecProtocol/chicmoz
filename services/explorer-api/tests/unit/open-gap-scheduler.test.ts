@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
     updates: [] as Array<Record<string, unknown>>,
     updateTargets: [] as unknown[][],
     unresolvedHeights: [] as number[],
+    tipRepairWindow: 5,
     publishFails: false,
     order: [] as string[],
   };
@@ -148,7 +149,9 @@ vi.mock("../../src/environment.js", () => ({
   L2_BLOCK_RECONCILIATION_MAX_BLOCKS: 200,
   L2_BLOCK_RECONCILIATION_MAX_RANGES: 10,
   L2_BLOCK_RECONCILIATION_SCAN_WINDOW: 10_000,
-  L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW: 5,
+  get L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW() {
+    return mocks.state.tipRepairWindow;
+  },
 }));
 vi.mock("../../src/logger.js", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -235,6 +238,7 @@ beforeEach(() => {
     updates: [],
     updateTargets: [],
     unresolvedHeights: [],
+    tipRepairWindow: 5,
     publishFails: false,
     order: [],
   });
@@ -636,6 +640,27 @@ describe("buildTipBoundaryRepairRequest", () => {
 
     mocks.state.unresolvedHeights = [98106];
     await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
+  });
+
+  // The listener fetches from the lowest height until 200 blocks are sent.
+  it("narrows a window wider than the block budget until it reaches its mismatch", async () => {
+    mocks.state.tipRepairWindow = 300;
+    mocks.state.unresolvedHeights = [TIP - 2];
+
+    const planned = await buildTipBoundaryRepairRequest();
+
+    expect(planned?.request).toMatchObject({
+      ranges: [range(TIP - 101, TIP + 97)],
+      maxBlocks: 199,
+    });
+  });
+
+  it("passes over a mismatch at height 0, which the listener never fetches", async () => {
+    mocks.state.unresolvedHeights = [0, TIP - 2];
+
+    const planned = await buildTipBoundaryRepairRequest();
+
+    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
   });
 });
 

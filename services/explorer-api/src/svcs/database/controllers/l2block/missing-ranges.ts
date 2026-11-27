@@ -590,22 +590,30 @@ export const buildMissingBlockRangeRequest = async ({
  */
 export const buildTipBoundaryRepairRequest =
   async (): Promise<PlannedRangeRequest | null> => {
-    const repairWindow = L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW;
+    // The listener fetches a request from its lowest height until `maxBlocks`
+    // runs out, so a window wider than that never reaches its mismatch.
+    const repairWindow = Math.min(
+      L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW,
+      Math.floor((L2_BLOCK_RECONCILIATION_MAX_BLOCKS - 1) / 2),
+    );
     const windows = (
       await getUnresolvedBoundaryHeights(
         await getCurrentRollupVersionNumber(),
         CANDIDATE_GAP_LIMIT,
       )
-    ).map((height) => {
-      const from = Math.max(1, height - repairWindow);
-      const to = height + repairWindow;
-      return {
-        height,
-        from,
-        to,
-        id: gapId({ from, to, reason: TIP_BOUNDARY_REASON }),
-      };
-    });
+    )
+      // The listener fetches no height below 1.
+      .filter((height) => height >= 1)
+      .map((height) => {
+        const from = Math.max(1, height - repairWindow);
+        const to = height + repairWindow;
+        return {
+          height,
+          from,
+          to,
+          id: gapId({ from, to, reason: TIP_BOUNDARY_REASON }),
+        };
+      });
     if (windows.length === 0) {
       return null;
     }
