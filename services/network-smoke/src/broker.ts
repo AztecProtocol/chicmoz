@@ -121,10 +121,20 @@ export const brokerReads = ({
         records: high - low,
       }));
     },
-    /** How many records `topic` has taken in all, over its partitions. */
-    published: async (topic: string) => {
+    /**
+     * How many records of `topic` carry a timestamp in [from, to), by the
+     * clock of the host whose producers stamped them. A record counts once it
+     * has landed, whenever that is.
+     */
+    publishedBetween: async (topic: string, from: number, to: number) => {
       await ready();
-      return (await ends(topic)).reduce((sum, { high }) => sum + high, 0);
+      // Per partition, the first offset stamped at or after `at`.
+      const before = async (at: number) =>
+        (await admin.fetchTopicOffsetsByTimestamp(topic, at)).reduce(
+          (sum, { offset }) => sum + Number(offset),
+          0,
+        );
+      return (await before(to)) - (await before(from));
     },
     /**
      * Takes the end offsets of the API's assigned partitions once, then waits

@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -23,9 +22,9 @@ import {
   type BlockId,
   type PruneFacts,
   type ScriptStatus,
-  prefixHandled,
   scriptControl,
 } from "./script-control.js";
+import { type ShortHold, type StepTimes, stepThrough } from "./step-through.js";
 
 const endpoints = readScriptedEndpoints();
 const control = scriptControl(endpoints.controlUrl);
@@ -97,80 +96,32 @@ const apiHolds = (blocks: BlockId[], label: string) =>
     { timeout: 60_000, interval: 1_000 },
   );
 
-/** Whether a pass of the listener handles the current state by `deadline`. */
-const handledBy = async (tip: number, deadline: number) => {
-  for (;;) {
-    if (prefixHandled((await control.status()).stateReads, tip)) {
-      return true;
-    }
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await sleep(250);
-  }
+const STEP_TIMES: StepTimes = {
+  stepMs: STEP_MS,
+  // Longer than today's 5 s tips poll, so a tips timer would show.
+  holdMs: 7_000,
+  // Many passes of the listener's poll: a listener that never handles the
+  // shorter chain fails the check that needs it, not the whole scenario.
+  holdLimitMs: 15_000,
+  pollMs: 250,
 };
 
-// Longer than today's 5 s tips poll, so a tips timer would show.
-const SHORT_HOLD_MS = 7_000;
-// Many passes of the listener's poll: a listener that never handles the
-// shorter chain fails the check that needs it, not the whole scenario.
-const SHORT_HOLD_LIMIT_MS = 15_000;
-
-/** What must not move while the node serves the shorter chain. */
-const quietView = async (prune: PruneFacts) => ({
-  published: {
-    block: await broker.published(endpoints.broker.blockTopic),
-    tips: await broker.published(endpoints.broker.tipsTopic),
-  },
-  api: {
-    latestHeight: await api.latestHeight(),
-    dead: await Promise.all(prune.dead.map((b) => api.blockAt(b.height))),
-    reorgs: byRoot(await api.reorgs()),
-  },
+/** The API's state that must not move while the node serves the shorter chain. */
+const apiView = async (prune: PruneFacts) => ({
+  latestHeight: await api.latestHeight(),
+  dead: await Promise.all(prune.dead.map((b) => api.blockAt(b.height))),
+  reorgs: byRoot(await api.reorgs()),
 });
 
-type QuietView = Awaited<ReturnType<typeof quietView>>;
+type ApiView = Awaited<ReturnType<typeof apiView>>;
 
-/**
- * Steps the node to the prune's last state; `beforePrune` runs before the
- * prune. Each state of the shorter chain is held until a pass of the listener
- * has handled it, or SHORT_HOLD_LIMIT_MS, and for at least SHORT_HOLD_MS, so
- * the scenario plays the order it names. Returns what must not move, read just
- * before the prune and at the end of the hold, and the states no pass handled,
- * when the prune has a shorter chain.
- */
-const stepThrough = async (
-  prune: PruneFacts,
-  beforePrune: () => Promise<void>,
-) => {
-  let { current } = await control.status();
-  let short:
-    | { start: QuietView; end?: QuietView; unhandled: number[] }
-    | undefined;
-  const target = prune.dead[0].height - 1;
-  while (current < prune.endAt) {
-    await sleep(STEP_MS);
-    if (current + 1 === prune.pruneAt) {
-      await beforePrune();
-      if (prune.shorterSteps > 0) {
-        short = { start: await quietView(prune), unhandled: [] };
-      }
-    }
-    ({ current } = await control.step());
-    const steppedAt = Date.now();
-    const lastShort = prune.pruneAt + prune.shorterSteps - 1;
-    if (current >= prune.pruneAt && current <= lastShort) {
-      if (!(await handledBy(target, steppedAt + SHORT_HOLD_LIMIT_MS))) {
-        short?.unhandled.push(current);
-      }
-      await sleep(Math.max(0, SHORT_HOLD_MS - (Date.now() - steppedAt)));
-      if (current === lastShort && short) {
-        short.end = await quietView(prune);
-      }
-    }
-  }
-  return short;
-};
+/** Steps the node through `prune`, as `stepThrough` does, viewing the API. */
+const stepPrune = (prune: PruneFacts, beforePrune: () => Promise<void>) =>
+  stepThrough(control, prune, {
+    beforePrune,
+    view: () => apiView(prune),
+    times: STEP_TIMES,
+  });
 
 const COMPARE_CHAIN = fileURLToPath(
   new URL("../scripts/compare-chain.ts", import.meta.url),
@@ -293,7 +244,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
     const deadHolder = prune.dead.find(
       (b) => b.height === prune.movedTx.deadHeight,
     );
-    await stepThrough(prune, async () => {
+    await stepPrune(prune, async () => {
       // The prune tests something only once the API holds what it removes,
       // the moved tx and its contract on their dead block included: on the
       // replacing block alone they would pass as a first insert.
@@ -402,7 +353,8 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
 describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', before 13''-16'", () => {
   let prune: PruneFacts;
   let baseline: ReorgRecord[];
-  let short: Awaited<ReturnType<typeof stepThrough>>;
+  let short: ShortHold<ApiView> | undefined;
+  let published: { block: number; tips: number } | undefined;
   let want: Partial<Snapshot>;
   let seen: Snapshot;
 
@@ -411,7 +363,7 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
     const deadHolder = prune.dead.find(
       (b) => b.height === prune.movedTx.deadHeight,
     );
-    short = await stepThrough(prune, async () => {
+    short = await stepPrune(prune, async () => {
       await apiHolds(prune.dead, "blocks 13'-16' before the prune");
       await vi.waitFor(
         async () =>
@@ -437,6 +389,22 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
       want,
       "the API after the second prune",
     );
+    // Read once settled, so a record sent in the window has landed.
+    const { from, to } = short ?? {};
+    if (from !== undefined && to !== undefined) {
+      published = {
+        block: await broker.publishedBetween(
+          endpoints.broker.blockTopic,
+          from,
+          to,
+        ),
+        tips: await broker.publishedBetween(
+          endpoints.broker.tipsTopic,
+          from,
+          to,
+        ),
+      };
+    }
   });
 
   it("publishes no block and no tips record, and keeps its state, while the node serves the shorter chain", () => {
@@ -444,9 +412,9 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
       .soft(short?.unhandled, "states of the shorter chain no pass handled")
       .toEqual([]);
     expect
-      .soft(short?.end?.published, "records published")
-      .toEqual(short?.start.published);
-    expect.soft(short?.end?.api, "the API's state").toEqual(short?.start.api);
+      .soft(published, "records stamped while the node served it")
+      .toEqual({ block: 0, tips: 0 });
+    expect.soft(short?.end, "the API's state").toEqual(short?.start);
   });
 
   it("serves the node's chain above 12' as canonical, and nothing above it", () => {

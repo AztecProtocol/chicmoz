@@ -3,10 +3,11 @@ import { type StateRead, prefixHandled } from "./script-control.js";
 
 describe("the hold on a shorter chain, tip 12", () => {
   it("ends at the next pass's walk, never on tip reads alone or on the walking pass's own reread", () => {
-    const tips: StateRead = { method: "getChainTips" };
+    const tips: StateRead = { method: "getChainTips", at: 0 };
     const block = (height: number): StateRead => ({
       method: "getBlock",
       height,
+      at: 0,
     });
     const walk = [block(16), block(15), block(14), block(13)];
     const handled = (reads: StateRead[]) => prefixHandled(reads, 12);

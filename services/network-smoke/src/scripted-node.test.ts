@@ -46,7 +46,7 @@ describe("scripted node", () => {
       expect(
         (await control.status()).stateReads.slice(earlier.length),
         `${states[i]}: its reads of the proposed tip and of a block by height, in order`,
-      ).toEqual([
+      ).toMatchObject([
         { method: "getChainTips" },
         { method: "getBlockData", height: above },
         { method: "getBlockNumber" },

@@ -161,7 +161,7 @@ export const startScriptedNode = async ({
   ) => {
     const height = heightIn(param);
     if (height !== undefined) {
-      stateReads.push({ method, height });
+      stateReads.push({ method, height, at: Date.now() });
     }
   };
 
@@ -169,7 +169,7 @@ export const startScriptedNode = async ({
     getNodeInfo: () => Promise.resolve(nodeInfo),
     getChainTips: (): Promise<L2Tips> => {
       tipReads++;
-      stateReads.push({ method: "getChainTips" });
+      stateReads.push({ method: "getChainTips", at: Date.now() });
       const s = state();
       const proposed = s.chain.length - 1;
       return Promise.resolve({
@@ -186,7 +186,7 @@ export const startScriptedNode = async ({
       const tier = tag ?? "proposed";
       tipReads++;
       if (tier === "proposed") {
-        stateReads.push({ method: "getBlockNumber" });
+        stateReads.push({ method: "getBlockNumber", at: Date.now() });
       }
       return Promise.resolve(BlockNumber(heightAt(state(), tier)));
     },
@@ -261,11 +261,12 @@ export const startScriptedNode = async ({
       }
       current++;
       stateReads = [];
+      const at = Date.now();
       const s = state();
       log(
         `state ${current} ${s.label}: proposed ${s.chain.length - 1} ${s.chain.at(-1)?.hash}, checkpointed ${s.checkpointed}, proven ${s.proven}, finalized ${s.finalized}`,
       );
-      reply(200, { current, label: s.label });
+      reply(200, { current, label: s.label, at });
     } else {
       reply(404, { error: "not found" });
     }

@@ -34,13 +34,20 @@ export type ScriptFacts = z.infer<typeof scriptFactsSchema>;
 export type PruneFacts = z.infer<typeof pruneFactsSchema>;
 export type BlockId = z.infer<typeof blockIdSchema>;
 
+/** When the node answered or moved, in ms since the epoch, by the host's clock. */
+const atSchema = z.number();
+
 const stateReadSchema = z.union([
   /** A read of the proposed tip. */
-  z.object({ method: z.enum(["getChainTips", "getBlockNumber"]) }),
+  z.object({
+    method: z.enum(["getChainTips", "getBlockNumber"]),
+    at: atSchema,
+  }),
   /** A read of a block by its height. */
   z.object({
     method: z.enum(["getBlock", "getBlockData"]),
     height: z.number().int(),
+    at: atSchema,
   }),
 ]);
 
@@ -69,7 +76,11 @@ export const prefixHandled = (reads: StateRead[], tip: number) => {
   return first >= 0 && reread >= 0 && reads.slice(reread + 1).some(walks);
 };
 
-const stepSchema = z.object({ current: z.number().int(), label: z.string() });
+const stepSchema = z.object({
+  current: z.number().int(),
+  label: z.string(),
+  at: atSchema,
+});
 
 /** The scripted node's control port: read the script, move to the next state. */
 export const scriptControl = (controlUrl: string) => {
