@@ -612,12 +612,34 @@ describe("selection", () => {
 });
 
 describe("buildTipBoundaryRepairRequest", () => {
+  // The mismatch, then the heights below it, then those above it.
+  const windowAround = (height: number, radius: number) => [
+    range(height, height),
+    range(height - radius, height - 1),
+    range(height + 1, height + radius),
+  ];
+  // What a listener with a lower limit than the API's sends for a request: the
+  // ranges in order, each from its lowest height and at most `limit` wide,
+  // until `limit` heights in all.
+  const listenerSends = (
+    request:
+      | { ranges: Array<{ from: number; to: number }>; maxBlocks?: number }
+      | undefined,
+    limit: number,
+  ) =>
+    (request?.ranges ?? [])
+      .flatMap(({ from, to }) => {
+        const first = Math.max(1, from);
+        return heights(first, Math.min(to, first + limit - 1));
+      })
+      .slice(0, Math.min(request?.maxBlocks ?? limit, limit));
+
   it("sends the window around the most recently seen open mismatch", async () => {
     mocks.state.unresolvedHeights = [TIP - 2, 98106];
 
     const planned = await buildTipBoundaryRepairRequest();
 
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
+    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
     // Reopening a tip row keeps its backoff: it is fulfilled as soon as its
     // heights are present, mismatch or not.
     expect(mocks.state.upserts[0].set).not.toHaveProperty("requestCount");
@@ -636,21 +658,22 @@ describe("buildTipBoundaryRepairRequest", () => {
     ];
 
     const planned = await buildTipBoundaryRepairRequest();
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
+    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
 
     mocks.state.unresolvedHeights = [98106];
     await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
   });
 
-  // The listener fetches from the lowest height until 200 blocks are sent.
-  it("narrows a window wider than the block budget until it reaches its mismatch", async () => {
+  it("asks for the mismatch before its neighbors, so a listener sending fewer heights than the window still sends it", async () => {
     mocks.state.tipRepairWindow = 300;
     mocks.state.unresolvedHeights = [TIP - 2];
 
     const planned = await buildTipBoundaryRepairRequest();
 
+    expect(listenerSends(planned?.request, 50)).toContain(TIP - 2);
+    // The window still fits the API's own block budget.
     expect(planned?.request).toMatchObject({
-      ranges: [range(TIP - 101, TIP + 97)],
+      ranges: windowAround(TIP - 2, 99),
       maxBlocks: 199,
     });
   });
@@ -660,7 +683,7 @@ describe("buildTipBoundaryRepairRequest", () => {
 
     const planned = await buildTipBoundaryRepairRequest();
 
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
+    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
   });
 });
 

@@ -590,8 +590,8 @@ export const buildMissingBlockRangeRequest = async ({
  */
 export const buildTipBoundaryRepairRequest =
   async (): Promise<PlannedRangeRequest | null> => {
-    // The listener fetches a request from its lowest height until `maxBlocks`
-    // runs out, so a window wider than that never reaches its mismatch.
+    // A window fits one request's block budget: wider, it would name heights
+    // no request could carry.
     const repairWindow = Math.min(
       L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW,
       Math.floor((L2_BLOCK_RECONCILIATION_MAX_BLOCKS - 1) / 2),
@@ -649,12 +649,22 @@ export const buildTipBoundaryRepairRequest =
     logger.warn(
       `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}`,
     );
+    // The listener sends ranges in order, each from its lowest height, and
+    // its own width and block limits can be lower than the API's: the
+    // mismatch goes first, so a truncated request still carries it.
+    const ranges = [
+      { from: height, to: height },
+      { from, to: height - 1 },
+      { from: height + 1, to },
+    ]
+      .filter((part) => part.from <= part.to)
+      .map((part) => ({ ...part, statusHint: "proposed" as const }));
     return {
       request: {
         requestId: randomUUID(),
         requestedAt: Date.now(),
         reason: TIP_BOUNDARY_REASON,
-        ranges: [range],
+        ranges,
         maxBlocks: Math.min(L2_BLOCK_RECONCILIATION_MAX_BLOCKS, to - from + 1),
       },
       markRequested: () => markGapsRequested([id]),
