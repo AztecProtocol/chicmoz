@@ -91,6 +91,10 @@ export const BlockDetailPage: FC = () => {
   const totalFees = formatFees(block.header.totalFees, feeJuiceDecimals);
   const totalManaUsed = block.header.totalManaUsed?.toString?.() ?? "0";
   const txCount = block.body.txEffects.length;
+  // The height read lists the canonical block's txs, which for an orphaned
+  // block are its replacement's: the body says which txs this block holds,
+  // and the read only adds their fees.
+  const feeByTxHash = new Map(txs?.map((t) => [t.txHash, t.transactionFee]));
   const l1Anchor = block.proposedOnL1 ?? block.proofVerifiedOnL1;
   const blockRollupVersion = BigInt(block.header.globalVariables.version);
   const isOldRollup =
@@ -388,29 +392,32 @@ export const BlockDetailPage: FC = () => {
               <div style={{ textAlign: "right" }}>Idx</div>
               <div style={{ textAlign: "right" }}>Fee ({feeJuiceSymbol})</div>
             </div>
-            {(txs ?? []).map((t, i) => (
-              <Link
-                key={t.txHash}
-                className="block-tx-row"
-                to="/tx-effects/$hash"
-                params={{ hash: t.txHash }}
-              >
-                <HashCell value={t.txHash} />
-                <span className="idx">{i}</span>
-                <span className="num">
-                  {formatFees(t.transactionFee, feeJuiceDecimals)}
-                  <TokenEtherscanLink
-                    symbol={feeJuiceSymbol}
-                    address={feeJuiceAddress}
-                    className="u"
-                  />
-                </span>
-              </Link>
-            ))}
-            {(!txs || txs.length === 0) && (
-              <div className="empty-state">
-                {txs ? "no tx-effects in this block" : "loading tx-effects…"}
-              </div>
+            {block.body.txEffects.map(({ txHash }, i) => {
+              const fee = feeByTxHash.get(txHash);
+              return (
+                <Link
+                  key={txHash}
+                  className="block-tx-row"
+                  to="/tx-effects/$hash"
+                  params={{ hash: txHash }}
+                >
+                  <HashCell value={txHash} />
+                  <span className="idx">{i}</span>
+                  <span className="num">
+                    {fee === undefined
+                      ? "—"
+                      : formatFees(fee, feeJuiceDecimals)}
+                    <TokenEtherscanLink
+                      symbol={feeJuiceSymbol}
+                      address={feeJuiceAddress}
+                      className="u"
+                    />
+                  </span>
+                </Link>
+              );
+            })}
+            {txCount === 0 && (
+              <div className="empty-state">no tx-effects in this block</div>
             )}
           </div>
         )}
