@@ -35,26 +35,22 @@ describe("scripted node", () => {
       if (i > 0) {
         expect((await control.step()).current).toBe(i);
       }
+      const { stateReads: earlier } = await control.status();
       const tips = await client.getChainTips();
-      await client.getBlockNumber();
-      await client.getBlockNumber("proven");
-      expect(
-        (await control.status()).stateTipReads.map((r) => r.method),
-        `${states[i]}: its reads of the proposed tip`,
-      ).toEqual(["getChainTips", "getBlockNumber"]);
-      const { stateBlockReads: earlier } = await control.status();
       const above = BlockNumber(tips.proposed.number + 1);
       expect(await client.getBlockData({ number: above })).toBeUndefined();
+      await client.getBlockNumber();
+      await client.getBlockNumber("proven");
       await client.getBlock(tips.proposed.number);
       await client.getBlockData(BlockHash.fromString(tips.proposed.hash));
       expect(
-        (await control.status()).stateBlockReads
-          .slice(earlier.length)
-          .map((r) => [r.method, r.height]),
-        `${states[i]}: its reads of a block by height`,
+        (await control.status()).stateReads.slice(earlier.length),
+        `${states[i]}: its reads of the proposed tip and of a block by height, in order`,
       ).toEqual([
-        ["getBlockData", above],
-        ["getBlock", tips.proposed.number],
+        { method: "getChainTips" },
+        { method: "getBlockData", height: above },
+        { method: "getBlockNumber" },
+        { method: "getBlock", height: tips.proposed.number },
       ]);
       const heights = [
         tips.finalized.block.number,

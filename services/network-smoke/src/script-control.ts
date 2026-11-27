@@ -34,53 +34,39 @@ export type ScriptFacts = z.infer<typeof scriptFactsSchema>;
 export type PruneFacts = z.infer<typeof pruneFactsSchema>;
 export type BlockId = z.infer<typeof blockIdSchema>;
 
-const stateTipReadSchema = z.object({
-  method: z.enum(["getChainTips", "getBlockNumber"]),
-  /** When the node answered, in ms since the epoch. */
-  at: z.number(),
-});
-
-const stateBlockReadSchema = z.object({
-  method: z.enum(["getBlock", "getBlockData"]),
-  height: z.number().int(),
-  /** When the node answered, in ms since the epoch. */
-  at: z.number(),
-});
+const stateReadSchema = z.union([
+  /** A read of the proposed tip. */
+  z.object({ method: z.enum(["getChainTips", "getBlockNumber"]) }),
+  /** A read of a block by its height. */
+  z.object({
+    method: z.enum(["getBlock", "getBlockData"]),
+    height: z.number().int(),
+  }),
+]);
 
 export const scriptStatusSchema = scriptFactsSchema.extend({
   current: z.number().int(),
   /** `getChainTips` and `getBlockNumber` calls served so far: the listener's polls. */
   tipReads: z.number().int(),
-  /** Each read of the proposed tip answered in the current state. */
-  stateTipReads: z.array(stateTipReadSchema),
-  /** Each read of a block by its height answered in the current state. */
-  stateBlockReads: z.array(stateBlockReadSchema),
+  /** The current state's reads, in the order the node answered them. */
+  stateReads: z.array(stateReadSchema),
 });
 
 export type ScriptStatus = z.infer<typeof scriptStatusSchema>;
-export type StateTipRead = z.infer<typeof stateTipReadSchema>;
-export type StateBlockRead = z.infer<typeof stateBlockReadSchema>;
+export type StateRead = z.infer<typeof stateReadSchema>;
 
 /**
  * Whether a pass of the listener has handled the shorter chain, tip `tip`, and
  * ended. Holding a longer chain, the SDK's block stream walks back from its
- * own tip and reads heights the node lacks; a tip read `pollMs` after that
- * walk is the next pass's. Tip reads alone show neither: an election probes
- * nodes it may not follow.
+ * own tip, reading heights the node lacks, then rereads the tips in the same
+ * pass; a walk after a tip read that follows a walk is the next pass's. Tip
+ * reads alone show neither: an election probes nodes it may not follow.
  */
-export const prefixHandled = (
-  {
-    stateBlockReads,
-    stateTipReads,
-  }: Pick<ScriptStatus, "stateBlockReads" | "stateTipReads">,
-  tip: number,
-  pollMs: number,
-) => {
-  const walked = stateBlockReads.filter((r) => r.height > tip).map((r) => r.at);
-  return (
-    walked.length > 0 &&
-    stateTipReads.some((r) => r.at - Math.min(...walked) >= pollMs)
-  );
+export const prefixHandled = (reads: StateRead[], tip: number) => {
+  const walks = (r: StateRead) => "height" in r && r.height > tip;
+  const first = reads.findIndex(walks);
+  const reread = reads.findIndex((r, i) => i > first && !("height" in r));
+  return first >= 0 && reread >= 0 && reads.slice(reread + 1).some(walks);
 };
 
 const stepSchema = z.object({ current: z.number().int(), label: z.string() });

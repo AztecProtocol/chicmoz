@@ -100,7 +100,7 @@ const apiHolds = (blocks: BlockId[], label: string) =>
 /** Whether a pass of the listener handles the current state by `deadline`. */
 const handledBy = async (tip: number, deadline: number) => {
   for (;;) {
-    if (prefixHandled(await control.status(), tip, endpoints.listenerPollMs)) {
+    if (prefixHandled((await control.status()).stateReads, tip)) {
       return true;
     }
     if (Date.now() >= deadline) {

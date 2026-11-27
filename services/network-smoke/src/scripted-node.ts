@@ -26,11 +26,7 @@ import {
   type BlockResponse,
   type BlocksIncludeOptions,
 } from "@aztec-labs/stdlib/interfaces/client";
-import {
-  type ScriptStatus,
-  type StateBlockRead,
-  type StateTipRead,
-} from "./script-control.js";
+import { type ScriptStatus, type StateRead } from "./script-control.js";
 import {
   type NodeState,
   type ScriptedBlock,
@@ -157,16 +153,15 @@ export const startScriptedNode = async ({
   const nodeInfo = recordedNodeInfo();
   let current = 0;
   let tipReads = 0;
-  let stateTipReads: StateTipRead[] = [];
-  let stateBlockReads: StateBlockRead[] = [];
+  let stateReads: StateRead[] = [];
   const state = () => states[current];
   const readBlock = (
-    method: StateBlockRead["method"],
+    method: Extract<StateRead, { height: number }>["method"],
     param: BlockParameter,
   ) => {
     const height = heightIn(param);
     if (height !== undefined) {
-      stateBlockReads.push({ method, height, at: Date.now() });
+      stateReads.push({ method, height });
     }
   };
 
@@ -174,7 +169,7 @@ export const startScriptedNode = async ({
     getNodeInfo: () => Promise.resolve(nodeInfo),
     getChainTips: (): Promise<L2Tips> => {
       tipReads++;
-      stateTipReads.push({ method: "getChainTips", at: Date.now() });
+      stateReads.push({ method: "getChainTips" });
       const s = state();
       const proposed = s.chain.length - 1;
       return Promise.resolve({
@@ -191,7 +186,7 @@ export const startScriptedNode = async ({
       const tier = tag ?? "proposed";
       tipReads++;
       if (tier === "proposed") {
-        stateTipReads.push({ method: "getBlockNumber", at: Date.now() });
+        stateReads.push({ method: "getBlockNumber" });
       }
       return Promise.resolve(BlockNumber(heightAt(state(), tier)));
     },
@@ -250,8 +245,7 @@ export const startScriptedNode = async ({
     ...facts,
     current,
     tipReads,
-    stateTipReads,
-    stateBlockReads,
+    stateReads,
   });
   const control = createServer((req, res) => {
     const reply = (code: number, body: unknown) => {
@@ -266,8 +260,7 @@ export const startScriptedNode = async ({
         return;
       }
       current++;
-      stateTipReads = [];
-      stateBlockReads = [];
+      stateReads = [];
       const s = state();
       log(
         `state ${current} ${s.label}: proposed ${s.chain.length - 1} ${s.chain.at(-1)?.hash}, checkpointed ${s.checkpointed}, proven ${s.proven}, finalized ${s.finalized}`,
