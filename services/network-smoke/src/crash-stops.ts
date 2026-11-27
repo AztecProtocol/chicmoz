@@ -144,7 +144,6 @@ const blockRecordSchema = z.object({
   }),
 });
 
-/** A block record, as a scenario compares two copies of one. */
 const blockRecord = async (
   { offset, key, value }: { offset: number; key?: Buffer; value?: Buffer },
   sentBeforeKill: boolean,

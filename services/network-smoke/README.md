@@ -64,7 +64,7 @@ Then the script prunes twice more, each time with the replacing block there at o
 
 A listener without the block stream's store misses the first stop, and one that never sends a prune's replacing block misses the second; either way the scenario fails.
 
-Before each prune the test waits until the API holds the blocks it removes, with the moved tx's effect (and in the first, its contract) on its dead block, so neither can pass as a first insert. The reorgs it expects are the script's, one per prune played so far, never a list read from the API, which would take in a record the API added between two scenarios. After every prune, the broker must hold every block record in one of the topic's 3 partitions: steps 2 s apart reach the API in order from any partition, so only the broker shows whether the records share one. Their order within it is not read.
+Before each prune the test waits until the API holds the blocks it removes, with the moved tx's effect (and in the first, its contract) on its dead block, so neither can pass as a first insert. The reorgs it expects are the script's, one per prune played so far, never a list read from the API, which would take in a record the API added between two scenarios. After the last prune, the broker must hold every block record in one of the topic's 3 partitions: steps 2 s apart reach the API in order from any partition, so only the broker shows whether the records share one. Their order within it is not read.
 
 `logs/scripted-node.log` has each state change and every block lookup with the state it was answered in.
 

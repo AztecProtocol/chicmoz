@@ -26,7 +26,7 @@ type Mark = {
   end: number;
 };
 
-/** Offsets and consumer groups on the run's broker, read through the admin API only. */
+/** Offsets and consumer groups on the run's broker, read through the admin API, and a partition's records (`recordsOf`), read by a consumer of a group of its own. */
 export const brokerReads = ({
   brokers,
   username,

@@ -261,7 +261,6 @@ const wantAfter = (
 const contractBlock = ({ prunes: [first] }: ScriptStatus) =>
   first.final[first.movedTx.finalHeight - 1];
 
-/** Checks a prune's settled state against `wantAfter`'s; `names` name the checks. */
 const itServesTheScript = (
   read: () => { seen: Snapshot; want: Partial<Snapshot> },
   names: { chain: string; reorgs: string; tx: string },
@@ -665,7 +664,7 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
   });
 });
 
-describe("the block topic, after every prune", () => {
+describe("the block topic, after the last prune", () => {
   // Spaced steps reach the API in order from any partition, so the scenarios
   // cannot show where the block records went; the broker can.
   it("holds every block record in one of its partitions", async () => {
