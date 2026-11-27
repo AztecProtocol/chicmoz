@@ -168,9 +168,30 @@ export type BlockContracts = {
   instancesUpdated: ChicmozL2ContractInstanceUpdatedEvent[];
 };
 
+const RETRYABLE_CLASSES = new Set(["08", "40", "53", "57"]);
+
+/**
+ * Whether a rerun of the block can clear `e`: SQLSTATE classes 08
+ * (connection), 40 (serialization failure, deadlock), 53 (insufficient
+ * resources) and 57 (operator intervention), and 55P03 (lock timeout).
+ */
+const retryable = (e: unknown): boolean => {
+  // drizzle-orm 0.44 and later wrap pg's error, keeping it as `cause`.
+  const { code, cause } = (e ?? {}) as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  };
+  const state = code ?? cause?.code;
+  return (
+    typeof state === "string" &&
+    (RETRYABLE_CLASSES.has(state.slice(0, 2)) || state === "55P03")
+  );
+};
+
 /**
  * Stores a canonical block's contract rows, each in a savepoint: a row that
- * fails is logged and skipped, and a failed heartbeat aborts the block.
+ * fails on its own data is logged and skipped, while a failed heartbeat or an
+ * error a retry can cure aborts the block.
  */
 export const storeBlockContracts = async (
   dbTx: DbTx,
@@ -191,6 +212,9 @@ export const storeBlockContracts = async (
           );
         }
       } catch (e) {
+        if (retryable(e)) {
+          throw e;
+        }
         logger.error(
           `Failed to store ${label(row)}: ${(e as Error).stack ?? String(e)}`,
         );
