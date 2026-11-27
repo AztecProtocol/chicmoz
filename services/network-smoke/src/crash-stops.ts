@@ -28,6 +28,17 @@ const RECOVERY_WAIT_MS = 120_000;
 const LISTENER_WRITE = /^insert into "l2_block_stream_hash"/i;
 const API_WRITE = /^insert into "l2_rollup_version_observation"/i;
 
+// The API's handlers, besides the block handler, whose records reach that
+// upsert (`observeRollupVersion`): catch-up blocks, after their commit; chain
+// info and staking-asset info, through `storeChainInfo`; node info with a
+// rollup version, through `storeL2RpcNode`.
+const OTHER_API_WRITERS = [
+  "catchupHandler",
+  "chainInfoHandler",
+  "stakingAssetInfoHandler",
+  "l2RpcNodeInfoHandler",
+];
+
 /** The waiting write a stop caught, as `pg_stat_activity` showed it. */
 export type CaughtWrite = { database: string; statement: string };
 
@@ -338,7 +349,7 @@ export type HeldUp = {
   waiting: CaughtWrite;
   /** The API's upserts the lock held up. */
   writesWaiting: number;
-  /** The API's other groups that had not committed a record. */
+  /** The groups of the row's other writers that had not committed a record. */
   othersBehind: string[];
 };
 
@@ -413,12 +424,14 @@ export const apiStop = ({
       ),
     );
   /**
-   * The API's chain-info and node-info handlers upsert the row too, each
-   * holding a record its group cannot commit while the row is locked, and a
+   * The row's other writers (`OTHER_API_WRITERS`) each upsert it while their
+   * group holds a record it cannot commit until the row is unlocked, and a
    * group handles one record at a time: more upserts held up, on the lock or
-   * queued behind one another, than other groups behind means one is the
-   * block handler's. Waiters are read before the groups, so none of them is
-   * missed.
+   * queued behind one another, than those groups behind means one is the
+   * block handler's. They are counted by id, so neither the block group,
+   * whose member expires while its handler waits, nor an unrelated group
+   * still rejoining raises the count. Waiters are read before the groups, so
+   * none of them is missed.
    */
   const blockHandlerHeldUp = async (
     lock: RowLock,
@@ -430,7 +443,9 @@ export const apiStop = ({
       if (held.length === 0) {
         return undefined;
       }
-      othersBehind = await broker.apiGroupsBehind(blockTopic);
+      othersBehind = await broker.groupsBehind(
+        OTHER_API_WRITERS.map((handler) => apiGroupPrefix + handler),
+      );
       return held.length > othersBehind.length ? held : undefined;
     }, timeoutMs);
     return {

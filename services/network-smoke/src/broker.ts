@@ -26,6 +26,31 @@ type Mark = {
   end: number;
 };
 
+/** A consumer group, and each partition of the topics it has committed on or is assigned: the offset it committed there (-1 for none), and the partition's low and end offsets. */
+export type GroupOffsets = {
+  groupId: string;
+  state: string;
+  partitions: { committed: number; low: number; end: number }[];
+};
+
+/**
+ * The groups that have not committed a record published before the read,
+ * which their handler may still hold. Committed offsets outlive a group's
+ * members, so a group whose member expired is judged as any other. One with
+ * no partition to judge counts, unless it is stable or does not exist.
+ */
+export const lateGroups = (groups: GroupOffsets[]) =>
+  groups
+    .filter(({ state, partitions }) =>
+      partitions.length === 0
+        ? state !== "Stable" && state !== "Dead"
+        : partitions.some(
+            ({ committed, low, end }) =>
+              (committed < 0 ? low : committed) < end,
+          ),
+    )
+    .map((g) => g.groupId);
+
 /** Offsets and consumer groups on the run's broker, read through the admin API, and a partition's records (`recordsOf`), read by a consumer of a group of its own. */
 export const brokerReads = ({
   brokers,
@@ -145,18 +170,39 @@ export const brokerReads = ({
       }
       return committed;
     },
-    /**
-     * The API's groups not assigned `topic` that have not committed a record
-     * published before the call, which they may still be handling; a group
-     * without a stable assignment counts as one of them.
-     */
-    apiGroupsBehind: async (topic: string) => {
-      const { marks, unsettled } = await apiMarks();
-      const onTopic = new Set(
-        marks.filter((m) => m.topic === topic).map((m) => m.group),
-      );
-      const late = await behind(marks.filter((m) => !onTopic.has(m.group)));
-      return [...new Set(late.map((m) => m.group)), ...unsettled];
+    /** The late ones (`lateGroups`) of `groupIds`, whatever their state. */
+    groupsBehind: async (groupIds: string[]) => {
+      await ready();
+      const { groups } = await admin.describeGroups(groupIds);
+      const judged: GroupOffsets[] = [];
+      for (const { groupId, state, members } of groups) {
+        // Without a topic list: every topic the group has committed on.
+        const committed = await admin.fetchOffsets({ groupId });
+        const topics = new Set([
+          ...committed.map((t) => t.topic),
+          ...members.flatMap((m) =>
+            Object.keys(
+              AssignerProtocol.MemberAssignment.decode(m.memberAssignment)
+                ?.assignment ?? {},
+            ),
+          ),
+        ]);
+        const partitions: GroupOffsets["partitions"] = [];
+        for (const topic of topics) {
+          const own = committed.find((t) => t.topic === topic)?.partitions;
+          for (const { partition, low, high } of await ends(topic)) {
+            partitions.push({
+              committed: Number(
+                own?.find((p) => p.partition === partition)?.offset ?? -1,
+              ),
+              low,
+              end: high,
+            });
+          }
+        }
+        judged.push({ groupId, state, partitions });
+      }
+      return lateGroups(judged);
     },
     /**
      * The records of one partition of `topic` from offset `from` up to `to`,
