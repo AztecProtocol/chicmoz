@@ -35,18 +35,27 @@ const failFirstSavepoint = (error: Error) => {
 };
 
 describe("a contract row whose savepoint fails", () => {
-  it("aborts the block on a lock timeout, so the bus redelivers it", async () => {
-    const lockTimeout = pgError(
-      "55P03",
-      "canceling statement due to lock timeout",
-    );
-    const { transaction, dbTx } = failFirstSavepoint(lockTimeout);
+  it.each([
+    { shape: "as pg throws it", wrap: (e: Error) => e },
+    {
+      shape: "wrapped as a query error's cause",
+      wrap: (e: Error) =>
+        Object.assign(new Error("Failed query"), { cause: e }),
+    },
+  ])(
+    "aborts the block on a lock timeout $shape, so the bus redelivers it",
+    async ({ wrap }) => {
+      const lockTimeout = wrap(
+        pgError("55P03", "canceling statement due to lock timeout"),
+      );
+      const { transaction, dbTx } = failFirstSavepoint(lockTimeout);
 
-    await expect(
-      storeBlockContracts(dbTx, contracts, () => Promise.resolve()),
-    ).rejects.toBe(lockTimeout);
-    expect(transaction).toHaveBeenCalledTimes(1);
-  });
+      await expect(
+        storeBlockContracts(dbTx, contracts, () => Promise.resolve()),
+      ).rejects.toBe(lockTimeout);
+      expect(transaction).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("skips a row that fails on its own data and stores the next", async () => {
     const { transaction, dbTx } = failFirstSavepoint(
