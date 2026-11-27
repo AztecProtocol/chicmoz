@@ -15,7 +15,6 @@ import {
   type ReorgRecord,
   byRoot,
   explorerReads,
-  plusReorg,
   served,
   settle,
 } from "./explorer-reads.js";
@@ -228,16 +227,23 @@ const reorgOf = (prune: PruneFacts): ReorgRecord => ({
   orphanedBlockHash: prune.dead[0].hash.toLowerCase(),
 });
 
-/** What the API must serve once a prune has settled, read from height `from`, with the contract on `contractOn` if given. */
+/**
+ * What the API must serve once `prune` has settled, read from height `from`,
+ * with the contract on `contractOn` if given: one reorg per prune the script
+ * has played by then, never a list read from the API, which would take in a
+ * record the API added in between.
+ */
 const wantAfter = (
+  script: ScriptStatus,
   prune: PruneFacts,
   from: number,
-  reorgs: ReorgRecord[],
   contractOn?: BlockId,
 ): Partial<Snapshot> => ({
   latestHeight: prune.final.length,
   canonical: expectedFrom(prune, from),
-  reorgs,
+  reorgs: byRoot(
+    script.prunes.filter((p) => p.endAt <= prune.endAt).map(reorgOf),
+  ),
   dropped: { status: 404 },
   txEffect: movedTxBlock(prune, prune.movedTx.finalHeight),
   ...(contractOn
@@ -346,7 +352,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
       );
       checkerBefore = await compareChain("sample");
     });
-    want = wantAfter(prune, 1, [reorgOf(prune)], contractBlock(script));
+    want = wantAfter(script, prune, 1, contractBlock(script));
     seen = await settled(
       () => snapshot(prune, 1, script.contractAddress),
       want,
@@ -410,24 +416,20 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
 });
 
 describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', before 13''-16'", () => {
+  let script: ScriptStatus;
   let prune: PruneFacts;
-  let baseline: ReorgRecord[];
   let short: ShortHold<ApiView> | undefined;
   let published: { block: number; tips: number } | undefined;
   let want: Partial<Snapshot>;
   let seen: Snapshot;
 
   beforeAll(async () => {
-    prune = (await control.status()).prunes[1];
-    short = await stepPrune(prune, async () => {
-      await apiHoldsDead(prune, "blocks 13'-16' before the prune");
-      baseline = await api.reorgList();
-    });
-    want = wantAfter(
-      prune,
-      prune.dead[0].height,
-      plusReorg(baseline, reorgOf(prune)),
+    script = await control.status();
+    prune = script.prunes[1];
+    short = await stepPrune(prune, () =>
+      apiHoldsDead(prune, "blocks 13'-16' before the prune"),
     );
+    want = wantAfter(script, prune, prune.dead[0].height);
     process.stdout.write(
       `while the node served the shorter chain:\n${JSON.stringify(short, null, 2)}\n`,
     );
@@ -467,7 +469,8 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
   itServesTheScript(() => ({ seen, want }), {
     chain:
       "serves the node's chain above 12' as canonical, and nothing above it",
-    reorgs: "adds one reorg to those before it: the 4 blocks from height 13",
+    reorgs:
+      "lists two reorgs: the first prune's, and the 4 blocks from height 13",
     tx: "keeps the moved tx mined, not dropped, on the replacing block",
   });
 });
@@ -476,7 +479,6 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
   let script: ScriptStatus;
   let prune: PruneFacts;
   let replacing: BlockId;
-  let baseline: ReorgRecord[];
   let stop: ReturnType<typeof listenerStop>;
   let want: Partial<Snapshot>;
   let seen: Snapshot;
@@ -496,7 +498,6 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
       prune,
       async () => {
         await apiHoldsDead(prune, "blocks 17''-18'' before the prune");
-        baseline = await api.reorgList();
         await stop.arm(prune.dead);
       },
       () => stop.fire(replacing),
@@ -504,14 +505,9 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
     process.stdout.write(
       `the listener's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
     );
-    want = wantAfter(
-      prune,
-      prune.dead[0].height,
-      plusReorg(baseline, reorgOf(prune)),
-      contractBlock(script),
-    );
+    want = wantAfter(script, prune, 1, contractBlock(script));
     seen = await settled(
-      () => snapshot(prune, prune.dead[0].height, script.contractAddress),
+      () => snapshot(prune, 1, script.contractAddress),
       want,
       "the API after the listener's restart",
     );
@@ -567,8 +563,9 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
 
   itServesTheScript(() => ({ seen, want }), {
     chain:
-      "serves the node's chain above 16'' as canonical, and nothing above it",
-    reorgs: "adds one reorg to those before it: the 2 blocks from height 17",
+      "serves the node's chain from height 1 as canonical, and nothing above it",
+    reorgs:
+      "lists three reorgs: the earlier prunes', and the 2 blocks from height 17",
     tx: "keeps the moved tx mined, not dropped, on the replacing block, and the contract on 7'",
   });
 });
@@ -576,7 +573,6 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
 describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed between committing 20'''' and committing its offset", () => {
   let script: ScriptStatus;
   let prune: PruneFacts;
-  let baseline: ReorgRecord[];
   let stop: ReturnType<typeof apiStop>;
   let want: Partial<Snapshot>;
   let seen: Snapshot;
@@ -596,7 +592,6 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
       prune,
       async () => {
         await apiHoldsDead(prune, "blocks 20'''-21''' before the prune");
-        baseline = await api.reorgList();
         await stop.arm();
       },
       () => stop.fire(prune.final[prune.dead[0].height - 1], prune.dead),
@@ -604,14 +599,9 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
     process.stdout.write(
       `the API's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
     );
-    want = wantAfter(
-      prune,
-      prune.dead[0].height,
-      plusReorg(baseline, reorgOf(prune)),
-      contractBlock(script),
-    );
+    want = wantAfter(script, prune, 1, contractBlock(script));
     seen = await settled(
-      () => snapshot(prune, prune.dead[0].height, script.contractAddress),
+      () => snapshot(prune, 1, script.contractAddress),
       want,
       "the API after its restart",
     );
@@ -666,9 +656,9 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
   // bring back, and no record to write again.
   itServesTheScript(() => ({ seen, want }), {
     chain:
-      "serves the node's chain above 19''' as canonical, and nothing above it",
+      "serves the node's chain from height 1 as canonical, and nothing above it",
     reorgs:
-      "adds one reorg to those before it, the 2 blocks from height 20, and none from the replay",
+      "lists four reorgs, the earlier prunes' and the 2 blocks from height 20: none from the replay",
     tx: "keeps the moved tx mined, not dropped, on the replacing block, and the contract on 7'",
   });
 });
