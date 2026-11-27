@@ -55,7 +55,8 @@ vi.stubEnv("VITE_API_KEY", "dev-api-key");
 const { BlockDetailPage } = await import("./index");
 const { formatFees } = await import("~/lib/utils");
 
-// The tx rows, as [tx hash, fee].
+// The tx rows, as [tx hash, index, fee], and whether the page notes where a
+// tx mined again is listed.
 const render = ({
   body,
   orphaned,
@@ -95,28 +96,37 @@ const render = ({
     timestamp: 1_700_000_000_000,
   }));
   const html = renderToStaticMarkup(<BlockDetailPage />);
-  return [
-    ...html.matchAll(
-      /href="\/tx-effects\/([^"]+)">.*?<span class="num">(.*?)<span/g,
-    ),
-  ].map(([, txHash, fee]) => [txHash, fee]);
+  return {
+    rows: [
+      ...html.matchAll(
+        /href="\/tx-effects\/([^"]+)">.*?<span class="idx">(.*?)<\/span><span class="num">(.*?)<span/g,
+      ),
+    ].map(([, txHash, index, fee]) => [txHash, index, fee]),
+    note: html.includes("a later block also mined"),
+  };
 };
 
 describe("BlockDetailPage", () => {
-  it("lists an orphaned block's own txs, not those of the block its height now names", () => {
+  it("lists an orphaned block's own txs with no index or fee, and notes where a tx mined again is listed", () => {
     expect(
       render({
-        body: [TX_A],
+        body: [TX_A, TX_B],
         orphaned: true,
         heightRead: [
           [TX_B, ONE],
           [TX_C, TWO],
         ],
       }),
-    ).toEqual([[TX_A, "—"]]);
+    ).toEqual({
+      rows: [
+        [TX_A, "—", "—"],
+        [TX_B, "—", "—"],
+      ],
+      note: true,
+    });
   });
 
-  it("lists a block's txs in its order, each with its own fee", () => {
+  it("lists a block's txs in its order, each with its index and its own fee", () => {
     expect(
       render({
         body: [TX_B, TX_C],
@@ -126,9 +136,12 @@ describe("BlockDetailPage", () => {
           [TX_B, ONE],
         ],
       }),
-    ).toEqual([
-      [TX_B, formatFees(ONE)],
-      [TX_C, formatFees(TWO)],
-    ]);
+    ).toEqual({
+      rows: [
+        [TX_B, "0", formatFees(ONE)],
+        [TX_C, "1", formatFees(TWO)],
+      ],
+      note: false,
+    });
   });
 });

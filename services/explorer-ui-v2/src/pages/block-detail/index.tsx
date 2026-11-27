@@ -91,9 +91,11 @@ export const BlockDetailPage: FC = () => {
   const totalFees = formatFees(block.header.totalFees, feeJuiceDecimals);
   const totalManaUsed = block.header.totalManaUsed?.toString?.() ?? "0";
   const txCount = block.body.txEffects.length;
-  // The height read lists the canonical block's txs, which for an orphaned
-  // block are its replacement's: the body says which txs this block holds,
-  // and the read only adds their fees.
+  // The body says which txs this block holds; the height read, the canonical
+  // block's, only adds their fees. A tx's effect moves to the block that
+  // mines it again, so an orphaned body keeps only the rest: its positions
+  // are not their indexes, and a fee by hash can be the later block's.
+  const orphaned = !!block.orphan;
   const feeByTxHash = new Map(txs?.map((t) => [t.txHash, t.transactionFee]));
   const l1Anchor = block.proposedOnL1 ?? block.proofVerifiedOnL1;
   const blockRollupVersion = BigInt(block.header.globalVariables.version);
@@ -392,8 +394,13 @@ export const BlockDetailPage: FC = () => {
               <div style={{ textAlign: "right" }}>Idx</div>
               <div style={{ textAlign: "right" }}>Fee ({feeJuiceSymbol})</div>
             </div>
+            {orphaned && (
+              <div className="block-tx-note">
+                a tx that a later block also mined is listed under that block
+              </div>
+            )}
             {block.body.txEffects.map(({ txHash }, i) => {
-              const fee = feeByTxHash.get(txHash);
+              const fee = orphaned ? undefined : feeByTxHash.get(txHash);
               return (
                 <Link
                   key={txHash}
@@ -402,7 +409,7 @@ export const BlockDetailPage: FC = () => {
                   params={{ hash: txHash }}
                 >
                   <HashCell value={txHash} />
-                  <span className="idx">{i}</span>
+                  <span className="idx">{orphaned ? "—" : i}</span>
                   <span className="num">
                     {fee === undefined
                       ? "—"
