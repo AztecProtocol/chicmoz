@@ -517,6 +517,7 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
     const { missed, waiting, atKill } = stop.result;
     expect.soft(missed, "why nothing was killed").toBeUndefined();
     expect.soft(waiting, "the write that waited").toEqual({
+      application: "aztec-listener",
       database: databases.listener,
       statement: 'insert into "l2_block_stream_hash"',
     });
@@ -613,6 +614,7 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
     const [sent] = atKill?.sent ?? [];
     expect.soft(missed, "why nothing was killed").toBeUndefined();
     expect.soft(held?.waiting, "the write held up").toEqual({
+      application: "explorer-api",
       database: databases.api,
       statement: 'insert into "l2_rollup_version_observation"',
     });
@@ -642,6 +644,7 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
     );
     expect.soft(replayMissed, "why no replay was seen").toBeUndefined();
     expect.soft(replay?.waiting, "the restarted API's write held up").toEqual({
+      application: "explorer-api",
       database: databases.api,
       statement: 'insert into "l2_rollup_version_observation"',
     });

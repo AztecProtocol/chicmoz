@@ -23,6 +23,11 @@ const STOP_WAIT_MS = 15_000;
 // member's 30 s session has run out, and the listener polls only after that.
 const RECOVERY_WAIT_MS = 120_000;
 
+// The services the scenarios kill, by the names the runner and their
+// Postgres sessions go by.
+const LISTENER = "aztec-listener";
+const API = "explorer-api";
+
 // What the listener's store and the API's post-commit step send for the row
 // each scenario locks; Drizzle writes them as upserts.
 const LISTENER_WRITE = /^insert into "l2_block_stream_hash"/i;
@@ -40,7 +45,11 @@ const OTHER_API_WRITERS = [
 ];
 
 /** The waiting write a stop caught, as `pg_stat_activity` showed it. */
-export type CaughtWrite = { database: string; statement: string };
+export type CaughtWrite = {
+  application: string;
+  database: string;
+  statement: string;
+};
 
 /** Offsets `[from, to)` of one partition. */
 export type OffsetRange = { partition: number; from: number; to: number };
@@ -85,16 +94,21 @@ const until = async <T>(
   return value;
 };
 
-/** The sessions of `database` whose `write` waits on `lock`. */
-const writesWaiting = async (lock: RowLock, database: string, write: RegExp) =>
+/** The sessions of service `name` whose `write` waits on `lock`. */
+const writesWaiting = async (lock: RowLock, name: string, write: RegExp) =>
   (await lock.waiters()).filter(
     (w) =>
-      w.database === database &&
+      w.application === name &&
       w.waitEventType === "Lock" &&
       write.test(w.query),
   );
 
-const caughtWrite = ({ database, query }: Waiter): CaughtWrite => ({
+const caughtWrite = ({
+  application,
+  database,
+  query,
+}: Waiter): CaughtWrite => ({
+  application,
   database,
   statement: query.split("(")[0].trim(),
 });
@@ -108,38 +122,19 @@ const missedStop = async (
   `the lock held up no write of the ${writer} within ${withinMs / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
 
 /**
- * Kills `name` and ends every session of `database` that `lock` holds up:
- * a session waiting on a lock never sees its client go, and an autocommit
- * write queued there would commit once the lock is released.
+ * Kills service `name`, then ends every Postgres session it opened, by the
+ * name the run gives them: a session never sees its client go, and a
+ * statement it had sent, waiting on the lock or not yet, would run once the
+ * lock is released, and an autocommit one would commit.
  */
-const killWaiting = async (
-  lock: RowLock,
-  database: string,
-  services: Services,
-  name: string,
-) => {
+const killService = async (lock: RowLock, services: Services, name: string) => {
   await services.kill(name);
-  const ofService = async () =>
-    (await lock.waiters()).filter((w) => w.database === database);
-  for (const w of await ofService()) {
-    await lock.terminate(w.pid);
-  }
-  const left = await ofService();
-  if (left.length > 0) {
-    throw new Error(
-      `${name}'s sessions still wait on the lock after the kill: ${JSON.stringify(left)}`,
-    );
-  }
+  await lock.endSessions(name);
 };
 
-/** `killWaiting`, then releases `lock` and starts `name` again. Resolves with when it started. */
-const crash = async (
-  lock: RowLock,
-  database: string,
-  services: Services,
-  name: string,
-) => {
-  await killWaiting(lock, database, services, name);
+/** `killService`, then releases `lock` and starts `name` again. Resolves with when it started. */
+const crash = async (lock: RowLock, services: Services, name: string) => {
+  await killService(lock, services, name);
   await lock.release();
   const restartedAt = Date.now();
   await services.start(name);
@@ -266,7 +261,7 @@ export const listenerStop = ({
       const { lock, before, first } = armed;
       try {
         const waiting = await poll(async () => {
-          const [write] = await writesWaiting(lock, database, LISTENER_WRITE);
+          const [write] = await writesWaiting(lock, LISTENER, LISTENER_WRITE);
           return write;
         }, STOP_WAIT_MS);
         if (waiting === undefined) {
@@ -297,12 +292,7 @@ export const listenerStop = ({
           result.missed = `the state at the stop is not ${JSON.stringify(expected)}`;
           return;
         }
-        const restartedAt = await crash(
-          lock,
-          database,
-          services,
-          "aztec-listener",
-        );
+        const restartedAt = await crash(lock, services, LISTENER);
         await until(
           async () =>
             (await store(replacing.height)).hash ===
@@ -456,7 +446,7 @@ export const apiStop = ({
   ): Promise<{ held?: HeldUp; othersBehind: string[] }> => {
     let othersBehind: string[] = [];
     const writes = await poll(async () => {
-      const held = await writesWaiting(lock, database, API_WRITE);
+      const held = await writesWaiting(lock, API, API_WRITE);
       if (held.length === 0) {
         return undefined;
       }
@@ -522,9 +512,9 @@ export const apiStop = ({
             "the state at the stop is not one record sent, committed in the database, and the block group alone before it";
           return;
         }
-        await killWaiting(lock, database, services, "explorer-api");
+        await killService(lock, services, API);
         const restartedAt = Date.now();
-        await services.start("explorer-api");
+        await services.start(API);
         const replayed = await blockHandlerHeldUp(lock, RECOVERY_WAIT_MS);
         if (replayed.held === undefined) {
           result.replayMissed = await missedStop(

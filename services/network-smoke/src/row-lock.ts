@@ -10,6 +10,8 @@ export type PgAccess = {
 /** A session's statement that waits on a lock: one another session holds, or one queued behind such a waiter. */
 export type Waiter = {
   pid: number;
+  /** Its `application_name`: the run gives each service's sessions the service's name. */
+  application: string;
   database: string;
   waitEventType: string | null;
   query: string;
@@ -98,38 +100,52 @@ export const lockRows = async (
   const waiters = async (): Promise<Waiter[]> => {
     const { rows } = await watcher.query<{
       pid: number;
+      application_name: string;
       datname: string;
       wait_event_type: string | null;
       query: string;
       blockers: number[];
     }>(
-      "SELECT pid, datname, wait_event_type, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE wait_event_type = 'Lock'",
+      "SELECT pid, application_name, datname, wait_event_type, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE wait_event_type = 'Lock'",
     );
     const chain = blockedBy(pid, rows);
     return rows
       .filter((r) => chain.has(r.pid))
       .map((r) => ({
         pid: r.pid,
+        application: r.application_name,
         database: r.datname,
         waitEventType: r.wait_event_type,
         query: r.query,
       }));
   };
 
+  const sessionsOf = async (application: string) =>
+    (
+      await watcher.query<{ pid: number }>(
+        "SELECT pid FROM pg_stat_activity WHERE application_name = $1",
+        [application],
+      )
+    ).rows.map((r) => r.pid);
+
   let released = false;
   return {
     waiters,
     /**
-     * Ends another session, so its open transaction rolls back and its
-     * waiting statement never runs; resolves once that session is gone.
+     * Ends every session named `application`, whatever it is doing, so its
+     * open transaction rolls back and no statement it sent runs once the
+     * lock goes; throws if one is left once each had 5 s to end.
      */
-    terminate: async (other: number) => {
-      const { rows } = await watcher.query<{ ended: boolean }>(
-        "SELECT pg_terminate_backend($1, 5000) AS ended",
-        [other],
-      );
-      if (!rows[0]?.ended) {
-        throw new Error(`session ${other} did not end`);
+    endSessions: async (application: string) => {
+      for (const other of await sessionsOf(application)) {
+        // False, with a warning, for one that ended on its own meanwhile.
+        await watcher.query("SELECT pg_terminate_backend($1, 5000)", [other]);
+      }
+      const left = await sessionsOf(application);
+      if (left.length > 0) {
+        throw new Error(
+          `sessions of ${application} outlived their termination: ${left.join(", ")}`,
+        );
       }
     },
     /** Ends the lock's sessions; a second call does nothing. */

@@ -164,6 +164,9 @@ export const startServices = (
         ...env[name](),
         ...extraEnv[name],
         ...(svc.database ? { POSTGRES_DB_NAME: svc.database } : {}),
+        // `pg` names each session it opens after it (`application_name`), so
+        // a crash scenario can end every session of the service it kills.
+        PGAPPNAME: name,
       },
     });
   };
