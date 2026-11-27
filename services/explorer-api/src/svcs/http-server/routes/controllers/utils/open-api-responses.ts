@@ -245,10 +245,13 @@ export const l1L2ValidatorHistoryResponse = getResponse(
   "l1L2ValidatorHistory",
 );
 
-// Clean BigInt fields in Reorg schema
-const cleanedReorgSchema = chicmozReorgSchema.extend({
-  height: z.string(), // Convert height from BigInt to string
-});
+// Clean BigInt fields in Reorg schema. `.extend()` returns a schema without
+// the record's description, so it is carried over.
+const cleanedReorgSchema = chicmozReorgSchema
+  .extend({
+    height: z.string(), // Convert height from BigInt to string
+  })
+  .meta(chicmozReorgSchema.meta() ?? {});
 export const reorgResponse = getResponse(cleanedReorgSchema, "reorg");
 export const reorgResponseArray = getResponse(
   z.array(cleanedReorgSchema),
