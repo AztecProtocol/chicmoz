@@ -2,9 +2,8 @@ CREATE TABLE IF NOT EXISTS "l2_reorg" (
 	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
 	"l2_network_id" varchar NOT NULL,
 	"rollup_version" bigint NOT NULL,
-	"root_height" bigint NOT NULL,
-	"root_hash" varchar NOT NULL,
-	"removed_count" integer NOT NULL,
+	"cause_hash" varchar NOT NULL,
+	"cause_kind" varchar NOT NULL,
 	"observed_at" timestamp NOT NULL,
 	"revived_at" timestamp
 );--> statement-breakpoint

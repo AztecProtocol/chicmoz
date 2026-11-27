@@ -299,6 +299,9 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.recordsOf(version)).toEqual([
       { active: true, blocks: [a[1], a[2], a[3], above].map((b) => b.hash) },
     ]);
+    expect(await reads.causesOf(version)).toEqual([
+      { hash: b1.hash, kind: "ordered" },
+    ]);
     expect(
       await Promise.all([a[1], a[2], above].map((b) => reads.stateOf(b.hash))),
     ).toEqual([
@@ -454,6 +457,9 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.chainOf(version)).toEqual(heads([a0, b2, b3]));
     expect(await reads.recordsOf(version)).toEqual([
       { active: true, blocks: [a1.hash] },
+    ]);
+    expect(await reads.causesOf(version)).toEqual([
+      { hash: b2.hash, kind: "catchup" },
     ]);
     expect(await reads.repairOpen(17_001)).toBe(true);
   });

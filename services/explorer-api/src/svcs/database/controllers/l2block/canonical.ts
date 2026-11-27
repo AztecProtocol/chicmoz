@@ -6,7 +6,11 @@ import { alias } from "drizzle-orm/pg-core";
 import { L2_NETWORK_ID } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { droppedTx } from "../../schema/dropped-tx/index.js";
-import { l2ReorgBlockTable, l2ReorgTable } from "../../schema/l2/reorg.js";
+import {
+  type ReorgCauseKind,
+  l2ReorgBlockTable,
+  l2ReorgTable,
+} from "../../schema/l2/reorg.js";
 import {
   archive,
   body,
@@ -83,6 +87,8 @@ type Change = {
   dbTx: DbTx;
   version: number;
   now: number;
+  /** The incoming block this change applies: its reorg record names it. */
+  cause: { hash: HexString; kind: ReorgCauseKind };
   heartbeat: Heartbeat;
   steps: number;
   demoted: Map<HexString, bigint>;
@@ -562,15 +568,13 @@ const recordReorg = async (change: Change) => {
           ? -1
           : 1,
     );
-  const [root] = blocks;
   const [record] = await change.dbTx
     .insert(l2ReorgTable)
     .values({
       l2NetworkId: L2_NETWORK_ID,
       rollupVersion: change.version,
-      rootHeight: root.height,
-      rootHash: root.hash,
-      removedCount: blocks.length,
+      causeHash: change.cause.hash,
+      causeKind: change.cause.kind,
       observedAt: new Date(change.now),
     })
     .returning({ id: l2ReorgTable.id });
@@ -579,8 +583,9 @@ const recordReorg = async (change: Change) => {
       .insert(l2ReorgBlockTable)
       .values(part.map((b) => ({ reorgId: record.id, ...b })));
   });
+  const [lowest] = blocks;
   logger.warn(
-    `L2 reorg at height ${root.height}: ${blocks.length} block(s) left the chain, the lowest ${root.hash}`,
+    `L2 reorg at height ${lowest.height}: ${blocks.length} block(s) left the chain, the lowest ${lowest.hash}, applying ${change.cause.kind} block ${change.cause.hash}`,
   );
 };
 
@@ -761,6 +766,7 @@ const apply = async (
         dbTx,
         version: block.header.globalVariables.version,
         now: Date.now(),
+        cause: { hash: block.hash, kind: ordered ? "ordered" : "catchup" },
         heartbeat,
         steps: 0,
         demoted: new Map(),

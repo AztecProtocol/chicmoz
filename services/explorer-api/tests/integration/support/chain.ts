@@ -131,6 +131,14 @@ export const loadChainReads = async () => {
     return [...records.values()];
   };
 
+  /** The block that wrote each reorg record of a rollup version, oldest first. */
+  const causesOf = (version: number) =>
+    db
+      .select({ hash: l2ReorgTable.causeHash, kind: l2ReorgTable.causeKind })
+      .from(l2ReorgTable)
+      .where(eq(l2ReorgTable.rollupVersion, version))
+      .orderBy(asc(l2ReorgTable.id));
+
   /** The `/l2/reorgs` entries that show one of `blocks`. */
   const listed = async (blocks: BuiltBlock[]): Promise<ListedReorg[]> =>
     (await getReorgs())
@@ -165,5 +173,6 @@ export const loadChainReads = async () => {
     recordsOf,
     listed,
     repairOpen,
+    causesOf,
   };
 };

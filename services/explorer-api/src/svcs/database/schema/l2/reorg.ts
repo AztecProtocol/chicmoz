@@ -2,7 +2,6 @@ import { HexString, L2NetworkId } from "@chicmoz-pkg/types";
 import {
   bigint,
   index,
-  integer,
   pgTable,
   primaryKey,
   timestamp,
@@ -10,10 +9,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { generateBoundedIntegerColumn, l2NetworkIdDbEnum } from "../utils.js";
 
+/** The stream the block whose application wrote a reorg record came on. */
+export type ReorgCauseKind = "ordered" | "catchup";
+
 /**
- * One row per ordered block that demoted canonical blocks: what the explorer
- * had as canonical and removed, not the node's prune depth. `revived_at` is
- * the only later write, set once every listed block is canonical again.
+ * One row per applied block, ordered or catch-up, that demoted canonical
+ * blocks: what the explorer had as canonical and removed, not the node's
+ * prune depth. `cause_hash` is that block's hash. `revived_at` is the only
+ * later write, set once every listed block is canonical again.
  */
 export const l2ReorgTable = pgTable(
   "l2_reorg",
@@ -25,9 +28,8 @@ export const l2ReorgTable = pgTable(
       .notNull()
       .$type<L2NetworkId>(),
     rollupVersion: generateBoundedIntegerColumn("rollup_version").notNull(),
-    rootHeight: bigint("root_height", { mode: "bigint" }).notNull(),
-    rootHash: varchar("root_hash").notNull().$type<HexString>(),
-    removedCount: integer("removed_count").notNull(),
+    causeHash: varchar("cause_hash").notNull().$type<HexString>(),
+    causeKind: varchar("cause_kind").notNull().$type<ReorgCauseKind>(),
     observedAt: timestamp("observed_at").notNull(),
     revivedAt: timestamp("revived_at"),
   },
