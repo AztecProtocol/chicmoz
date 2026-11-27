@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { downProject } from "@chicmoz/test-harness";
@@ -7,6 +7,7 @@ import { releasePorts } from "./port-registry.js";
 import { ownerAlive, readPgids, stopGroup } from "./processes.js";
 import { RUN_ID_PATTERN, type RunRecord, run } from "./run.js";
 import { removeTmpDir, tmpDirs } from "./tmp.js";
+import { stagingDirs } from "./toolchain.js";
 
 const HARNESS_RUN_ID = /^ih[0-9a-f]{10}$/;
 
@@ -61,6 +62,10 @@ const down = async (runId: string) => {
   } finally {
     for (const dir of Object.values(tmpDirs(runId, runDir))) {
       removeTmpDir(dir);
+    }
+    for (const dir of stagingDirs(readConfig().toolchainDir, runId)) {
+      rmSync(dir, { recursive: true, force: true });
+      process.stdout.write(`removed the toolchain staging directory ${dir}\n`);
     }
     // Only once every group stopped: a survivor may still bind a port.
     released = stuck.length === 0 && (await releasePorts(runId));

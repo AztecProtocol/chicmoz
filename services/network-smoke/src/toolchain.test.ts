@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkLock } from "./toolchain.js";
+import { checkLock, stagingDirs } from "./toolchain.js";
 
 const SHA512 = `sha512-${"A".repeat(86)}==`;
 const lock = (entry: Record<string, unknown>) =>
@@ -47,5 +50,25 @@ describe("toolchain lock check", () => {
         }),
       ),
     ).toThrow("node_modules/b");
+  });
+});
+
+describe("toolchain staging directories", () => {
+  it("finds only the given run's, never an install or another run's", () => {
+    const dir = mkdtempSync(join(tmpdir(), "chicmoz-toolchain-"));
+    try {
+      const names = [
+        "aztec-0123456789ab.tmp-ns0000000000",
+        "aztec-0123456789ab.tmp-ns1111111111",
+        "aztec-0123456789ab",
+        "aztec-0123456789ab.tmp-ns0000000000x",
+      ];
+      for (const name of names) {
+        mkdirSync(join(dir, name));
+      }
+      expect(stagingDirs(dir, "ns0000000000")).toEqual([join(dir, names[0])]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
