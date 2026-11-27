@@ -24,14 +24,14 @@ export const recordedBlocks = (source: FixtureSource) => {
   const fixtures = listFixtures(source, "l2-block").map(
     (name) => [name, loadFixture(source, "l2-block", name).data] as const,
   );
-  const tip = Math.max(...fixtures.map(([, data]) => data.expected.height));
+  const proposedTip = Math.max(...fixtures.map(([, data]) => data.expected.height));
   return fixtures
     .map(([name, data]) => {
       const event: NewBlockEvent = {
         blockNumber: data.expected.height,
         statusHint: "proposed",
         block: data.hex,
-        ordered: { tip },
+        ordered: { proposedTip },
       };
       return { name, expected: data.expected, event };
     })

@@ -149,23 +149,23 @@ export const buildChain = async (
   return chain;
 };
 
-/** As the hash-following listener sends it: `tip` defaults to the block's own height. */
+/** As the hash-following listener sends it: `proposedTip` defaults to the block's own height. */
 export const orderedEvent = (
   b: BuiltBlock,
-  tip = Number(b.height),
+  proposedTip = Number(b.height),
 ): NewBlockEvent => ({
   block: b.hex,
   blockNumber: Number(b.height),
   statusHint: "proposed",
-  ordered: { tip },
+  ordered: { proposedTip },
 });
 
 export const catchupEvent = (
   b: BuiltBlock,
-  { final }: { final?: true } = {},
+  { finalized }: { finalized?: true } = {},
 ): CatchupBlockEvent => ({
   block: b.hex,
   blockNumber: Number(b.height),
   statusHint: "proposed",
-  ...(final ? { final } : {}),
+  ...(finalized ? { finalized } : {}),
 });

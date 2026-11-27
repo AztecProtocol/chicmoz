@@ -21,7 +21,9 @@ import {
 import { controllers } from "../../../svcs/database/index.js";
 import { parseBlockContracts } from "./contracts.js";
 
-const orderedSchema = z.object({ tip: z.number().int().nonnegative() });
+const orderedSchema = z.object({
+  proposedTip: z.number().int().nonnegative(),
+});
 
 const decode = async ({
   block,
@@ -84,7 +86,7 @@ const onBlock = async (event: NewBlockEvent, heartbeat: Heartbeat) => {
   }
   await afterCommit(
     incoming,
-    await applyOrderedBlock(incoming, ordered.data.tip, heartbeat),
+    await applyOrderedBlock(incoming, ordered.data.proposedTip, heartbeat),
   );
 };
 
@@ -98,7 +100,7 @@ const onCatchupBlock = async (
   }
   await afterCommit(
     incoming,
-    await applyCatchupBlock(incoming, event.final === true, heartbeat),
+    await applyCatchupBlock(incoming, event.finalized === true, heartbeat),
   );
 };
 

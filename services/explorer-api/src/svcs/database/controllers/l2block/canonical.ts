@@ -796,18 +796,18 @@ const apply = async (
  * with that block's linked descendants, and every other canonical holder of
  * its txs with theirs; brings back its stored ancestors; asks for the heights
  * below it that this leaves empty; and demotes every canonical block above
- * `tip`.
+ * `proposedTip`.
  */
 export const applyOrderedBlock = (
   incoming: IncomingBlock,
-  tip: number,
+  proposedTip: number,
   heartbeat: Heartbeat,
 ): Promise<ChainOutcome> => {
   const { height, hash } = incoming.block;
-  let ceiling = BigInt(tip);
+  let ceiling = BigInt(proposedTip);
   if (ceiling < height) {
     logger.warn(
-      `Ordered block ${height} (${hash}) carries tip ${tip}, below its height; using ${height}`,
+      `Ordered block ${height} (${hash}) carries proposed tip ${proposedTip}, below its height; using ${height}`,
     );
     ceiling = height;
   }
@@ -839,14 +839,14 @@ export const applyOrderedBlock = (
  * authority below its height, as an ordered block does: the other holders of
  * its txs there go, its stored ancestors come back, and the heights left
  * empty are asked for. An already-canonical block with a linked canonical
- * child has the same authority. With `final` (at or below the serving node's
- * own finalized tip), it also joins when the link is undecided and the
+ * child has the same authority. With `finalized` (at or below the serving
+ * node's own finalized tip), it also joins when the link is undecided and the
  * canonical block below, if any, is its parent, asking for that height when
  * it is empty.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
-  final: boolean,
+  finalized: boolean,
   heartbeat: Heartbeat,
 ): Promise<ChainOutcome> =>
   apply(incoming, heartbeat, { ordered: false }, async (change, stored) => {
@@ -870,9 +870,9 @@ export const applyCatchupBlock = (
       return false;
     }
     if (link === "excludes") {
-      if (final) {
+      if (finalized) {
         logger.warn(
-          `CHAIN_LINK_CONFLICT: final catch-up block ${stored.height} (${stored.hash}) is not the parent of the canonical chain above it; left off the chain`,
+          `CHAIN_LINK_CONFLICT: finalized catch-up block ${stored.height} (${stored.hash}) is not the parent of the canonical chain above it; left off the chain`,
         );
       }
       return false;
@@ -887,7 +887,7 @@ export const applyCatchupBlock = (
       await requestEmptied(change, stored.height);
       return true;
     }
-    if (!final) {
+    if (!finalized) {
       return false;
     }
     const below = await canonicalAt(change, stored.height - 1n);

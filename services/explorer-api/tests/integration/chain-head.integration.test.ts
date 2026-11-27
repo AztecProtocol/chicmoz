@@ -23,16 +23,16 @@ import {
 } from "./support/explorer-api.js";
 
 // Each case runs on a rollup version of its own, because an ordered block
-// demotes every canonical block of its version above its tip, and on heights
-// of its own, because repair rows are per network.
+// demotes every canonical block of its version above its proposed tip, and
+// on heights of its own, because repair rows are per network.
 let lastVersion = 1_000;
 const freshVersion = () => ++lastVersion;
 
 describe("the canonical chain on a real database", () => {
   let api: ExplorerApiForTest;
   let reads: Awaited<ReturnType<typeof loadChainReads>>;
-  let ordered: (b: BuiltBlock, tip?: number) => Promise<void>;
-  let catchup: (b: BuiltBlock, options?: { final?: true }) => Promise<void>;
+  let ordered: (b: BuiltBlock, proposedTip?: number) => Promise<void>;
+  let catchup: (b: BuiltBlock, options?: { finalized?: true }) => Promise<void>;
   let orderedWith: (
     event: NewBlockEvent,
     heartbeat: Heartbeat,
@@ -74,7 +74,8 @@ describe("the canonical chain on a real database", () => {
     reads = await loadChainReads();
     walkBound = WALK_BOUND;
 
-    ordered = (b, tip) => deliver(blockHandler, orderedEvent(b, tip));
+    ordered = (b, proposedTip) =>
+      deliver(blockHandler, orderedEvent(b, proposedTip));
     catchup = (b, options) => deliver(catchupHandler, catchupEvent(b, options));
     orderedWith = (event, heartbeat) => blockHandler.cb(event, heartbeat);
     ignoredUnordered = (b) =>
@@ -382,7 +383,7 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.recordsOf(version)).toEqual([]);
   });
 
-  it("keeps a final catch-up block at a canonical height off the chain until its ordered copy arrives", async () => {
+  it("keeps a finalized catch-up block at a canonical height off the chain until its ordered copy arrives", async () => {
     const version = freshVersion();
     const a = await buildChain(5_000n, 3, { version });
     for (const block of a) {
@@ -393,7 +394,7 @@ describe("the canonical chain on a real database", () => {
       parent: a[0],
     });
 
-    await catchup(b1, { final: true });
+    await catchup(b1, { finalized: true });
     expect(await reads.chainOf(version)).toEqual(heads(a));
     expect(await reads.recordsOf(version)).toEqual([]);
 
@@ -415,7 +416,7 @@ describe("the canonical chain on a real database", () => {
       parent: c[0],
     });
 
-    await catchup(stranger, { final: true });
+    await catchup(stranger, { finalized: true });
     expect(await reads.stateOf(stranger.hash)).toEqual({
       hasOrphanedParent: false,
     });
@@ -426,12 +427,12 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.ownerOf(c[1].txHashes[0])).toBe(c[1].hash);
   });
 
-  it("keeps a final catch-up block above the canonical head off the chain", async () => {
+  it("keeps a finalized catch-up block above the canonical head off the chain", async () => {
     const version = freshVersion();
     const [head, above] = await buildChain(16_000n, 2, { version });
     await ordered(head);
 
-    await catchup(above, { final: true });
+    await catchup(above, { finalized: true });
 
     expect(await reads.chainOf(version)).toEqual(heads([head]));
   });
@@ -506,7 +507,7 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.repairOpen(18_001)).toBe(false);
   });
 
-  it("fills history from block 1 with final catch-up blocks, each only on the canonical block below as its parent", async () => {
+  it("fills history from block 1 with finalized catch-up blocks, each only on the canonical block below as its parent", async () => {
     const version = freshVersion();
     const c = await buildChain(1n, 6, { version });
     await ordered(c[4], 6);
@@ -514,7 +515,7 @@ describe("the canonical chain on a real database", () => {
     const stranger = await buildBlock(3n, [freshTxHash()], { version });
 
     for (const block of [c[0], c[1], stranger, c[2], c[3]]) {
-      await catchup(block, { final: true });
+      await catchup(block, { finalized: true });
     }
 
     expect(await reads.chainOf(version)).toEqual(heads(c));
@@ -524,14 +525,14 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.recordsOf(version)).toEqual([]);
   });
 
-  it("opens a repair at the empty height below a final catch-up block that joins with its link from above undecided", async () => {
+  it("opens a repair at the empty height below a finalized catch-up block that joins with its link from above undecided", async () => {
     const version = freshVersion();
     // Its parent is not stored, so the walk down from it cannot decide.
     const head = await buildBlock(26_004n, [freshTxHash()], { version });
     const block = await buildBlock(26_002n, [freshTxHash()], { version });
     await ordered(head);
 
-    await catchup(block, { final: true });
+    await catchup(block, { finalized: true });
 
     expect(await reads.stateOf(block.hash)).toBe("canonical");
     expect(await reads.repairOpen(26_001)).toBe(true);
@@ -854,7 +855,7 @@ describe("the canonical chain on a real database", () => {
     await catchup(twin);
     expect(await reads.chainOf(version)).toEqual(heads([p, child]));
 
-    await catchup(twin, { final: true });
+    await catchup(twin, { finalized: true });
     expect(await reads.chainOf(version)).toEqual(heads([p, twin, child]));
   });
 

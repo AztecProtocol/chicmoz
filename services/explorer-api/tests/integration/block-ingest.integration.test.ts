@@ -12,7 +12,7 @@ import {
 const recorded = listFixtures("local-network", "l2-block")
   .map((name) => loadFixture("local-network", "l2-block", name).data)
   .sort((a, b) => a.expected.height - b.expected.height);
-const tip = Math.max(...recorded.map(({ expected }) => expected.height));
+const proposedTip = Math.max(...recorded.map(({ expected }) => expected.height));
 
 describe("recorded blocks through the block handler", () => {
   let api: ExplorerApiForTest;
@@ -27,7 +27,7 @@ describe("recorded blocks through the block handler", () => {
         block: hex,
         blockNumber: expected.height,
         statusHint: "proposed",
-        ordered: { tip },
+        ordered: { proposedTip },
       });
     }
   });
