@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   chicmozL2BlockLightSchema,
   chicmozL2ContractInstanceDeluxeSchema,
@@ -117,43 +118,46 @@ export const explorerReads = (apiUrl: string) => {
   };
 };
 
+/** Whether `value` holds `want`'s value at each of `want`'s keys. */
+export const holds = <T extends object>(value: T, want: Partial<T>) =>
+  Object.entries(want).every(([key, expected]) =>
+    isDeepStrictEqual(value[key as keyof T], expected),
+  );
+
 /**
- * Reads `snapshot` until two reads `gapMs` apart are equal, with `progress`
- * (a counter of the listener's tip reads) grown between them and `consumed`
- * true just before the second, or until `timeoutMs`. Tip reads prove the
- * listener polled, not that the API consumed what it sent: `consumed` covers
- * that. A gap longer than the API's cache keeps two equal reads from being
- * one cache entry read twice.
+ * Reads `snapshot` until it `holds` `want` or `timeoutMs` passes, then waits
+ * until the API has committed through the end offsets of its topics at that
+ * moment (`consumedThrough`), and reads it once more after `cacheMs`, when
+ * the API's REST cache holds nothing older: that read is the settled state,
+ * whether `want` was met or not. Waiting on `want` keeps a fast read from
+ * settling before the listener publishes; offsets taken once keep records
+ * that never stop, tips and node liveness, from holding it off.
  */
-export const settle = async <T>(
+export const settle = async <T extends object>(
   snapshot: () => Promise<T>,
   {
-    gapMs,
+    want,
     timeoutMs,
-    progress,
-    consumed,
+    intervalMs,
+    cacheMs,
+    consumedThrough,
   }: {
-    gapMs: number;
+    want: Partial<T>;
     timeoutMs: number;
-    progress?: () => Promise<number> | number;
-    consumed?: () => Promise<boolean>;
+    intervalMs: number;
+    cacheMs: number;
+    consumedThrough: (timeoutMs: number) => Promise<void>;
   },
 ) => {
   const deadline = Date.now() + timeoutMs;
-  let mark = await progress?.();
   let value = await snapshot();
-  let settled = false;
-  while (!settled && Date.now() < deadline) {
-    await sleep(gapMs);
-    const caughtUp = (await consumed?.()) ?? true;
-    const next = await snapshot();
-    const nextMark = await progress?.();
-    settled =
-      caughtUp &&
-      JSON.stringify(next) === JSON.stringify(value) &&
-      (mark === undefined || (nextMark ?? 0) > mark);
-    value = next;
-    mark = nextMark;
+  while (!holds(value, want) && Date.now() < deadline) {
+    await sleep(intervalMs);
+    value = await snapshot();
   }
-  return { value, settled };
+  const met = holds(value, want);
+  await consumedThrough(timeoutMs);
+  await sleep(cacheMs);
+  const confirmed = await snapshot();
+  return { value: confirmed, met, held: holds(confirmed, want) };
 };

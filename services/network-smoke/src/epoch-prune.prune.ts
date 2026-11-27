@@ -31,9 +31,12 @@ const node = createAztecNodeClient(endpoints.aztecNodeUrl);
 const api = explorerReads(endpoints.explorerApiUrl);
 const broker = brokerReads(endpoints.broker);
 
+// For the API to reach what a scenario expects once the node's chain is
+// final, which a correct pipeline does in a few polls; it bounds the commit
+// wait too.
+const SETTLE_TIMEOUT_MS = 30_000;
 // Longer than the API's 5 s block cache.
-const SETTLE_GAP_MS = 6_000;
-const SETTLE_TIMEOUT_MS = 90_000;
+const CACHE_MS = 6_000;
 // A listener pass that read the node just before the prune may publish
 // just after it.
 const PREFIX_GRACE_MS = 3_000;
@@ -140,7 +143,7 @@ const outcome = async ({
 }) => ({
   latestHeight: await api.latestHeight(),
   chain: await Promise.all(heights.map(api.blockAt)),
-  reorgs: await api.reorgs(),
+  reorgs: byRoot(await api.reorgs()),
   txs: await Promise.all(
     txs.map(async ({ txHash, address }) => ({
       txHash,
@@ -154,21 +157,31 @@ const outcome = async ({
 
 type Outcome = Awaited<ReturnType<typeof outcome>>;
 
-/** The API once it has consumed every record and stopped changing; a scenario that never gets there fails. */
-const settled = async (args: Parameters<typeof outcome>[0]) => {
-  const { value, settled: done } = await settle(() => outcome(args), {
-    gapMs: SETTLE_GAP_MS,
+/** The API once it has consumed what the broker held when `want` was met or its time ran out; a consumer that never catches up fails the scenario. */
+const settled = async (
+  args: Parameters<typeof outcome>[0],
+  want: Partial<Outcome>,
+  label: string,
+) => {
+  const { value, met, held } = await settle(() => outcome(args), {
+    want,
     timeoutMs: SETTLE_TIMEOUT_MS,
-    progress: () => readTipReads(endpoints.rpcTapFile).length,
-    consumed: broker.apiConsumed,
+    intervalMs: 1_000,
+    cacheMs: CACHE_MS,
+    consumedThrough: broker.apiConsumedThrough,
   });
-  if (!done) {
-    throw new Error(
-      `the API did not settle within ${SETTLE_TIMEOUT_MS / 1000} s: lag ${JSON.stringify(await broker.lag(endpoints.broker.apiGroupPrefix))}, last read ${JSON.stringify(value)}`,
-    );
-  }
+  log(
+    `${label}: ${met ? "expected state reached" : `expected state not reached in ${SETTLE_TIMEOUT_MS / 1000} s`}; once consumed, ${held ? "as expected" : "not as expected"}`,
+  );
   return value;
 };
+
+/** The one reorg a prune adds: rooted at its first removed height, counting every removed block. */
+const reorgOf = (prune: ForcedPrune): ReorgRecord => ({
+  height: prune.removed[0],
+  nbrOfOrphanedBlocks: prune.removed.length,
+  orphanedBlockHash: prune.before.get(prune.removed[0]) ?? "",
+});
 
 const summary = (prune: ForcedPrune) => ({
   target: prune.target,
@@ -212,6 +225,7 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
   let after: Map<string, Receipt>;
   let chain: Map<number, string>;
   let heights: number[];
+  let want: Pick<Outcome, "latestHeight" | "chain" | "reorgs" | "txs" | "dead">;
   let seen: Outcome;
 
   beforeAll(async () => {
@@ -267,7 +281,31 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
       );
     }
     heights = range(1, Math.max(...prune.before.keys()) + 1);
-    seen = await settled({ heights, txs, dead: deadOf(prune) });
+    // Final: every tx is in a block of the node's chain, and no other comes.
+    chain = await readNodeChain(node);
+    want = {
+      latestHeight: Math.max(...chain.keys()),
+      chain: expectedChain(heights, chain),
+      reorgs: [reorgOf(prune)],
+      txs: txs.map(({ txHash }) => {
+        const block = served(
+          blockOf(after.get(txHash) ?? { status: "" }),
+          false,
+        );
+        return {
+          txHash,
+          dropped: { status: 404 },
+          effect: block,
+          contract: { hash: block.hash, orphaned: false },
+        };
+      }),
+      dead: deadOf(prune).map((b) => served(b, true)),
+    };
+    seen = await settled(
+      { heights, txs, dead: deadOf(prune) },
+      want,
+      "replaced at once",
+    );
     const first = await api.get("/l2/blocks/1");
     firstParent =
       first.status === 200
@@ -275,7 +313,6 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
             .parse(first.body)
             .header.lastArchive.root.toLowerCase()
         : { status: first.status };
-    chain = await readNodeChain(node);
     const listener = listenerOrder(prune);
     log(`replaced at once: listener order: ${listener.order}`);
     log(
@@ -295,43 +332,32 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
   });
 
   it("serves the node's chain from its genesis as canonical, and nothing above the node's tip", () => {
-    expect
-      .soft(seen.latestHeight, "latest height")
-      .toBe(Math.max(...chain.keys()));
+    expect.soft(seen.latestHeight, "latest height").toBe(want.latestHeight);
     expect
       .soft(seen.chain, "the canonical block at each height")
-      .toEqual(expectedChain(heights, chain));
+      .toEqual(want.chain);
     expect.soft(firstParent, "block 1's parent archive").toBe(genesisArchive);
   });
 
   it("lists one reorg: the removed blocks, from the first removed height", () => {
-    expect(seen.reorgs).toEqual([
-      {
-        height: prune.removed[0],
-        nbrOfOrphanedBlocks: prune.removed.length,
-        orphanedBlockHash: prune.before.get(prune.removed[0]),
-      },
-    ]);
+    expect(seen.reorgs).toEqual(want.reorgs);
   });
 
   it("keeps each moved tx mined, not dropped, with its effect and its account contract on the node's block", () => {
-    for (const tx of seen.txs) {
-      const block = served(
-        blockOf(after.get(tx.txHash) ?? { status: "" }),
-        false,
-      );
+    for (const [i, tx] of seen.txs.entries()) {
+      const wanted = want.txs[i];
       expect
         .soft(tx.dropped, `${tx.txHash}: dropped-tx lookup`)
-        .toEqual({ status: 404 });
-      expect.soft(tx.effect, `${tx.txHash}: tx effect`).toEqual(block);
+        .toEqual(wanted.dropped);
+      expect.soft(tx.effect, `${tx.txHash}: tx effect`).toEqual(wanted.effect);
       expect
         .soft(tx.contract, `${tx.txHash}: its account contract`)
-        .toEqual({ hash: block.hash, orphaned: false });
+        .toEqual(wanted.contract);
     }
   });
 
   it("serves each dead block by its hash, as orphaned", () => {
-    expect(seen.dead).toEqual(deadOf(prune).map((b) => served(b, true)));
+    expect(seen.dead).toEqual(want.dead);
   });
 });
 
@@ -380,6 +406,7 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
   let receipt: Receipt;
   let chain: Map<number, string>;
   let heights: number[];
+  let want: Pick<Outcome, "chain" | "reorgs" | "dead">;
   let seen: Outcome;
 
   beforeAll(async () => {
@@ -446,8 +473,13 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
     const tx = await sender.deploy();
     receipt = (await minedOnChain([tx])).get(tx.txHash) ?? { status: "" };
     heights = range(prune.target + 1, Math.max(...prune.before.keys()) + 1);
-    seen = await settled({ heights, txs: [tx], dead });
     chain = await readNodeChain(node);
+    want = {
+      chain: expectedChain(heights, chain),
+      reorgs: plusReorg(baseline, reorgOf(prune)),
+      dead: dead.map((b) => served(b, true)),
+    };
+    seen = await settled({ heights, txs: [tx], dead }, want, "shorter chain");
     const listener = listenerOrder(prune);
     log(`shorter chain: listener order: ${listener.order}`);
     log(
@@ -492,18 +524,10 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
       .toBe(prune.removed[0]);
     expect
       .soft(seen.chain, "the canonical block above the target")
-      .toEqual(expectedChain(heights, chain));
+      .toEqual(want.chain);
     expect
-      .soft(byRoot(seen.reorgs), "every reorg: those before the prune, and one")
-      .toEqual(
-        plusReorg(baseline, {
-          height: prune.removed[0],
-          nbrOfOrphanedBlocks: prune.removed.length,
-          orphanedBlockHash: prune.before.get(prune.removed[0]) ?? "",
-        }),
-      );
-    expect
-      .soft(seen.dead, "the dead blocks by hash")
-      .toEqual(dead.map((b) => served(b, true)));
+      .soft(seen.reorgs, "every reorg: those before the prune, and one")
+      .toEqual(want.reorgs);
+    expect.soft(seen.dead, "the dead blocks by hash").toEqual(want.dead);
   });
 });
