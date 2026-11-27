@@ -1,4 +1,5 @@
 import { type Heartbeat } from "@chicmoz-pkg/message-bus";
+import { CHAIN_WALK_BOUND } from "@chicmoz-pkg/message-registry";
 import { type ChicmozL2Block, type HexString } from "@chicmoz-pkg/types";
 import { and, asc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -50,7 +51,7 @@ import { store, writeTxEffect } from "./store.js";
 // descends from carries that chain's authority over the heights below it.
 
 /** Walks stop after this many steps; more canonical blocks than this above a tip is corrupted state. */
-export const WALK_BOUND = 10_000;
+export const WALK_BOUND = CHAIN_WALK_BOUND;
 const HEARTBEAT_EVERY = 500;
 const ROWS_PER_STATEMENT = 1_000;
 
