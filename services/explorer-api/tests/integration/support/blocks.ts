@@ -14,7 +14,11 @@ import {
   type NewBlockEvent,
 } from "@chicmoz-pkg/message-registry";
 import { type HexString } from "@chicmoz-pkg/types";
-import { listFixtures, loadFixture } from "@chicmoz/test-harness";
+import {
+  type FixtureData,
+  listFixtures,
+  loadFixture,
+} from "@chicmoz/test-harness";
 
 export type BuiltBlock = {
   hex: string;
@@ -24,24 +28,38 @@ export type BuiltBlock = {
   archive: AppendOnlyTreeSnapshot;
 };
 
-// A recorded effect with public logs and no contract-class logs, so storing a
-// clone adds no contract rows that would collide across blocks.
-const baseBlock = (): L2Block => {
+const recorded = (
+  what: string,
+  wanted: (expected: FixtureData["l2-block"]["expected"]) => boolean,
+): L2Block => {
   const fixture = listFixtures("local-network", "l2-block")
     .map((name) => loadFixture("local-network", "l2-block", name))
-    .find(
-      (f) =>
-        f.data.expected.counts.publicLogs > 0 &&
-        f.data.expected.counts.contractClassLogs === 0 &&
-        f.data.expected.contractInstanceAddresses.length === 0,
-    );
+    .find((f) => wanted(f.data.expected));
   if (!fixture) {
-    throw new Error("no recorded local-network block with public logs and no contract logs");
+    throw new Error(`no recorded local-network block with ${what}`);
   }
   return L2Block.fromBuffer(Buffer.from(fixture.data.hex, "hex"));
 };
 
-let base: L2Block | undefined;
+// A recorded effect with public logs and no contract-class logs, so storing a
+// clone adds no contract rows that would collide across blocks.
+let plain: L2Block | undefined;
+// A recorded effect that publishes a contract class. Its clones share the
+// class row, so only the first one stored in a database adds it.
+let publishing: L2Block | undefined;
+const baseBlock = (publishesClass: boolean): L2Block =>
+  publishesClass
+    ? (publishing ??= recorded(
+        "a contract class log",
+        (e) => e.counts.contractClassLogs > 0,
+      ))
+    : (plain ??= recorded(
+        "public logs and no contract logs",
+        (e) =>
+          e.counts.publicLogs > 0 &&
+          e.counts.contractClassLogs === 0 &&
+          e.contractInstanceAddresses.length === 0,
+      ));
 
 /**
  * The coinbase is salted to tell headers at one height apart. The handler
@@ -49,6 +67,7 @@ let base: L2Block | undefined;
  * `version` replaces the recorded rollup version. Each block gets an archive
  * of its own, unless `archive` names one; `parent` makes the block's last
  * archive the parent's archive, the link a chain's consecutive blocks have.
+ * `publishesClass` clones an effect that publishes a contract class.
  */
 export const buildBlock = async (
   height: bigint,
@@ -57,13 +76,15 @@ export const buildBlock = async (
     version,
     parent,
     archive: sharedArchive,
+    publishesClass,
   }: {
     version?: number;
     parent?: Pick<BuiltBlock, "archive">;
     archive?: AppendOnlyTreeSnapshot;
+    publishesClass?: true;
   } = {},
 ): Promise<BuiltBlock> => {
-  base ??= baseBlock();
+  const base = baseBlock(publishesClass === true);
   const [effect] = base.body.txEffects;
   if (!effect) {
     throw new Error("base block has no tx effect");

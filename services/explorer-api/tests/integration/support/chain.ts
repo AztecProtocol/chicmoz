@@ -39,6 +39,9 @@ export const loadChainReads = async () => {
   const { l2OpenGapTable } = await import(
     "../../../src/svcs/database/schema/l2/open-gap.js"
   );
+  const { l2ContractClassRegistered } = await import(
+    "../../../src/svcs/database/schema/l2contract/index.js"
+  );
   const { getReorgs } = await import(
     "../../../src/svcs/database/controllers/l2block/get-block.js"
   );
@@ -79,6 +82,15 @@ export const loadChainReads = async () => {
       .where(eq(txEffect.txHash, txHash));
     return row?.blockHash;
   };
+
+  /** The contract classes stored with a block. */
+  const classesOf = async (blockHash: HexString) =>
+    (
+      await db
+        .select({ id: l2ContractClassRegistered.contractClassId })
+        .from(l2ContractClassRegistered)
+        .where(eq(l2ContractClassRegistered.blockHash, blockHash))
+    ).map(({ id }) => id);
 
   const isDropped = async (txHash: HexString) =>
     (
@@ -148,6 +160,7 @@ export const loadChainReads = async () => {
     chainOf,
     stateOf,
     ownerOf,
+    classesOf,
     isDropped,
     recordsOf,
     listed,

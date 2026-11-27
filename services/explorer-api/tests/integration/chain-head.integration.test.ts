@@ -919,6 +919,54 @@ describe("the canonical chain on a real database", () => {
     expect(beats).toBeGreaterThan(0);
   });
 
+  it("heartbeats before each tx effect it writes", async () => {
+    const beatsFor = async (block: BuiltBlock) => {
+      let beats = 0;
+      await orderedWith(orderedEvent(block), () => {
+        beats++;
+        return Promise.resolve();
+      });
+      return beats;
+    };
+    const one = await buildBlock(27_000n, [freshTxHash()], {
+      version: freshVersion(),
+    });
+    const four = await buildBlock(
+      27_010n,
+      [freshTxHash(), freshTxHash(), freshTxHash(), freshTxHash()],
+      { version: freshVersion() },
+    );
+
+    // The rest of each change beats once per statement of up to a thousand
+    // rows, as often for one tx as for four.
+    expect((await beatsFor(four)) - (await beatsFor(one))).toBe(3);
+  });
+
+  it("rolls back a block with its tx effects and contract rows when a heartbeat fails after they are written", async () => {
+    const tx = freshTxHash();
+    const block = await buildBlock(28_000n, [tx], {
+      version: freshVersion(),
+      publishesClass: true,
+    });
+    let beats = 0;
+    // The beats before its effect and before its class row pass; the next,
+    // settlement's first, fails.
+    const failsThird = () =>
+      ++beats > 2
+        ? Promise.reject(new Error("rebalancing"))
+        : Promise.resolve();
+
+    await expect(orderedWith(orderedEvent(block), failsThird)).rejects.toThrow(
+      "rebalancing",
+    );
+    expect(await reads.stateOf(block.hash)).toBe("absent");
+    expect(await reads.ownerOf(tx)).toBeUndefined();
+    expect(await reads.classesOf(block.hash)).toEqual([]);
+
+    await ordered(block);
+    expect(await reads.classesOf(block.hash)).toHaveLength(1);
+  });
+
   describe("bounds", () => {
     it("stops a walk at the bound without throwing, keeps its partition through it, and rolls back when a heartbeat fails", async () => {
       const version = freshVersion();

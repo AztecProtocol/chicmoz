@@ -540,6 +540,9 @@ const attachTxs = async (
     if (owner?.blockHash === block.hash || (owner && !canonical)) {
       continue;
     }
+    // An effect is at most two statements plus one per public data write,
+    // which the protocol caps at 64 a tx.
+    await change.heartbeat();
     await writeTxEffect(change.dbTx, {
       bodyId: stored.bodyId,
       index,
