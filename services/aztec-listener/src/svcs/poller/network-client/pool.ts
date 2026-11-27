@@ -6,6 +6,7 @@ import {
 import { AZTEC_RPC_URLS } from "../../../environment.js";
 import { onL2RpcNodeError } from "../../../events/emitted/index.js";
 import { logger } from "../../../logger.js";
+import { redactError } from "./redact-urls.js";
 
 export interface RpcNode {
   name: string;
@@ -99,6 +100,25 @@ export const withV5NodeNamespaceFallback =
     return await send(host, rewrittenBody, extraHeaders, noRetry);
   };
 
+// The SDK's fetch names the node's URL in its errors, and its client logs a
+// failed fetch's error through the SDK's logger before any caller sees it.
+// The offline markers callNodeFunction looks for in the message name no URL.
+const withRedactedErrors =
+  (send: JsonRpcFetch): JsonRpcFetch =>
+  async (host, body, extraHeaders, noRetry) => {
+    try {
+      return await send(host, body, extraHeaders, noRetry);
+    } catch (e) {
+      throw redactError(e);
+    }
+  };
+
+/** The JSON-RPC client the pool keeps for the node at `url`. */
+export const nodeClient = (url: string): AztecNode =>
+  createAztecNodeClient(url, {
+    fetch: withRedactedErrors(withV5NodeNamespaceFallback(defaultFetch)),
+  });
+
 const resetPools = () => {
   logger.info(
     `⚠️ ⚠️ ⚠️  Resetting node pools (online: ${onlinePool.length}, offline: ${offlinePool.length})`,
@@ -117,9 +137,7 @@ export const initPool = () => {
     return {
       name: node.name,
       url: node.url,
-      instance: createAztecNodeClient(node.url, {
-        fetch: withV5NodeNamespaceFallback(defaultFetch),
-      }),
+      instance: nodeClient(node.url),
     };
   });
   resetPools();

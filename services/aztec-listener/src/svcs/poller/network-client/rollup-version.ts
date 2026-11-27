@@ -3,6 +3,7 @@ import { logger } from "../../../logger.js";
 import { withDeadline } from "./deadline.js";
 import { callNodeFunction } from "./index.js";
 import { type RpcNode } from "./pool.js";
+import { redactUrls } from "./redact-urls.js";
 
 export type ReportedVersion = { node: RpcNode; version: number };
 
@@ -32,7 +33,7 @@ export const readLatestRollupVersion = async (
           : undefined;
       } catch (e) {
         logger.info(
-          `Node ${node.name} reported no rollup version: ${(e as Error).message}`,
+          `Node ${node.name} reported no rollup version: ${redactUrls((e as Error).message)}`,
         );
         return undefined;
       }

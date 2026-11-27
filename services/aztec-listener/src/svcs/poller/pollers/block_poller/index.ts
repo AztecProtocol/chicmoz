@@ -32,6 +32,7 @@ import {
   readGenesisBlockHash,
 } from "../../network-client/block-stream-source.js";
 import { getOnlineRpcNodes, getRpcNode } from "../../network-client/pool.js";
+import { redactUrls } from "../../network-client/redact-urls.js";
 import {
   type ReportedVersion,
   readLatestRollupVersion,
@@ -39,7 +40,7 @@ import {
 import { publishTipsIfDue } from "../l2-tips-poller.js";
 import { ChainPublisher } from "./chain-publisher.js";
 import { runProvenSideWork } from "./proven-side-work.js";
-import { redactUrls, streamLogger } from "./stream-logger.js";
+import { streamLogger } from "./stream-logger.js";
 
 /** One rollup version's block stream. */
 export type StreamChain = {

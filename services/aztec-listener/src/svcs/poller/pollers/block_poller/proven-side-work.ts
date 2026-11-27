@@ -6,6 +6,7 @@ import {
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { type StickySource } from "../../network-client/block-stream-source.js";
+import { redactUrls } from "../../network-client/redact-urls.js";
 import {
   type ReadPublicStorage,
   handleProvenTransactions,
@@ -83,7 +84,7 @@ export const runProvenSideWork = async (
       const outcome = await handleProvenTransactions(block, readStorage);
       if (!outcome.ok) {
         logger.warn(
-          `Proven side work stopped at block ${block.number}, which the next pass retries: ${outcome.error.message}`,
+          `Proven side work stopped at block ${block.number}, which the next pass retries: ${redactUrls(outcome.error.message)}`,
         );
         return;
       }
