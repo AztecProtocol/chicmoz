@@ -276,6 +276,16 @@ describe("open gap scheduling on a real database", () => {
     expect((await repairTick())?.[0]).toEqual([700, 700]);
   });
 
+  it("sends a tip repair again once its window's backoff has passed, and not before", async () => {
+    await mismatches([{ height: 500, seenAgoMs: MINUTE }]);
+    expect((await repairTick())?.[0]).toEqual([500, 500]);
+
+    // One request: the window waits two cadences.
+    expect(await repairTick()).toBeNull();
+    await elapse(2 * CADENCE_MS);
+    expect((await repairTick())?.[0]).toEqual([500, 500]);
+  });
+
   it("sends a due tip repair past more backed-off windows than the scheduler's candidates", async () => {
     // Each seen before the due mismatch at 900, and more of them than the
     // scheduler's 50 candidates. The first ticks request, and so back off,
