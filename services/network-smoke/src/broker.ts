@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AssignerProtocol, Kafka, logLevel } from "kafkajs";
 import { z } from "zod";
@@ -32,12 +33,13 @@ export const brokerReads = ({
   password,
   apiGroupPrefix,
 }: BrokerAccess) => {
-  const admin = new Kafka({
+  const kafka = new Kafka({
     clientId: "network-smoke",
     brokers: brokers.split(","),
     sasl: { mechanism: "plain", username, password },
     logLevel: logLevel.NOTHING,
-  }).admin();
+  });
+  const admin = kafka.admin();
   let connected: Promise<void> | undefined;
   const ready = () => (connected ??= admin.connect());
 
@@ -113,6 +115,86 @@ export const brokerReads = ({
   };
 
   return {
+    /** Each partition of `topic`'s end offset: the offset its next record gets. */
+    endOffsets: async (topic: string) => {
+      await ready();
+      return new Map((await ends(topic)).map((p) => [p.partition, p.high]));
+    },
+    /**
+     * The offsets the API's groups have committed on `topic`, per group and
+     * partition: the next record each would consume. Committed offsets
+     * outlive the group's members, so this reads a crashed consumer's too.
+     */
+    apiCommitted: async (topic: string) => {
+      await ready();
+      const ids = (await admin.listGroups()).groups
+        .map((g) => g.groupId)
+        .filter((id) => id.startsWith(apiGroupPrefix));
+      const committed = new Map<string, Map<number, number>>();
+      for (const groupId of ids) {
+        const [offsets] = await admin.fetchOffsets({
+          groupId,
+          topics: [topic],
+        });
+        const held = (offsets?.partitions ?? [])
+          .map((p) => [p.partition, Number(p.offset)] as const)
+          .filter(([, offset]) => offset >= 0);
+        if (held.length > 0) {
+          committed.set(groupId, new Map(held));
+        }
+      }
+      return committed;
+    },
+    /**
+     * The records of one partition of `topic` from offset `from` up to `to`,
+     * read by a consumer of a group of its own; throws if they are not all
+     * there within `timeoutMs`.
+     */
+    recordsOf: async (
+      topic: string,
+      partition: number,
+      { from, to }: { from: number; to: number },
+      timeoutMs = 30_000,
+    ) => {
+      const consumer = kafka.consumer({
+        groupId: `network-smoke-reader-${randomUUID()}`,
+      });
+      const found = new Map<number, { key?: Buffer; value?: Buffer }>();
+      let all: () => void = () => undefined;
+      const complete = new Promise<void>((resolve) => (all = resolve));
+      try {
+        await consumer.connect();
+        await consumer.subscribe({ topic, fromBeginning: true });
+        await consumer.run({
+          eachMessage: ({ partition: p, message }) => {
+            const offset = Number(message.offset);
+            if (p === partition && offset >= from && offset < to) {
+              found.set(offset, {
+                key: message.key ?? undefined,
+                value: message.value ?? undefined,
+              });
+              if (found.size === to - from) {
+                all();
+              }
+            }
+            return Promise.resolve();
+          },
+        });
+        if (to > from) {
+          const timedOut = sleep(timeoutMs).then(() => "timed out" as const);
+          if ((await Promise.race([complete, timedOut])) === "timed out") {
+            throw new Error(
+              `${topic} partition ${partition}: ${found.size} of the ${to - from} records from offset ${from} in ${timeoutMs / 1000} s`,
+            );
+          }
+        }
+      } finally {
+        await consumer.disconnect();
+      }
+      return [...found.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([offset, record]) => ({ offset, ...record }));
+    },
     /** How many records each partition of `topic` holds. */
     recordsPerPartition: async (topic: string) => {
       await ready();
