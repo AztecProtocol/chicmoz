@@ -18,6 +18,8 @@ export const heightsTable = pgTable("heights", {
   processedProposedBlockHeight: integer(
     "processedProposedBlockHeight",
   ).notNull(),
+  // The old listener's last chain heights. Nothing updates them: the block
+  // stream's first start takes chainProvenBlockHeight as its floor.
   chainProposedBlockHeight: integer("chainProposedBlockHeight").notNull(),
   processedProvenBlockHeight: integer("processedProvenBlockHeight").notNull(),
   chainProvenBlockHeight: integer("chainProvenBlockHeight").notNull(),

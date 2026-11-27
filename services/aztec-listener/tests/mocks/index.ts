@@ -11,6 +11,7 @@ export const mockTxsController = {
 // Mock the message bus
 export const mockMessageBus = {
   publishMessage: vi.fn(),
+  publishKeyedMessage: vi.fn(),
   publishMessageSync: vi.fn(),
 };
 
@@ -110,6 +111,7 @@ export const mockModules = {
   // Mock the message bus module
   "../../src/svcs/message-bus/index.js": () => ({
     publishMessage: mockMessageBus.publishMessage,
+    publishKeyedMessage: mockMessageBus.publishKeyedMessage,
     publishMessageSync: mockMessageBus.publishMessageSync,
   }),
 

@@ -11,9 +11,11 @@ import type {
   L2BlockStatusHint,
   L2TipsEvent,
 } from "@chicmoz-pkg/message-registry";
+import { L2_NETWORK_ID } from "../../environment.js";
 import { logger } from "../../logger.js";
 import { txsController } from "../../svcs/database/index.js";
 import {
+  publishKeyedMessage,
   publishMessage,
   publishMessageSync,
 } from "../../svcs/message-bus/index.js";
@@ -30,27 +32,26 @@ const toSafeBlockNumber = (value: bigint): number => {
   return blockNumber;
 };
 
-export const onBlock = async (
-  block: L2Block,
-  statusHint: L2BlockStatusHint,
-) => {
+/**
+ * Sends a block of the ordered stream, keyed by the network so the topic
+ * keeps the send order. `proposedTip` is the proposed tip of the pass that
+ * sends it.
+ */
+export const onOrderedBlock = async (block: L2Block, proposedTip: number) => {
   const height = BigInt(block.header.globalVariables.blockNumber.toString());
   const heightNumber = toSafeBlockNumber(height);
-  const statusHintStr =
-    statusHint === "proposed"
-      ? "🦊 publishing proposed block"
-      : "🐴 publishing proven block";
   logger.info(
-    `${statusHintStr} ${height} (hash: ${(
+    `🦊 publishing block ${height} (hash: ${(
       await block.hash()
-    ).toString()})...`,
+    ).toString()}, proposed tip ${proposedTip})...`,
   );
   const blockBuffer = block.toBuffer() as Uint8Array;
   const blockStr = Buffer.from(blockBuffer).toString("hex");
-  await publishMessage("NEW_BLOCK_EVENT", {
+  await publishKeyedMessage("NEW_BLOCK_EVENT", L2_NETWORK_ID, {
     block: blockStr,
-    statusHint,
+    statusHint: "proposed",
     blockNumber: heightNumber,
+    ordered: { proposedTip },
   });
   const potentiallyIncludedTxs = await txsController.getTxs([
     "pending",
@@ -61,12 +62,10 @@ export const onBlock = async (
   );
 
   for (const potentialTx of potentiallyIncludedTxs) {
-    const txFoundInBlock = blockTxHashes.includes(potentialTx.txHash);
-    if (txFoundInBlock) {
-      const newState = statusHint;
-      await txsController.storeOrUpdate(potentialTx, newState);
+    if (blockTxHashes.includes(potentialTx.txHash)) {
+      await txsController.storeOrUpdate(potentialTx, "proposed");
       logger.info(
-        `✅ Transaction ${potentialTx.txHash} found in block ${height}, updated to ${newState}`,
+        `✅ Transaction ${potentialTx.txHash} found in block ${height}, updated to proposed`,
       );
     }
   }
@@ -75,7 +74,10 @@ export const onBlock = async (
 export const onCatchupBlock = async (
   block: L2Block,
   statusHint: L2BlockStatusHint,
-  metadata: Pick<CatchupBlockEvent, "requestId" | "catchupReason"> = {},
+  metadata: Pick<
+    CatchupBlockEvent,
+    "requestId" | "catchupReason" | "finalized"
+  > = {},
 ) => {
   const blockNumber = BigInt(
     block.header.globalVariables.blockNumber.toString(),

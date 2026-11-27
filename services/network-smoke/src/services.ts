@@ -105,6 +105,9 @@ export const startServices = (
       // its L1 proposal arrived for a minute.
       CACHE_TTL: "5",
       CACHE_LATEST_TTL: "2",
+      // The block stream starts an empty listener store at the finalized
+      // block, so the blocks below it reach the API through reconciliation.
+      L2_BLOCK_RECONCILIATION_INTERVAL_MS: "5000",
     },
     "ethereum-listener": {
       INSTANCE_NAME: "smoke-ethereum-listener",

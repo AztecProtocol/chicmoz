@@ -23,6 +23,7 @@ import {
   AZTEC_STREAM_STALL_ALERT_MS,
 } from "../../../environment.js";
 import { logger } from "../../../logger.js";
+import { withDeadline } from "./deadline.js";
 import {
   type OpenElectionReader,
   boundedElectionReaders,
@@ -42,6 +43,13 @@ const PINNED_READ_TIMEOUT_MS = 60_000;
 export class NodeCheckError extends Error {
   override readonly name = "NodeCheckError";
 }
+
+/**
+ * An intentional end of a block stream pass. It keeps the name `AbortError`,
+ * on which the SDK's stream ends a pass without logging; an AbortError from a
+ * dependency is a failure.
+ */
+export class PassExit extends AbortError {}
 
 export type ElectionStore = Pick<
   L2TipsStoreBase,
@@ -68,13 +76,13 @@ export type StickySourceConfig = {
 
 /** What every snapshot of one pass is checked against. */
 type PassBounds = { finalized: L2BlockId; floor: number | undefined };
-/** `proposed` is the tip the election's probe showed. */
-type Pin = { node: RpcNode; bounds: PassBounds; proposed: L2BlockId };
-type Bench = { until: number } | { tip: L2BlockId };
+/** `tips` are what the election's probe showed. */
+type Pin = { node: RpcNode; bounds: PassBounds; tips: L2Tips };
+type Bench = { until: number } | { tip: L2BlockId; sitsOutNext: boolean };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
 type Fault = {
-  kind: "behind" | "fork" | "missing" | "floor" | "unreachable";
+  kind: "order" | "behind" | "fork" | "missing" | "floor" | "unreachable";
   reason: string;
 };
 
@@ -94,12 +102,24 @@ const forkAt = (height: number): Fault => ({
   reason: `has another block at the block stream's finalized height ${height}`,
 });
 
-// The checks a snapshot needs no read for. The stream reports a lower
-// finalized tip too, which would point the store below hashes it deleted.
+const tiersOrdered = ({ proposed, checkpointed, proven, finalized }: L2Tips) =>
+  finalized.block.number <= proven.block.number &&
+  proven.block.number <= checkpointed.block.number &&
+  checkpointed.block.number <= proposed.number;
+
+// The checks a snapshot needs no read for. The store takes the tiers as the
+// stream reports them: out of order, or with a lower finalized tip, which
+// would point the store below hashes it deleted.
 const tipsFault = (
   tips: L2Tips,
   { finalized, floor }: PassBounds,
 ): Fault | undefined => {
+  if (!tiersOrdered(tips)) {
+    return {
+      kind: "order",
+      reason: `has tips out of order: proposed ${tips.proposed.number}, checkpointed ${tips.checkpointed.block.number}, proven ${tips.proven.block.number}, finalized ${tips.finalized.block.number}`,
+    };
+  }
   const theirs = tips.finalized.block;
   if (theirs.number < finalized.number) {
     return {
@@ -117,24 +137,6 @@ const tipsFault = (
     };
   }
   return undefined;
-};
-
-const withDeadline = async <T>(
-  work: Promise<T>,
-  ms: number,
-  error: () => Error,
-): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(error()), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 };
 
 /**
@@ -201,8 +203,9 @@ const blockDataFault = async (query: BlockQuery, header: BlockHeader) => {
  * every read of that pass goes to it. A failed response check or a walk-back
  * past the bound sets the node aside for five minutes. A failed read, a tips
  * or range read answered with nothing, or a rejected snapshot benches it for
- * five minutes; the prefix rule, an empty range or no block at a height its
- * snapshot covers bench it until its tip changes. Benched nodes are all back
+ * five minutes; the prefix rule, an empty range, or no block at a height its
+ * snapshot covers bench it until its tip changes, and a tip its blocks do not
+ * match benches it for the next election as well. Benched nodes are all back
  * once no eligible node is outside the bench.
  */
 export class StickySource implements L2BlockStreamSource {
@@ -288,12 +291,16 @@ export class StickySource implements L2BlockStreamSource {
     );
     for (const { node, tips } of eligible) {
       const bench = this.benched.get(node.url);
-      if (
-        bench !== undefined &&
-        ("until" in bench
-          ? bench.until <= now
-          : !sameBlock(bench.tip, tips.proposed))
-      ) {
+      if (bench === undefined) {
+        continue;
+      }
+      if ("until" in bench) {
+        if (bench.until <= now) {
+          this.benched.delete(node.url);
+        }
+      } else if (bench.sitsOutNext) {
+        bench.sitsOutNext = false;
+      } else if (!sameBlock(bench.tip, tips.proposed)) {
         this.benched.delete(node.url);
       }
     }
@@ -343,14 +350,25 @@ export class StickySource implements L2BlockStreamSource {
         } (${describeTips(before?.tips)})`,
       );
     }
-    this.pin = { node: next.node, bounds, proposed: next.tips.proposed };
+    this.pin = { node: next.node, bounds, tips: next.tips };
     return next.node;
   }
 
-  /** The pass ended on the prefix rule: unpins the node and benches it. */
-  endPassOnPrefix(): void {
+  /** Unpins the pinned node and benches it until its tip changes. */
+  benchPinnedUntilNewTip(): void {
     if (this.pin !== undefined) {
       this.bench(this.pin, "new tip");
+    }
+  }
+
+  /**
+   * Unpins the pinned node and benches it for the next election, then until
+   * its tip changes: a node whose blocks disagree with its tips can lead the
+   * election with a new tip every pass.
+   */
+  benchPinnedPastNextElection(): void {
+    if (this.pin !== undefined) {
+      this.bench(this.pin, "next election");
     }
   }
 
@@ -376,7 +394,7 @@ export class StickySource implements L2BlockStreamSource {
         const message = `Node ${pin.node.name} ${fault.reason}; the block stream skips this pass`;
         logger.warn(message);
         this.bench(pin, "cooldown");
-        throw new AbortError(message);
+        throw new PassExit(message);
       }
       this.latestTips = tips;
       return tips;
@@ -384,28 +402,36 @@ export class StickySource implements L2BlockStreamSource {
   }
 
   getBlockData(query: BlockQuery): Promise<BlockData | undefined> {
-    return this.recorded(async () => {
+    return this.recorded(() => {
       this.walkStep(++this.blockReads, "block reads");
-      const { pin, result: response } = await this.pinnedCall("getBlock", [
-        query,
-      ]);
-      if (response === undefined) {
-        const tip = this.latestTips?.proposed.number;
-        if ("number" in query && tip !== undefined && query.number <= tip) {
-          // A height its snapshot covers: the stream aborts the pass, as on an empty range.
-          this.bench(pin, "new tip");
-        }
-        return undefined;
-      }
-      await this.check(pin.node, blockDataFault(query, response.header));
-      return {
-        header: response.header,
-        archive: response.archive,
-        blockHash: response.hash,
-        checkpointNumber: response.checkpointNumber,
-        indexWithinCheckpoint: response.indexWithinCheckpoint,
-      };
+      return this.readBlockData(query);
     });
+  }
+
+  /** The pinned node's block at `height`, read outside the walk bound. */
+  pinnedBlockData(height: number): Promise<BlockData | undefined> {
+    return this.recorded(() =>
+      this.readBlockData({ number: BlockNumber(height) }),
+    );
+  }
+
+  /** As `pinnedBlockData`, for a caller that benches the node itself when the block is missing. */
+  pinnedBlockDataUnbenched(height: number): Promise<BlockData | undefined> {
+    return this.recorded(() =>
+      this.readBlockData({ number: BlockNumber(height) }, false),
+    );
+  }
+
+  /** Calls the pinned node under the pinned reads' deadline; a failure benches no node. */
+  async pinnedRead<K extends keyof AztecNode>(
+    fnName: K,
+    args: Parameters<AztecNode[K]>,
+  ): Promise<Awaited<ReturnType<AztecNode[K]>>> {
+    const pin = this.pin;
+    if (pin === undefined) {
+      throw new PassExit();
+    }
+    return this.boundedCall(pin, fnName, args);
   }
 
   getBlocks(query: BlocksQuery): Promise<L2Block[]> {
@@ -464,37 +490,89 @@ export class StickySource implements L2BlockStreamSource {
     }
   }
 
+  private async readBlockData(
+    query: BlockQuery,
+    benchIfMissing = true,
+  ): Promise<BlockData | undefined> {
+    const { pin, result: response } = await this.pinnedCall("getBlock", [
+      query,
+    ]);
+    if (response === undefined) {
+      const tip = this.latestTips?.proposed.number;
+      if (
+        benchIfMissing &&
+        "number" in query &&
+        tip !== undefined &&
+        query.number <= tip
+      ) {
+        // A height its snapshot covers: the stream aborts the pass, as on an empty range.
+        this.bench(pin, "new tip");
+      }
+      return undefined;
+    }
+    await this.check(pin.node, blockDataFault(query, response.header));
+    if ("number" in query && query.number === BlockNumber.ZERO) {
+      const fault = await this.genesisFault(response.header);
+      if (fault !== undefined) {
+        logger.error(`Node ${pin.node.name} ${fault}`);
+        this.fail(pin.node, fault);
+      }
+    }
+    return {
+      header: response.header,
+      archive: response.archive,
+      blockHash: response.hash,
+      checkpointNumber: response.checkpointNumber,
+      indexWithinCheckpoint: response.indexWithinCheckpoint,
+    };
+  }
+
+  private async genesisFault(header: BlockHeader) {
+    const genesis = await this.deps.store.getL2BlockHash(BlockNumber.ZERO);
+    return (await header.hash()).toString() === genesis
+      ? undefined
+      : "has another genesis block than the block stream's";
+  }
+
   private async pinnedCall<K extends keyof AztecNode>(
     fnName: K,
     args: Parameters<AztecNode[K]>,
   ) {
     const pin = this.pin;
     if (pin === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     try {
-      const result = await withDeadline(
-        callNodeFunction(fnName, args, pin.node),
-        PINNED_READ_TIMEOUT_MS,
-        () =>
-          new TimeoutError(
-            `Node ${pin.node.name} did not answer ${String(fnName)} within ${
-              PINNED_READ_TIMEOUT_MS / 1000
-            } s`,
-          ),
-      );
-      // The RPC client resolves a null answer to undefined, whatever the
-      // method's type; only a block lookup may answer nothing.
-      if (result === undefined && fnName !== "getBlock") {
-        throw new Error(
-          `Node ${pin.node.name} answered ${String(fnName)} with nothing`,
-        );
-      }
-      return { pin, result };
+      return { pin, result: await this.boundedCall(pin, fnName, args) };
     } catch (e) {
       this.bench(pin, "cooldown");
       throw e;
     }
+  }
+
+  private async boundedCall<K extends keyof AztecNode>(
+    pin: Pin,
+    fnName: K,
+    args: Parameters<AztecNode[K]>,
+  ): Promise<Awaited<ReturnType<AztecNode[K]>>> {
+    const result = await withDeadline(
+      callNodeFunction(fnName, args, pin.node),
+      PINNED_READ_TIMEOUT_MS,
+      () =>
+        new TimeoutError(
+          `Node ${pin.node.name} did not answer ${String(fnName)} within ${
+            PINNED_READ_TIMEOUT_MS / 1000
+          } s`,
+        ),
+    );
+    // The RPC client resolves a null answer to undefined, whatever the
+    // method's type; only a block lookup may answer nothing.
+    if (result === undefined && fnName !== "getBlock") {
+      throw new Error(
+        `Node ${pin.node.name} answered ${String(fnName)} with nothing`,
+      );
+    }
+    return result;
   }
 
   private async pinnedBlockHash(height: number): Promise<string | undefined> {
@@ -516,7 +594,7 @@ export class StickySource implements L2BlockStreamSource {
     }
     const node = this.pin?.node;
     if (node === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     this.fail(node, `took the block stream past ${bound} ${what} in one pass`);
   }
@@ -546,12 +624,12 @@ export class StickySource implements L2BlockStreamSource {
     );
   }
 
-  private bench(pin: Pin, until: "cooldown" | "new tip") {
+  private bench(pin: Pin, until: "cooldown" | "new tip" | "next election") {
     this.benched.set(
       pin.node.url,
       until === "cooldown"
         ? { until: this.now() + SET_ASIDE_MS }
-        : { tip: pin.proposed },
+        : { tip: pin.tips.proposed, sitsOutNext: until === "next election" },
     );
     if (this.pin === pin) {
       this.pin = undefined;

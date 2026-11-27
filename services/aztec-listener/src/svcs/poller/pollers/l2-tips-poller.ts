@@ -5,13 +5,9 @@ import {
   chicmozL2TipsSchema,
   jsonStringify,
 } from "@chicmoz-pkg/types";
-import {
-  L2_TIPS_HEARTBEAT_INTERVAL_MS,
-  L2_TIPS_POLL_INTERVAL_MS,
-} from "../../../environment.js";
+import { type L2Tips } from "@aztec-labs/stdlib/block";
+import { L2_TIPS_HEARTBEAT_INTERVAL_MS } from "../../../environment.js";
 import { onL2Tips } from "../../../events/emitted/index.js";
-import { logger } from "../../../logger.js";
-import { getL2Tips } from "../network-client/index.js";
 
 type RawTipBlock = { number: { valueOf?: () => unknown } | number | bigint; hash: unknown };
 type RawCheckpointTip = {
@@ -26,7 +22,6 @@ type RawL2Tips = {
   finalized: RawCheckpointTip;
 };
 
-let pollInterval: NodeJS.Timeout | undefined;
 let lastPublishedTips: string | undefined;
 let lastPublishedAt = 0;
 
@@ -68,8 +63,8 @@ const normalizeTips = (tips: RawL2Tips): ChicmozL2Tips =>
     finalized: normalizeCheckpointTip(tips.finalized),
   });
 
-const pollOnce = async () => {
-  const tips = normalizeTips((await getL2Tips()) as unknown as RawL2Tips);
+export const publishTipsIfDue = async (raw: L2Tips) => {
+  const tips = normalizeTips(raw as unknown as RawL2Tips);
   const serialized = jsonStringify(tips);
   const heartbeatDue = Date.now() - lastPublishedAt >= L2_TIPS_HEARTBEAT_INTERVAL_MS;
   if (serialized === lastPublishedTips && !heartbeatDue) {
@@ -78,21 +73,4 @@ const pollOnce = async () => {
   await onL2Tips(tips);
   lastPublishedTips = serialized;
   lastPublishedAt = Date.now();
-};
-
-export const startPolling = () => {
-  pollOnce().catch((error) => {
-    logger.error(`Error fetching L2 tips: ${(error as Error).stack}`);
-  });
-  pollInterval = setInterval(() => {
-    pollOnce().catch((error) => {
-      logger.error(`Error fetching L2 tips: ${(error as Error).stack}`);
-    });
-  }, L2_TIPS_POLL_INTERVAL_MS);
-};
-
-export const stopPolling = () => {
-  if (pollInterval) {
-    clearInterval(pollInterval);
-  }
 };

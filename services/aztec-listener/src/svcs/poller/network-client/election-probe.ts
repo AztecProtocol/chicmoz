@@ -6,7 +6,11 @@ import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc";
 import { type JsonRpcFetch } from "@aztec-labs/foundation/json-rpc/client";
 import { type L2Tips } from "@aztec-labs/stdlib/block";
-import { type RpcNode, withV5NodeNamespaceFallback } from "./pool.js";
+import {
+  type RpcNode,
+  withRedactedErrors,
+  withV5NodeNamespaceFallback,
+} from "./pool.js";
 
 /** Election answers are small; the cap keeps a faulty node from streaming an unbounded body into memory. */
 export const ELECTION_PROBE_MAX_BYTES = 64 * 1024;
@@ -66,8 +70,10 @@ class BoundedClient {
 
   constructor(url: string, maxBytes: number) {
     this.node = createAztecNodeClient(url, {
-      fetch: withV5NodeNamespaceFallback(
-        boundedFetch(maxBytes, () => this.deadline),
+      fetch: withRedactedErrors(
+        withV5NodeNamespaceFallback(
+          boundedFetch(maxBytes, () => this.deadline),
+        ),
       ),
     });
   }

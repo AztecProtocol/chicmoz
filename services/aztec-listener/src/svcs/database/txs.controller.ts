@@ -42,6 +42,12 @@ const buildTxRow = (
   };
 };
 
+const toStoredTx = (row: typeof txsTable.$inferSelect) => ({
+  ...row,
+  initiator: row.initiator ?? undefined,
+  additionalMsgSenders: row.additionalMsgSenders ?? undefined,
+});
+
 export const storeOrUpdate = async (
   pendingTx: ChicmozL2PendingTx & StoredTxMetadata,
   txState: TxState,
@@ -70,11 +76,20 @@ export const getTxs = async (
     .from(txsTable)
     .where(inArray(txsTable.txState, statesWhitelist));
 
-  return rows.map((row) => ({
-    ...row,
-    initiator: row.initiator ?? undefined,
-    additionalMsgSenders: row.additionalMsgSenders ?? undefined,
-  }));
+  return rows.map(toStoredTx);
+};
+
+/** The stored txs among `txHashes`, whatever their state. */
+export const getTxsByHashes = async (txHashes: HexString[]) => {
+  if (txHashes.length === 0) {
+    return [];
+  }
+  const rows = await db()
+    .select()
+    .from(txsTable)
+    .where(inArray(txsTable.txHash, txHashes));
+
+  return rows.map(toStoredTx);
 };
 
 export const storeOrUpdateState = async (

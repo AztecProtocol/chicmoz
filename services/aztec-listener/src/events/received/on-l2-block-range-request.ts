@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { EventHandler, type Heartbeat } from "@chicmoz-pkg/message-bus";
 import {
   generateL2TopicName,
   getConsumerGroupId,
@@ -17,11 +17,9 @@ import {
 } from "../../environment.js";
 import { onCatchupBlock } from "../emitted/index.js";
 import { logger } from "../../logger.js";
-import {
-  getBlock,
-  getLatestProposedHeight,
-  getLatestProvenHeight,
-} from "../../svcs/poller/network-client/index.js";
+import { openAttestedReader } from "../../svcs/poller/network-client/attested-reads.js";
+import { getRpcNode } from "../../svcs/poller/network-client/pool.js";
+import { streamRollupVersion } from "../../svcs/poller/pollers/block_poller/index.js";
 
 const inFlightRequests = new Set<string>();
 
@@ -85,7 +83,10 @@ export const clampRangeRequest = ({
   };
 };
 
-const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
+const processL2BlockRangeRequest = async (
+  event: L2BlockRangeRequestEvent,
+  heartbeat: Heartbeat,
+) => {
   const requestAgeMs = Date.now() - event.requestedAt;
   if (requestAgeMs > L2_BLOCK_RANGE_REQUEST_MAX_AGE_MS) {
     logger.warn(
@@ -93,8 +94,14 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     );
     return;
   }
-  const proposedHeight = toSafeHeight(await getLatestProposedHeight());
-  const provenHeight = toSafeHeight(await getLatestProvenHeight());
+  // One node answers the whole request, so its tips attest the blocks it serves.
+  const reader = await openAttestedReader(
+    getRpcNode(),
+    streamRollupVersion(),
+    heartbeat,
+  );
+  const proposedHeight = toSafeHeight(reader.tips.proposed.number);
+  const provenHeight = toSafeHeight(reader.tips.proven.block.number);
   const maxBlocks = Math.min(
     event.maxBlocks ?? L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
     L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS,
@@ -118,18 +125,23 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     }
 
     for (let height = range.from; height <= range.to && publishedBlocks < maxBlocks; height++) {
-      const block = await getBlock(height);
-      if (!block) {
+      // Before every read and publish: two slow calls in a row can outlast the
+      // Kafka session.
+      await heartbeat();
+      const read = await reader.getBlock(height);
+      if (!read) {
         failedHeights++;
         logger.warn(`Requested catchup block ${height} not found for ${event.requestId}`);
         continue;
       }
+      await heartbeat();
       await onCatchupBlock(
-        block,
+        read.block,
         range.statusHint,
         {
           requestId: event.requestId,
           catchupReason: event.reason === "tip_boundary_mismatch" ? "reorg_repair" : event.reason,
+          ...(read.finalized ? { finalized: true as const } : {}),
         },
       );
       publishedBlocks++;
@@ -141,7 +153,10 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
   );
 };
 
-const onL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
+const onL2BlockRangeRequest = async (
+  event: L2BlockRangeRequestEvent,
+  heartbeat: Heartbeat,
+) => {
   const dedupKey = getL2BlockRangeRequestDedupKey(event);
   if (inFlightRequests.has(dedupKey)) {
     logger.info(`Deduped in-flight L2 block range request ${event.requestId}; key=${dedupKey}`);
@@ -150,7 +165,9 @@ const onL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
 
   inFlightRequests.add(dedupKey);
   try {
-    await requestLimiter.schedule(() => processL2BlockRangeRequest(event));
+    await requestLimiter.schedule(() =>
+      processL2BlockRangeRequest(event, heartbeat),
+    );
   } catch (error) {
     if (error instanceof Bottleneck.BottleneckError) {
       logger.warn(`Skipped queued L2 block range request ${event.requestId}: ${error.message}`);
@@ -169,5 +186,8 @@ export const l2BlockRangeRequestHandler: EventHandler = {
     handlerName: "blockRangeRequestHandler",
   }),
   topic: generateL2TopicName(L2_NETWORK_ID, "L2_BLOCK_RANGE_REQUEST_EVENT"),
-  cb: onL2BlockRangeRequest as (arg0: unknown) => Promise<void>,
+  cb: onL2BlockRangeRequest as (
+    arg0: unknown,
+    heartbeat: Heartbeat,
+  ) => Promise<void>,
 };
