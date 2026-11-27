@@ -168,12 +168,13 @@ export type BlockContracts = {
   instancesUpdated: ChicmozL2ContractInstanceUpdatedEvent[];
 };
 
-const RETRYABLE_CLASSES = new Set(["08", "40", "53", "57"]);
+const RETRYABLE_CLASSES = new Set(["08", "40", "53", "57", "58"]);
 
 /**
  * Whether a rerun of the block can clear `e`: SQLSTATE classes 08
  * (connection), 40 (serialization failure, deadlock), 53 (insufficient
- * resources) and 57 (operator intervention), and 55P03 (lock timeout).
+ * resources), 57 (operator intervention) and 58 (system error, such as I/O),
+ * and 55P03 (lock timeout).
  */
 const retryable = (e: unknown): boolean => {
   // drizzle-orm 0.44 and later wrap pg's error, keeping it as `cause`.

@@ -34,25 +34,28 @@ const failFirstSavepoint = (error: Error) => {
   return { transaction, dbTx: { transaction } as unknown as DbTx };
 };
 
+const lockTimeout = () =>
+  pgError("55P03", "canceling statement due to lock timeout");
+
 describe("a contract row whose savepoint fails", () => {
   it.each([
-    { shape: "as pg throws it", wrap: (e: Error) => e },
+    { fault: "a lock timeout as pg throws it", error: lockTimeout() },
     {
-      shape: "wrapped as a query error's cause",
-      wrap: (e: Error) =>
-        Object.assign(new Error("Failed query"), { cause: e }),
+      fault: "a lock timeout wrapped as a query error's cause",
+      error: Object.assign(new Error("Failed query"), { cause: lockTimeout() }),
+    },
+    {
+      fault: "an I/O error",
+      error: pgError("58030", "could not read block 0 in file: I/O error"),
     },
   ])(
-    "aborts the block on a lock timeout $shape, so the bus redelivers it",
-    async ({ wrap }) => {
-      const lockTimeout = wrap(
-        pgError("55P03", "canceling statement due to lock timeout"),
-      );
-      const { transaction, dbTx } = failFirstSavepoint(lockTimeout);
+    "aborts the block on $fault, so the bus redelivers it",
+    async ({ error }) => {
+      const { transaction, dbTx } = failFirstSavepoint(error);
 
       await expect(
         storeBlockContracts(dbTx, contracts, () => Promise.resolve()),
-      ).rejects.toBe(lockTimeout);
+      ).rejects.toBe(error);
       expect(transaction).toHaveBeenCalledTimes(1);
     },
   );
