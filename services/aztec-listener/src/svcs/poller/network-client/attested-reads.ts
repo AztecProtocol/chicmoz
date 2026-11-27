@@ -5,8 +5,8 @@ import { NodeCheckError, bodyFault } from "./block-stream-source.js";
 import { callNodeFunction } from "./index.js";
 import { type RpcNode } from "./pool.js";
 
-/** `final`: at or below the serving node's own finalized tip, on the stream's rollup version. */
-export type AttestedBlock = { block: L2Block; final: boolean };
+/** `finalized`: at or below the serving node's own finalized tip, on the stream's rollup version. */
+export type AttestedBlock = { block: L2Block; finalized: boolean };
 
 export type AttestedReader = {
   node: RpcNode;
@@ -18,10 +18,10 @@ export type AttestedReader = {
 
 /**
  * Pins `node` for one request. Its tips and rollup version are read before
- * its blocks, and a finalized block cannot change, so `final` holds for every
- * block read after them. Only the stream's own `rollupVersion` gets `final`.
- * A caller whose session two slow reads can outlast passes its `heartbeat`,
- * which runs between them.
+ * its blocks, and a finalized block cannot change, so `finalized` holds for
+ * every block read after them. Only the stream's own `rollupVersion` gets
+ * `finalized`. A caller whose session two slow reads can outlast passes its
+ * `heartbeat`, which runs between them.
  */
 export const openAttestedReader = async (
   node: RpcNode,
@@ -77,7 +77,7 @@ export const openAttestedReader = async (
       }
       return {
         block,
-        final:
+        finalized:
           version !== undefined &&
           block.header.globalVariables.version.toBigInt() === version &&
           height <= tips.finalized.block.number,

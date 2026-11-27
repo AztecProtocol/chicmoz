@@ -7,7 +7,7 @@ import {
   AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS,
   AZTEC_ENABLE_FULL_SWEEP_CATCHUP,
   AZTEC_LISTEN_FOR_L2_TIPS,
-  AZTEC_TIPS_PROBE_TIMEOUT_MS,
+  AZTEC_NODE_PROBE_TIMEOUT_MS,
   BLOCK_POLL_INTERVAL_MS,
   CHAIN_INFO_POLL_INTERVAL_MS,
 } from "../../../../environment.js";
@@ -103,7 +103,7 @@ export const currentChain = async (now = Date.now()): Promise<StreamChain> => {
     latest =
       (await readLatestRollupVersion(
         getOnlineRpcNodes(),
-        AZTEC_TIPS_PROBE_TIMEOUT_MS,
+        AZTEC_NODE_PROBE_TIMEOUT_MS,
       )) ?? latest;
     versionReadAt = now;
   }
@@ -136,7 +136,7 @@ const sweepOnce = async (storeTip: number, rollupVersion: number) => {
   await onCatchupBlock(
     read.block,
     "proposed",
-    read.final ? { final: true } : {},
+    read.finalized ? { finalized: true } : {},
   );
   sweepHeight = (height + 1) % storeTip || 1;
 };

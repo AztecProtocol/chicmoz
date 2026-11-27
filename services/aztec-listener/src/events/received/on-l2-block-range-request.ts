@@ -141,7 +141,7 @@ const processL2BlockRangeRequest = async (
         {
           requestId: event.requestId,
           catchupReason: event.reason === "tip_boundary_mismatch" ? "reorg_repair" : event.reason,
-          ...(read.final ? { final: true as const } : {}),
+          ...(read.finalized ? { finalized: true as const } : {}),
         },
       );
       publishedBlocks++;

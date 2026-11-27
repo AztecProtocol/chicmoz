@@ -36,7 +36,7 @@ const nodeAt = (finalized: number) => {
 };
 
 describe("openAttestedReader", () => {
-  it("reads the node's tips and version before its blocks, with the caller's heartbeat between the two, and marks a block final only at or below its finalized tip", async () => {
+  it("reads the node's tips and version before its blocks, with the caller's heartbeat between the two, and marks a block finalized only at or below its finalized tip", async () => {
     const node = nodeAt(2);
     const reader = await openAttestedReader(node.rpc, ROLLUP_VERSION, () => {
       node.calls.push("heartbeat");
@@ -53,7 +53,7 @@ describe("openAttestedReader", () => {
       "getBlock",
     ]);
     expect(await two?.block.hash()).toEqual(await chain.blocks[2].hash());
-    expect([two?.final, three?.final]).toEqual([true, false]);
+    expect([two?.finalized, three?.finalized]).toEqual([true, false]);
     expect(reader.tips.proposed.number).toBe(4);
   });
 
@@ -77,7 +77,7 @@ describe("openAttestedReader", () => {
       streamVersion: undefined,
     },
   ])(
-    "marks no block final on $on",
+    "marks no block finalized on $on",
     async ({ nodeVersion, blockVersion, streamVersion }) => {
       const node = nodeAt(4);
       node.rollupVersion = nodeVersion;
@@ -85,7 +85,7 @@ describe("openAttestedReader", () => {
       node.getBlockOverride = () => respond(block, true);
       const reader = await openAttestedReader(node.rpc, streamVersion);
 
-      expect((await reader.getBlock(1))?.final).toBe(false);
+      expect((await reader.getBlock(1))?.finalized).toBe(false);
     },
   );
 

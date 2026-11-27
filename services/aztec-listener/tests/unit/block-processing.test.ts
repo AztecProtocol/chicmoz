@@ -49,7 +49,7 @@ describe("onOrderedBlock", () => {
         block: Buffer.from("mock-block-100").toString("hex"),
         statusHint: "proposed",
         blockNumber: 100,
-        ordered: { tip: 104 },
+        ordered: { proposedTip: 104 },
       },
     );
     expect(mockMessageBus.publishMessage).not.toHaveBeenCalled();

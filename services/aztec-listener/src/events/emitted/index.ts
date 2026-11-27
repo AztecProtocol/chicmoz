@@ -34,15 +34,16 @@ const toSafeBlockNumber = (value: bigint): number => {
 
 /**
  * Sends a block of the ordered stream, keyed by the network so the topic
- * keeps the send order. `tip` is the proposed tip of the pass that sends it.
+ * keeps the send order. `proposedTip` is the proposed tip of the pass that
+ * sends it.
  */
-export const onOrderedBlock = async (block: L2Block, tip: number) => {
+export const onOrderedBlock = async (block: L2Block, proposedTip: number) => {
   const height = BigInt(block.header.globalVariables.blockNumber.toString());
   const heightNumber = toSafeBlockNumber(height);
   logger.info(
     `🦊 publishing block ${height} (hash: ${(
       await block.hash()
-    ).toString()}, tip ${tip})...`,
+    ).toString()}, proposed tip ${proposedTip})...`,
   );
   const blockBuffer = block.toBuffer() as Uint8Array;
   const blockStr = Buffer.from(blockBuffer).toString("hex");
@@ -50,7 +51,7 @@ export const onOrderedBlock = async (block: L2Block, tip: number) => {
     block: blockStr,
     statusHint: "proposed",
     blockNumber: heightNumber,
-    ordered: { tip },
+    ordered: { proposedTip },
   });
   const potentiallyIncludedTxs = await txsController.getTxs([
     "pending",
@@ -75,7 +76,7 @@ export const onCatchupBlock = async (
   statusHint: L2BlockStatusHint,
   metadata: Pick<
     CatchupBlockEvent,
-    "requestId" | "catchupReason" | "final"
+    "requestId" | "catchupReason" | "finalized"
   > = {},
 ) => {
   const blockNumber = BigInt(

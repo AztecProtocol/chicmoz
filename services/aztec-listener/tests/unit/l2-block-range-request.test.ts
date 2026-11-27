@@ -107,11 +107,11 @@ describe("L2 block range request helpers", () => {
 });
 
 describe("L2 block range request", () => {
-  it("answers from one node, clamped to its tips, with final on the blocks its reader attests", async () => {
+  it("answers from one node, clamped to its tips, with finalized on the blocks its reader attests", async () => {
     openAttestedReader.mockResolvedValue({
       tips: { proposed: { number: 3 }, proven: { block: { number: 2 } } },
       getBlock: (height: number) =>
-        Promise.resolve({ block: { height }, final: height === 1 }),
+        Promise.resolve({ block: { height }, finalized: height === 1 }),
     });
 
     await l2BlockRangeRequestHandler.cb(
@@ -136,7 +136,7 @@ describe("L2 block range request", () => {
         {
           requestId: "request-3",
           catchupReason: "cadence",
-          ...(height === 1 ? { final: true } : {}),
+          ...(height === 1 ? { finalized: true } : {}),
         },
       ]),
     );
@@ -148,7 +148,7 @@ describe("L2 block range request", () => {
       tips: { proposed: { number: 4 }, proven: { block: { number: 4 } } },
       getBlock: (height: number) => {
         calls.push(`read ${height}`);
-        return Promise.resolve({ block: { height }, final: false });
+        return Promise.resolve({ block: { height }, finalized: false });
       },
     });
     onCatchupBlock.mockClear();

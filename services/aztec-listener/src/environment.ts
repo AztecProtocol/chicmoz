@@ -96,12 +96,12 @@ export const AZTEC_BLOCK_STREAM_BATCH_SIZE = z.coerce
   .default(10)
   .parse(process.env.AZTEC_BLOCK_STREAM_BATCH_SIZE);
 /** The most proven blocks one pass runs the fee-juice balance work on. */
-export const AZTEC_PROVEN_SIDE_WORK_MAX = z.coerce
+export const AZTEC_PROVEN_BLOCKS_PER_PASS = z.coerce
   .number()
   .int()
   .positive()
   .default(200)
-  .parse(process.env.AZTEC_PROVEN_SIDE_WORK_MAX);
+  .parse(process.env.AZTEC_PROVEN_BLOCKS_PER_PASS);
 export const L2_BLOCK_RANGE_REQUEST_MAX_RANGES = z.coerce
   .number()
   .int()
@@ -214,7 +214,7 @@ AZTEC_MAX_PRUNE_DEPTH:                                     ${AZTEC_MAX_PRUNE_DEP
 AZTEC_STREAM_STALL_ALERT_MS:                               ${AZTEC_STREAM_STALL_ALERT_MS / 1000}s
 AZTEC_NODE_PROBE_TIMEOUT_MS:                               ${AZTEC_NODE_PROBE_TIMEOUT_MS / 1000}s
 AZTEC_BLOCK_STREAM_BATCH_SIZE:                             ${AZTEC_BLOCK_STREAM_BATCH_SIZE}
-AZTEC_PROVEN_SIDE_WORK_MAX:                                ${AZTEC_PROVEN_SIDE_WORK_MAX}
+AZTEC_PROVEN_BLOCKS_PER_PASS:                              ${AZTEC_PROVEN_BLOCKS_PER_PASS}
 MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS:                        ${MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS}
 L2_BLOCK_RANGE_REQUEST_MAX_RANGES:                         ${L2_BLOCK_RANGE_REQUEST_MAX_RANGES}
 L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS:                         ${L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS}

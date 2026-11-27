@@ -9,7 +9,7 @@ import {
 } from "@aztec-labs/stdlib/block";
 import {
   AZTEC_MAX_PRUNE_DEPTH,
-  AZTEC_STREAM_PREFIX_ALERT_MS,
+  AZTEC_STREAM_STALL_ALERT_MS,
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import {
@@ -67,7 +67,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
     private readonly deps: ChainPublisherDeps,
     private readonly config: ChainPublisherConfig = {
       maxPruneDepth: AZTEC_MAX_PRUNE_DEPTH,
-      prefixAlertMs: AZTEC_STREAM_PREFIX_ALERT_MS,
+      prefixAlertMs: AZTEC_STREAM_STALL_ALERT_MS,
     },
   ) {
     this.now = deps.now ?? (() => Date.now());

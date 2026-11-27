@@ -87,7 +87,7 @@ describe("block poller full sweep", () => {
     // The node reader attests block 1 only.
     openAttestedReader.mockResolvedValue({
       getBlock: (height: number) =>
-        Promise.resolve({ block: { height }, final: height === 1 }),
+        Promise.resolve({ block: { height }, finalized: height === 1 }),
     });
   });
 
@@ -104,7 +104,7 @@ describe("block poller full sweep", () => {
     expect(onCatchupBlock).not.toHaveBeenCalled();
   });
 
-  it("sweeps one block per pass that leaves the tip, below the store's tip, marking final what the node's reader attests", async () => {
+  it("sweeps one block per pass that leaves the tip, below the store's tip, marking finalized what the node's reader attests", async () => {
     const { runPass } = await importPoller(true);
 
     for (let pass = 0; pass < 3; pass++) {
@@ -115,9 +115,9 @@ describe("block poller full sweep", () => {
     expect(openAttestedReader).toHaveBeenCalledTimes(3);
     expect(openAttestedReader).toHaveBeenCalledWith(node, 7);
     expect(onCatchupBlock.mock.calls).toEqual([
-      [{ height: 1 }, "proposed", { final: true }],
+      [{ height: 1 }, "proposed", { finalized: true }],
       [{ height: 2 }, "proposed", {}],
-      [{ height: 1 }, "proposed", { final: true }],
+      [{ height: 1 }, "proposed", { finalized: true }],
     ]);
     expect(storeProcessedProposedBlockHeight).toHaveBeenCalledWith(4);
   });

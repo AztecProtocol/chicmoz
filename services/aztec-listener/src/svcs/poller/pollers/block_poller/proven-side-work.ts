@@ -2,7 +2,7 @@ import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { type L2Block } from "@aztec-labs/stdlib/block";
 import {
   AZTEC_BLOCK_STREAM_BATCH_SIZE,
-  AZTEC_PROVEN_SIDE_WORK_MAX,
+  AZTEC_PROVEN_BLOCKS_PER_PASS,
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { type StickySource } from "../../network-client/block-stream-source.js";
@@ -51,7 +51,7 @@ const onStoredChain = async (
 export const runProvenSideWork = async (
   deps: ProvenSideWorkDeps,
   { max, batchSize } = {
-    max: AZTEC_PROVEN_SIDE_WORK_MAX,
+    max: AZTEC_PROVEN_BLOCKS_PER_PASS,
     batchSize: AZTEC_BLOCK_STREAM_BATCH_SIZE,
   },
 ) => {
