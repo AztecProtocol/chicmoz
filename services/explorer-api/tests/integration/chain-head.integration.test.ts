@@ -39,6 +39,10 @@ describe("the canonical chain on a real database", () => {
   ) => Promise<void>;
   let ignoredUnordered: (b: BuiltBlock) => Promise<void>;
   let setOrphaned: (blocks: BuiltBlock[], orphaned: boolean) => Promise<void>;
+  let unseenCanonical: (
+    height: bigint,
+    version: number,
+  ) => Promise<BuiltBlock["hash"]>;
   let bareChain: (chain: {
     version: number;
     from: bigint;
@@ -97,6 +101,20 @@ describe("the canonical chain on a real database", () => {
             blocks.map((b) => b.hash),
           ),
         );
+    };
+    // Only the block row, without the header and archive rows every chain
+    // read joins, so no change sees it to demote it.
+    unseenCanonical = async (height, version) => {
+      const tag = version.toString(16).padStart(8, "0");
+      const hash = `0x${tag}ee${height.toString(16).padStart(54, "0")}` as const;
+      await db.insert(l2Block).values({
+        hash,
+        height,
+        version,
+        orphan_timestamp: null,
+        orphan_hasOrphanedParent: null,
+      });
+      return hash;
     };
     // Linked blocks, canonical unless `offChain`, with only the rows a link
     // lookup reads, inserted in bulk: delivering thousands of blocks would
@@ -872,6 +890,20 @@ describe("the canonical chain on a real database", () => {
     await ignoredUnordered(block);
 
     expect(await reads.stateOf(block.hash)).toBe("absent");
+  });
+
+  it("refuses a second canonical block at a height in the database, and the block handler rethrows the refusal", async () => {
+    const version = freshVersion();
+    const [block] = await buildChain(29_000n, 1, { version });
+    const unseen = await unseenCanonical(block.height, version);
+
+    await expect(ordered(block)).rejects.toMatchObject({
+      code: "23505",
+      constraint: "l2block_one_canonical_per_height_idx",
+    });
+
+    expect(await reads.stateOf(block.hash)).toBe("absent");
+    expect(await reads.stateOf(unseen)).toBe("canonical");
   });
 
   it("serializes the block and catch-up consumers storing one height on the chain lock", async () => {

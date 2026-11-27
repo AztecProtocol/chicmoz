@@ -1,5 +1,12 @@
 import { HexString } from "@chicmoz-pkg/types";
-import { bigint, boolean, index, pgTable, varchar } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  pgTable,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 import {
@@ -31,6 +38,13 @@ export const l2Block = pgTable(
       t.height,
       t.orphan_timestamp,
     ),
+    // A chain change demotes a height's canonical block before it promotes
+    // another there; a statement that would leave two fails the change.
+    oneCanonicalPerHeightIdx: uniqueIndex(
+      "l2block_one_canonical_per_height_idx",
+    )
+      .on(t.version, t.height)
+      .where(sql`${t.orphan_timestamp} IS NULL`),
   }),
 );
 

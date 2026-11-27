@@ -281,6 +281,13 @@
       "when": 1779960000012,
       "tag": "0039_l2_reorg",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1779960000013,
+      "tag": "0040_one_canonical_block_per_height",
+      "breakpoints": true
     }
   ]
 }

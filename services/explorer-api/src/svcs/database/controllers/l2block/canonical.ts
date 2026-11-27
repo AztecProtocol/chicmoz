@@ -38,6 +38,11 @@ import { store, writeTxEffect } from "./store.js";
 // parent's archive root is outside the parent's hash, so two stored parents
 // make a lookup ambiguous.
 //
+// One canonical block per height also holds after every statement: the
+// unique index l2block_one_canonical_per_height_idx refuses a second. So a
+// change demotes a height's canonical block before it promotes another
+// there, and a violation propagates, failing the change for redelivery.
+//
 // Ordered blocks are the listener's chain, sent in order: each is canonical
 // at its height and nothing canonical stays above its tip. Catch-up blocks
 // only fill empty heights below the canonical head; one that the chain above
