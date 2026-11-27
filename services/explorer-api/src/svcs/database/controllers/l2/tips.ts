@@ -348,35 +348,6 @@ export const revalidateTips = async (dbTx: DbTx) => {
   await recordValidation(dbTx, mismatch, rollupVersion);
 };
 
-/**
- * The heights of the open mismatches, most recently seen first: those of
- * `rollupVersion`, and those recorded before mismatches carried a version.
- */
-export const getUnresolvedBoundaryHeights = async (
-  rollupVersion: number | null,
-  limit: number,
-): Promise<number[]> => {
-  const mismatch = l2TipBoundaryMismatchTable;
-  const rows = await db()
-    .select({ height: mismatch.height })
-    .from(mismatch)
-    .where(
-      and(
-        eq(mismatch.l2NetworkId, L2_NETWORK_ID),
-        isNull(mismatch.resolvedAt),
-        rollupVersion === null
-          ? undefined
-          : or(
-              isNull(mismatch.rollupVersion),
-              eq(mismatch.rollupVersion, rollupVersion),
-            ),
-      ),
-    )
-    .orderBy(desc(mismatch.lastSeenAt))
-    .limit(limit);
-  return [...new Set(rows.map(({ height }) => height))];
-};
-
 export const getRecentBoundaryMismatches = async (
   l2NetworkId: L2NetworkId = L2_NETWORK_ID,
 ) => {

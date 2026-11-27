@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => {
     deleted: [] as unknown[],
     updates: [] as Array<Record<string, unknown>>,
     updateTargets: [] as unknown[][],
-    unresolvedHeights: [] as number[],
+    candidateHeights: [] as number[],
     tipRepairWindow: 5,
     publishFails: false,
     order: [] as string[],
@@ -82,6 +82,20 @@ const mocks = vi.hoisted(() => {
     select: (fields?: Record<string, unknown>) => ({
       from: (table: object) => ({
         where: (condition: unknown) => {
+          // The tip repair's candidate query filters and orders in SQL, which
+          // the integration tests run; here it yields the heights given.
+          if (tableName(table) === "l2_tip_boundary_mismatch") {
+            return {
+              orderBy: () => ({
+                limit: (limit: number) =>
+                  Promise.resolve(
+                    state.candidateHeights
+                      .slice(0, limit)
+                      .map((height) => ({ height })),
+                  ),
+              }),
+            };
+          }
           if (tableName(table) !== "l2_open_gap") {
             return Object.assign(Promise.resolve(heightRows()), {
               orderBy: () => Promise.resolve(heightRows()),
@@ -160,10 +174,6 @@ vi.mock(
   "../../src/svcs/database/controllers/l2/chain-info/rollup-version-cache.js",
   () => ({ getCurrentRollupVersionNumber: () => Promise.resolve(1) }),
 );
-vi.mock("../../src/svcs/database/controllers/l2/tips.js", () => ({
-  getUnresolvedBoundaryHeights: () =>
-    Promise.resolve(mocks.state.unresolvedHeights),
-}));
 vi.mock("../../src/svcs/database/controllers/l2block/get-latest.js", () => ({
   getLatestHeight: () => Promise.resolve(BigInt(TIP)),
   getLatestBlockRollupVersion: () => Promise.resolve(1),
@@ -237,7 +247,7 @@ beforeEach(() => {
     deleted: [],
     updates: [],
     updateTargets: [],
-    unresolvedHeights: [],
+    candidateHeights: [],
     tipRepairWindow: 5,
     publishFails: false,
     order: [],
@@ -634,8 +644,8 @@ describe("buildTipBoundaryRepairRequest", () => {
       })
       .slice(0, Math.min(request?.maxBlocks ?? limit, limit));
 
-  it("sends the window around the most recently seen open mismatch", async () => {
-    mocks.state.unresolvedHeights = [TIP - 2, 98106];
+  it("sends the window around the picked mismatch, keeping its row's backoff", async () => {
+    mocks.state.candidateHeights = [TIP - 2];
 
     const planned = await buildTipBoundaryRepairRequest();
 
@@ -645,28 +655,9 @@ describe("buildTipBoundaryRepairRequest", () => {
     expect(mocks.state.upserts[0].set).not.toHaveProperty("requestCount");
   });
 
-  it("passes over a window that is backing off, and sends nothing while every one is", async () => {
-    mocks.state.unresolvedHeights = [98106, TIP - 2];
-    mocks.state.gaps = [
-      gap({
-        id: "MAINNET:tip_boundary_mismatch:98101:98111",
-        fromHeight: 98101,
-        toHeight: 98111,
-        reason: "tip_boundary_mismatch",
-        due: false,
-      }),
-    ];
-
-    const planned = await buildTipBoundaryRepairRequest();
-    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
-
-    mocks.state.unresolvedHeights = [98106];
-    await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
-  });
-
   it("asks for the mismatch before its neighbors, so a listener sending fewer heights than the window still sends it", async () => {
     mocks.state.tipRepairWindow = 300;
-    mocks.state.unresolvedHeights = [TIP - 2];
+    mocks.state.candidateHeights = [TIP - 2];
 
     const planned = await buildTipBoundaryRepairRequest();
 
@@ -676,14 +667,6 @@ describe("buildTipBoundaryRepairRequest", () => {
       ranges: windowAround(TIP - 2, 99),
       maxBlocks: 199,
     });
-  });
-
-  it("passes over a mismatch at height 0, which the listener never fetches", async () => {
-    mocks.state.unresolvedHeights = [0, TIP - 2];
-
-    const planned = await buildTipBoundaryRepairRequest();
-
-    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
   });
 });
 

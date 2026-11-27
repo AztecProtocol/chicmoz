@@ -32,6 +32,10 @@ const byFrom = (ranges: Range[] | null) =>
 describe("open gap scheduling on a real database", () => {
   let api: ExplorerApiForTest;
   let tick: () => Promise<Range[] | null>;
+  let repairTick: () => Promise<Range[] | null>;
+  let mismatches: (
+    rows: Array<{ height: number; seenAgoMs: number; version?: number }>,
+  ) => Promise<void>;
   let blocks: (heights: number[], version?: number) => Promise<void>;
   let arrive: (height: number) => Promise<void>;
   let orphan: (height: number) => Promise<void>;
@@ -49,6 +53,7 @@ describe("open gap scheduling on a real database", () => {
       L2_BLOCK_RECONCILIATION_MAX_BLOCKS: "200",
       L2_BLOCK_RECONCILIATION_MAX_RANGES: "10",
       L2_BLOCK_RECONCILIATION_SCAN_WINDOW: "10000",
+      L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW: "5",
     });
     api = await startExplorerApiForTest();
     const { getDb } = await import("@chicmoz-pkg/postgres-helper");
@@ -56,11 +61,15 @@ describe("open gap scheduling on a real database", () => {
     const { l2OpenGapTable } = await import(
       "../../src/svcs/database/schema/l2/open-gap.js"
     );
+    const { l2TipBoundaryMismatchTable } = await import(
+      "../../src/svcs/database/schema/l2/tips.js"
+    );
     const { l2Block } = await import(
       "../../src/svcs/database/schema/l2block/index.js"
     );
     const {
       buildMissingBlockRangeRequest,
+      buildTipBoundaryRepairRequest,
       fulfilRepairHeight,
       markOpenGapsFulfilledByHeight,
       recordRepairHeights,
@@ -79,14 +88,35 @@ describe("open gap scheduling on a real database", () => {
     const db = getDb();
     const hashOf = (height: number, version: number): HexString =>
       `0x${version.toString(16).padStart(2, "0")}${height.toString(16).padStart(62, "0")}`;
-    // A cadence tick whose publish succeeds: what it would send, then the
-    // marking that follows the send.
-    tick = async () => {
-      const planned = await buildMissingBlockRangeRequest({ reason: "cadence" });
+    // A tick whose publish succeeds: what it would send, then the marking
+    // that follows the send.
+    const sent = async (
+      planned: Awaited<ReturnType<typeof buildMissingBlockRangeRequest>>,
+    ) => {
       await planned?.markRequested();
       return planned
         ? planned.request.ranges.map(({ from, to }): Range => [from, to])
         : null;
+    };
+    tick = async () =>
+      sent(await buildMissingBlockRangeRequest({ reason: "cadence" }));
+    repairTick = async () => sent(await buildTipBoundaryRepairRequest());
+    mismatches = async (rows) => {
+      const now = Date.now();
+      await db.insert(l2TipBoundaryMismatchTable).values(
+        rows.map(({ height, seenAgoMs, version = CURRENT }) => ({
+          id: `SANDBOX:proposed:${height}`,
+          l2NetworkId: "SANDBOX" as const,
+          bucket: "proposed" as const,
+          height,
+          expectedHash: hashOf(height, version),
+          observedDbHash: null,
+          reason: `proposed boundary block ${height} is missing`,
+          firstSeenAt: new Date(now - seenAgoMs),
+          lastSeenAt: new Date(now - seenAgoMs),
+          rollupVersion: version,
+        })),
+      );
     };
     blocks = async (heights, version = CURRENT) => {
       await db.insert(l2Block).values(
@@ -145,6 +175,7 @@ describe("open gap scheduling on a real database", () => {
       ).map(({ from, to }): Range => [from, to]);
     reset = async () => {
       await db.delete(l2OpenGapTable);
+      await db.delete(l2TipBoundaryMismatchTable);
       await db.delete(l2Block);
     };
   });
@@ -233,6 +264,30 @@ describe("open gap scheduling on a real database", () => {
     ]);
 
     expect(await tick()).toEqual([[170, 170], [180, 180]]);
+  });
+
+  it("sends a due tip repair past more backed-off windows than the scheduler's candidates", async () => {
+    // Each seen more recently than the due mismatch at 900, and more of them
+    // than the scheduler's 50 candidates. The first ticks request, and so
+    // back off, these windows; the one at 3 starts at height 1.
+    const backedOff = [3, ...span(1_001, 1_050)];
+    await mismatches([
+      // Never fetched: the listener starts at height 1.
+      { height: 0, seenAgoMs: 0 },
+      ...backedOff.map((height, i) => ({ height, seenAgoMs: (i + 1) * 1_000 })),
+      { height: 950, seenAgoMs: 30 * MINUTE, version: OLD },
+      { height: 900, seenAgoMs: 60 * MINUTE },
+    ]);
+
+    for (const height of backedOff) {
+      expect((await repairTick())?.[0]).toEqual([height, height]);
+    }
+    expect(await repairTick()).toEqual([
+      [900, 900],
+      [895, 899],
+      [901, 905],
+    ]);
+    expect(await repairTick()).toBeNull();
   });
 
   it("does not let old-version blocks or old-chain gap rows hide a current-version gap", async () => {

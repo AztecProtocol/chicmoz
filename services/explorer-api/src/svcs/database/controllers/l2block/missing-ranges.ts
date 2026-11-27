@@ -6,6 +6,7 @@ import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import {
   and,
   asc,
+  desc,
   eq,
   gte,
   inArray,
@@ -13,6 +14,7 @@ import {
   lte,
   ne,
   not,
+  notExists,
   or,
   sql,
 } from "drizzle-orm";
@@ -27,9 +29,9 @@ import {
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { l2OpenGapTable } from "../../schema/l2/open-gap.js";
+import { l2TipBoundaryMismatchTable } from "../../schema/l2/tips.js";
 import { l2Block } from "../../schema/l2block/index.js";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
-import { getUnresolvedBoundaryHeights } from "../l2/tips.js";
 import { getLatestBlockRollupVersion, getLatestHeight } from "./get-latest.js";
 
 type GapRange = { from: number; to: number; statusHint: "proposed" };
@@ -596,48 +598,57 @@ export const buildTipBoundaryRepairRequest =
       L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW,
       Math.floor((L2_BLOCK_RECONCILIATION_MAX_BLOCKS - 1) / 2),
     );
-    const windows = (
-      await getUnresolvedBoundaryHeights(
-        await getCurrentRollupVersionNumber(),
-        CANDIDATE_GAP_LIMIT,
-      )
-    )
-      // The listener fetches no height below 1.
-      .filter((height) => height >= 1)
-      .map((height) => {
-        const from = Math.max(1, height - repairWindow);
-        const to = height + repairWindow;
-        return {
-          height,
-          from,
-          to,
-          id: gapId({ from, to, reason: TIP_BOUNDARY_REASON }),
-        };
-      });
-    if (windows.length === 0) {
-      return null;
-    }
-    const backingOff = new Set(
-      (
-        await db()
-          .select({ id: l2OpenGapTable.id })
-          .from(l2OpenGapTable)
-          .where(
-            and(
-              inArray(
-                l2OpenGapTable.id,
-                windows.map(({ id }) => id),
+    const rollupVersion = await getCurrentRollupVersionNumber();
+    const mismatch = l2TipBoundaryMismatchTable;
+    // Every filter, the backoff included, applies before the limit: rows a
+    // tick would pass over must not hide one it would send.
+    const [candidate] = await db()
+      .select({ height: mismatch.height })
+      .from(mismatch)
+      .where(
+        and(
+          eq(mismatch.l2NetworkId, L2_NETWORK_ID),
+          isNull(mismatch.resolvedAt),
+          // This version's, and those recorded before mismatches carried one.
+          rollupVersion === null
+            ? undefined
+            : or(
+                isNull(mismatch.rollupVersion),
+                eq(mismatch.rollupVersion, rollupVersion),
               ),
-              not(gapDueSql(Date.now())),
-            ),
-          )
-      ).map(({ id }) => id),
-    );
-    const window = windows.find(({ id }) => !backingOff.has(id));
-    if (!window) {
+          // The listener fetches no height below 1.
+          gte(mismatch.height, 1),
+          notExists(
+            db()
+              .select({ one: sql`1` })
+              .from(l2OpenGapTable)
+              .where(
+                and(
+                  eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
+                  eq(l2OpenGapTable.reason, TIP_BOUNDARY_REASON),
+                  eq(
+                    l2OpenGapTable.fromHeight,
+                    sql`greatest(1, ${mismatch.height} - ${repairWindow})`,
+                  ),
+                  eq(
+                    l2OpenGapTable.toHeight,
+                    sql`${mismatch.height} + ${repairWindow}`,
+                  ),
+                  not(gapDueSql(Date.now())),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(desc(mismatch.lastSeenAt))
+      .limit(1);
+    if (!candidate) {
       return null;
     }
-    const { height, from, to, id } = window;
+    const { height } = candidate;
+    const from = Math.max(1, height - repairWindow);
+    const to = height + repairWindow;
+    const id = gapId({ from, to, reason: TIP_BOUNDARY_REASON });
     const range = { from, to, statusHint: "proposed" as const };
     // Reopening must not reset the backoff here: the row is "fulfilled" as
     // soon as its heights are present, mismatch or not.
