@@ -18,9 +18,14 @@ export const useGetTxEffectByHash = (
     queryKey: queryKeyGenerator.txEffectByHash(hash),
     queryFn: () => TxEffectsAPI.getTxEffectByHash(hash),
     enabled: !!hash,
+    // A catch-up block can move an orphaned effect back onto the chain, and
+    // no websocket frame announces a catch-up block.
     refetchInterval: ({ state }) =>
-      refetchUntilFound && !state.data ? LIVE_REFETCH_INTERVAL : false,
-    // Mined tx effects are immutable — cache for 5min.
+      refetchUntilFound && !state.data
+        ? LIVE_REFETCH_INTERVAL
+        : state.data?.isOrphaned
+          ? REFETCH_INTERVAL
+          : false,
     staleTime: 5 * 60_000,
   });
 };
