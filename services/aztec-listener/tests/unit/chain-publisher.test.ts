@@ -221,6 +221,34 @@ describe("ChainPublisher after the node replaces published heights", () => {
     expect(await pass()).toBe(y.rpc);
   });
 
+  it.each([
+    {
+      serving: "another block at its tip",
+      served: (tip: number) => grow(prefix(main, 9), tip),
+    },
+    {
+      serving: "no block above 7",
+      served: () => Promise.resolve(prefix(main, 7)),
+    },
+  ])(
+    "keeps a node serving $serving out of the next election once its tip moves ahead, and the pin then stays on the node elected instead",
+    async ({ served }) => {
+      const x = new FakeNode("x", prefix(main, 5));
+      const y = new FakeNode("y", prefix(main, 5));
+      const { pass } = setup({ nodes: [x, y] });
+      await pass();
+      x.chain = prefix(main, 10);
+      x.servedChain = await served(10);
+      y.chain = prefix(main, 11);
+      expect(await pass()).toBe(x.rpc);
+
+      x.chain = prefix(main, 12);
+      x.servedChain = await served(12);
+      expect(await pass()).toBe(y.rpc);
+      expect(await pass()).toBe(y.rpc);
+    },
+  );
+
   it("sends a pass longer than one batch whole, each block with the pass's tip", async () => {
     const x = new FakeNode("x", prefix(main, 5));
     const { sent, pass, head } = setup({ nodes: [x] });

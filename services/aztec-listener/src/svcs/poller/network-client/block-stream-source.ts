@@ -78,7 +78,7 @@ export type StickySourceConfig = {
 type PassBounds = { finalized: L2BlockId; floor: number | undefined };
 /** `tips` are what the election's probe showed. */
 type Pin = { node: RpcNode; bounds: PassBounds; tips: L2Tips };
-type Bench = { until: number } | { tip: L2BlockId };
+type Bench = { until: number } | { tip: L2BlockId; sitsOutNext: boolean };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
 type Fault = {
@@ -203,10 +203,10 @@ const blockDataFault = async (query: BlockQuery, header: BlockHeader) => {
  * every read of that pass goes to it. A failed response check or a walk-back
  * past the bound sets the node aside for five minutes. A failed read, a tips
  * or range read answered with nothing, or a rejected snapshot benches it for
- * five minutes; the prefix rule, an empty range, no block at a height its
- * snapshot covers, or a block at its tip's height other than its tip bench it
- * until its tip changes. Benched nodes are all back once no eligible node is
- * outside the bench.
+ * five minutes; the prefix rule, an empty range, or no block at a height its
+ * snapshot covers bench it until its tip changes, and a tip its blocks do not
+ * match benches it for the next election as well. Benched nodes are all back
+ * once no eligible node is outside the bench.
  */
 export class StickySource implements L2BlockStreamSource {
   /** The store as the stream must read it: its hash lookups count against the walk bound. */
@@ -291,12 +291,16 @@ export class StickySource implements L2BlockStreamSource {
     );
     for (const { node, tips } of eligible) {
       const bench = this.benched.get(node.url);
-      if (
-        bench !== undefined &&
-        ("until" in bench
-          ? bench.until <= now
-          : !sameBlock(bench.tip, tips.proposed))
-      ) {
+      if (bench === undefined) {
+        continue;
+      }
+      if ("until" in bench) {
+        if (bench.until <= now) {
+          this.benched.delete(node.url);
+        }
+      } else if (bench.sitsOutNext) {
+        bench.sitsOutNext = false;
+      } else if (!sameBlock(bench.tip, tips.proposed)) {
         this.benched.delete(node.url);
       }
     }
@@ -357,6 +361,17 @@ export class StickySource implements L2BlockStreamSource {
     }
   }
 
+  /**
+   * Unpins the pinned node and benches it for the next election, then until
+   * its tip changes: a node whose blocks disagree with its tips can lead the
+   * election with a new tip every pass.
+   */
+  benchPinnedPastNextElection(): void {
+    if (this.pin !== undefined) {
+      this.bench(this.pin, "next election");
+    }
+  }
+
   /** Keeps the pinned node out of the elections for five minutes. */
   setAsidePinned(reason: string): void {
     if (this.pin !== undefined) {
@@ -397,6 +412,13 @@ export class StickySource implements L2BlockStreamSource {
   pinnedBlockData(height: number): Promise<BlockData | undefined> {
     return this.recorded(() =>
       this.readBlockData({ number: BlockNumber(height) }),
+    );
+  }
+
+  /** As `pinnedBlockData`, for a caller that benches the node itself when the block is missing. */
+  pinnedBlockDataUnbenched(height: number): Promise<BlockData | undefined> {
+    return this.recorded(() =>
+      this.readBlockData({ number: BlockNumber(height) }, false),
     );
   }
 
@@ -470,13 +492,19 @@ export class StickySource implements L2BlockStreamSource {
 
   private async readBlockData(
     query: BlockQuery,
+    benchIfMissing = true,
   ): Promise<BlockData | undefined> {
     const { pin, result: response } = await this.pinnedCall("getBlock", [
       query,
     ]);
     if (response === undefined) {
       const tip = this.latestTips?.proposed.number;
-      if ("number" in query && tip !== undefined && query.number <= tip) {
+      if (
+        benchIfMissing &&
+        "number" in query &&
+        tip !== undefined &&
+        query.number <= tip
+      ) {
         // A height its snapshot covers: the stream aborts the pass, as on an empty range.
         this.bench(pin, "new tip");
       }
@@ -596,12 +624,12 @@ export class StickySource implements L2BlockStreamSource {
     );
   }
 
-  private bench(pin: Pin, until: "cooldown" | "new tip") {
+  private bench(pin: Pin, until: "cooldown" | "new tip" | "next election") {
     this.benched.set(
       pin.node.url,
       until === "cooldown"
         ? { until: this.now() + SET_ASIDE_MS }
-        : { tip: pin.tips.proposed },
+        : { tip: pin.tips.proposed, sitsOutNext: until === "next election" },
     );
     if (this.pin === pin) {
       this.pin = undefined;
