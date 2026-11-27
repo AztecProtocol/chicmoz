@@ -5,8 +5,8 @@ import { queryKeyGenerator } from "./utils";
 
 export const useDroppedTxByHash = (
   hash: string,
-): UseQueryResult<ChicmozL2DroppedTx, Error> => {
-  return useQuery<ChicmozL2DroppedTx, Error>({
+): UseQueryResult<ChicmozL2DroppedTx | null, Error> => {
+  return useQuery<ChicmozL2DroppedTx | null, Error>({
     queryKey: queryKeyGenerator.droppedTxByHash(hash),
     queryFn: () => DroppedTxAPI.getDroppedTxByHash(hash),
     enabled: !!hash,
