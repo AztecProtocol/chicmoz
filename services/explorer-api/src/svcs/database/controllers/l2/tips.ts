@@ -139,6 +139,11 @@ const validateBoundary = async (
   rollupVersion: number | null,
 ): Promise<BoundaryValidationResult | null> => {
   const tip = bucket === "proposed" ? tips.proposed : tips[bucket].block;
+  // A tier at block 0 names the genesis block, which is never stored: there
+  // is nothing to check it against.
+  if (tip.number === 0) {
+    return null;
+  }
   const boundaryHash = await getBoundaryBlock(
     executor,
     tip.number,
