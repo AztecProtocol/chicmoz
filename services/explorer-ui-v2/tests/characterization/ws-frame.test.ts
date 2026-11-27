@@ -20,17 +20,22 @@ const PUBLISHED_BLOCK_FRAME = new URL(
 );
 
 const TX = `0x${"cd".repeat(32)}`;
-// Views a prune can change: the reorg lists, and block and tx details by
-// height and by hash.
+const ADDRESS = `0x${"ef".repeat(32)}`;
+// Views a prune can change: the reorg lists, the block pages, block and tx
+// details by height and by hash, and the contract instances and their lists.
 const CHAIN_VIEWS = [
   queryKeyGenerator.reorgs,
   queryKeyGenerator.orphanedBlocks,
+  queryKeyGenerator.paginatedTableBlocks(2, 20, undefined),
   queryKeyGenerator.blockByHeight("7"),
   queryKeyGenerator.blockByHeight(`0x${"ab".repeat(32)}`),
   queryKeyGenerator.txEffectsByBlockHeight(7),
   queryKeyGenerator.txEffectByHash(TX),
   queryKeyGenerator.pendingTxsByHash(TX),
   queryKeyGenerator.droppedTxByHash(TX),
+  queryKeyGenerator.contractInstance(ADDRESS),
+  queryKeyGenerator.deployedContractInstances(`0x${"12".repeat(32)}`),
+  queryKeyGenerator.paginatedContractInstances(20, 20, "all"),
 ];
 // A block frame says nothing about it.
 const UNRELATED = queryKeyGenerator.averageFees;

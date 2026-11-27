@@ -4,8 +4,8 @@ import { queryKeyGenerator } from "~/hooks/api";
 const prefixOf = (queryKey: readonly unknown[]) => queryKey.slice(0, 1);
 
 // Refreshed on a block or tips frame. Either can follow a prune, which changes
-// the reorg lists and any block or tx already shown: the detail queries go by
-// prefix, whatever block or tx they name.
+// the reorg lists and any block, tx or contract instance already shown: the
+// detail and page queries go by prefix, whatever they name.
 const CHAIN_QUERIES = [
   queryKeyGenerator.latestBlock,
   queryKeyGenerator.latestTableBlocks,
@@ -13,11 +13,15 @@ const CHAIN_QUERIES = [
   queryKeyGenerator.l2TipsHealth,
   queryKeyGenerator.reorgs,
   queryKeyGenerator.orphanedBlocks,
+  prefixOf(queryKeyGenerator.paginatedTableBlocks(0, 0, undefined)),
   prefixOf(queryKeyGenerator.blockByHeight("")),
   prefixOf(queryKeyGenerator.txEffectsByBlockHeight(undefined)),
   prefixOf(queryKeyGenerator.txEffectByHash("")),
   prefixOf(queryKeyGenerator.pendingTxsByHash("")),
   prefixOf(queryKeyGenerator.droppedTxByHash("")),
+  prefixOf(queryKeyGenerator.contractInstance("")),
+  prefixOf(queryKeyGenerator.deployedContractInstances("")),
+  queryKeyGenerator.latestContractInstances,
 ];
 
 /**
