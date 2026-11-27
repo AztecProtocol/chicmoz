@@ -96,6 +96,26 @@ const apiHolds = (blocks: BlockId[], label: string) =>
     { timeout: 60_000, interval: 1_000 },
   );
 
+/**
+ * Waits until the API holds what `prune` removes, the moved tx on its dead
+ * block included: on the replacing block alone it would pass as a first
+ * insert.
+ */
+const apiHoldsDead = async (prune: PruneFacts, label: string) => {
+  await apiHolds(prune.dead, label);
+  const deadHolder = prune.dead.find(
+    (b) => b.height === prune.movedTx.deadHeight,
+  );
+  await vi.waitFor(
+    async () =>
+      expect(
+        await api.txEffect(prune.movedTx.hash),
+        "the moved tx before the prune",
+      ).toEqual(deadHolder && served(deadHolder, false)),
+    { timeout: 30_000, interval: 1_000 },
+  );
+};
+
 const STEP_TIMES: StepTimes = {
   stepMs: STEP_MS,
   // Longer than today's 5 s tips poll, so a tips timer would show.
@@ -193,25 +213,66 @@ const reorgOf = (prune: PruneFacts): ReorgRecord => ({
   orphanedBlockHash: prune.dead[0].hash.toLowerCase(),
 });
 
-/** What the API must serve once a prune has settled, read from height `from`. */
+/** What the API must serve once a prune has settled, read from height `from`, with the contract on `contractOn` if given. */
 const wantAfter = (
   prune: PruneFacts,
   from: number,
   reorgs: ReorgRecord[],
-  withContract: boolean,
-): Partial<Snapshot> => {
-  const replacing = movedTxBlock(prune, prune.movedTx.finalHeight);
-  return {
-    latestHeight: prune.final.length,
-    canonical: expectedFrom(prune, from),
-    reorgs,
-    dropped: { status: 404 },
-    txEffect: replacing,
-    ...(withContract
-      ? { contractInstance: { hash: replacing.hash, orphaned: false } }
-      : {}),
-    dead: prune.dead.map((b) => served(b, true)),
-  };
+  contractOn?: BlockId,
+): Partial<Snapshot> => ({
+  latestHeight: prune.final.length,
+  canonical: expectedFrom(prune, from),
+  reorgs,
+  dropped: { status: 404 },
+  txEffect: movedTxBlock(prune, prune.movedTx.finalHeight),
+  ...(contractOn
+    ? {
+        contractInstance: {
+          hash: contractOn.hash.toLowerCase(),
+          orphaned: false,
+        },
+      }
+    : {}),
+  dead: prune.dead.map((b) => served(b, true)),
+});
+
+/** The first prune's replacing block, which deploys the script's contract. */
+const contractBlock = ({ prunes: [first] }: ScriptStatus) =>
+  first.final[first.movedTx.finalHeight - 1];
+
+/** Checks a prune's settled state against `wantAfter`'s; `names` name the checks. */
+const itServesTheScript = (
+  read: () => { seen: Snapshot; want: Partial<Snapshot> },
+  names: { chain: string; reorgs: string; tx: string },
+) => {
+  it(names.chain, () => {
+    const { seen, want } = read();
+    expect.soft(seen.latestHeight, "latest height").toBe(want.latestHeight);
+    expect
+      .soft(seen.canonical, "the canonical block at each height")
+      .toEqual(want.canonical);
+  });
+
+  it(names.reorgs, () => {
+    const { seen, want } = read();
+    expect(seen.reorgs).toEqual(want.reorgs);
+  });
+
+  it(names.tx, () => {
+    const { seen, want } = read();
+    expect.soft(seen.dropped, "dropped-tx lookup").toEqual(want.dropped);
+    expect.soft(seen.txEffect, "tx effect").toEqual(want.txEffect);
+    if ("contractInstance" in want) {
+      expect
+        .soft(seen.contractInstance, "contract instance")
+        .toEqual(want.contractInstance);
+    }
+  });
+
+  it("serves each dead block by its hash, as orphaned", () => {
+    const { seen, want } = read();
+    expect(seen.dead).toEqual(want.dead);
+  });
 };
 
 describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
@@ -270,7 +331,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
       );
       checkerBefore = await compareChain("sample");
     });
-    want = wantAfter(prune, 1, [reorgOf(prune)], true);
+    want = wantAfter(prune, 1, [reorgOf(prune)], contractBlock(script));
     seen = await settled(
       () => snapshot(prune, 1, script.contractAddress),
       want,
@@ -326,27 +387,10 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
     }
   });
 
-  it("serves the script's final chain as canonical, and nothing above it", () => {
-    expect.soft(seen.latestHeight, "latest height").toBe(want.latestHeight);
-    expect
-      .soft(seen.canonical, "the canonical block at each height")
-      .toEqual(want.canonical);
-  });
-
-  it("lists one reorg: the 4 blocks from height 7", () => {
-    expect(seen.reorgs).toEqual(want.reorgs);
-  });
-
-  it("keeps the moved tx mined, not dropped, and the contract on the replacing block", () => {
-    expect.soft(seen.dropped, "dropped-tx lookup").toEqual(want.dropped);
-    expect.soft(seen.txEffect, "tx effect").toEqual(want.txEffect);
-    expect
-      .soft(seen.contractInstance, "contract instance")
-      .toEqual(want.contractInstance);
-  });
-
-  it("serves each dead block by its hash, as orphaned", () => {
-    expect(seen.dead).toEqual(want.dead);
+  itServesTheScript(() => ({ seen, want }), {
+    chain: "serves the script's final chain as canonical, and nothing above it",
+    reorgs: "lists one reorg: the 4 blocks from height 7",
+    tx: "keeps the moved tx mined, not dropped, and the contract on the replacing block",
   });
 });
 
@@ -360,26 +404,14 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
 
   beforeAll(async () => {
     prune = (await control.status()).prunes[1];
-    const deadHolder = prune.dead.find(
-      (b) => b.height === prune.movedTx.deadHeight,
-    );
     short = await stepPrune(prune, async () => {
-      await apiHolds(prune.dead, "blocks 13'-16' before the prune");
-      await vi.waitFor(
-        async () =>
-          expect(
-            await api.txEffect(prune.movedTx.hash),
-            "the moved tx before the prune",
-          ).toEqual(deadHolder && served(deadHolder, false)),
-        { timeout: 30_000, interval: 1_000 },
-      );
+      await apiHoldsDead(prune, "blocks 13'-16' before the prune");
       baseline = await api.reorgList();
     });
     want = wantAfter(
       prune,
       prune.dead[0].height,
       plusReorg(baseline, reorgOf(prune)),
-      false,
     );
     process.stdout.write(
       `while the node served the shorter chain:\n${JSON.stringify(short, null, 2)}\n`,
@@ -417,24 +449,11 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
     expect.soft(short?.end, "the API's state").toEqual(short?.start);
   });
 
-  it("serves the node's chain above 12' as canonical, and nothing above it", () => {
-    expect.soft(seen.latestHeight, "latest height").toBe(want.latestHeight);
-    expect
-      .soft(seen.canonical, "the canonical block at each height")
-      .toEqual(want.canonical);
-  });
-
-  it("adds one reorg to those before it: the 4 blocks from height 13", () => {
-    expect(seen.reorgs).toEqual(want.reorgs);
-  });
-
-  it("keeps the moved tx mined, not dropped, on the replacing block", () => {
-    expect.soft(seen.dropped, "dropped-tx lookup").toEqual(want.dropped);
-    expect.soft(seen.txEffect, "tx effect").toEqual(want.txEffect);
-  });
-
-  it("serves each dead block by its hash, as orphaned", () => {
-    expect(seen.dead).toEqual(want.dead);
+  itServesTheScript(() => ({ seen, want }), {
+    chain:
+      "serves the node's chain above 12' as canonical, and nothing above it",
+    reorgs: "adds one reorg to those before it: the 4 blocks from height 13",
+    tx: "keeps the moved tx mined, not dropped, on the replacing block",
   });
 });
 
