@@ -60,6 +60,7 @@ export const TxDetailPage: FC = () => {
   // Only a block on the chain mines a tx: an orphaned block's effect is history.
   const historical = effect?.isOrphaned === true;
   const mined = !!effect && !historical;
+  // No status while no lookup has found the tx.
   const status = mined
     ? "mined"
     : dropped
@@ -68,7 +69,7 @@ export const TxDetailPage: FC = () => {
         ? "pending"
         : historical
           ? "orphaned"
-          : "pending";
+          : undefined;
 
   const ts = effect?.timestamp
     ? effect.timestamp
@@ -103,7 +104,7 @@ export const TxDetailPage: FC = () => {
         <div className="kicker">Tx effect · {ts ? ageStr(ts) : "—"}</div>
         <h1 className="hash-sized">{hash}</h1>
         <div className="meta-row">
-          <StatusPill status={status} />
+          {status && <StatusPill status={status} />}
           {effect?.blockHeight !== undefined && (
             <span className="meta-line">
               {historical ? "was in" : "in"} <EffectBlockLink effect={effect} />

@@ -140,6 +140,16 @@ describe("TxDetailPage", () => {
     });
   });
 
+  it("shows no status for a tx no lookup found", () => {
+    expect(render({})).toEqual({
+      status: undefined,
+      blockLinks: [],
+      droppedAt: false,
+      panels: [],
+      notFound: true,
+    });
+  });
+
   it("shows a pending tx's pending row", () => {
     expect(render({ pending: true })).toEqual({
       status: "pending",
