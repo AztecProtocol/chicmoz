@@ -35,12 +35,15 @@ export type Script = { states: NodeState[]; facts: ScriptFacts };
 export const recordedNodeInfo = () =>
   loadFixture("local-network", "node-info", "node-info").data.result;
 
-const recordedBlock = (name: string) =>
-  loadFixture("local-network", "l2-block", name).data;
+const recordedBlock = (name: string, source: "local-network" | "testnet") =>
+  loadFixture(source, "l2-block", name).data;
 
-/** The only tx of a recorded local-network block, as the node served it. */
-const recordedTx = (name: string): TxEffect => {
-  const { hex } = recordedBlock(name);
+/** The first tx of a recorded block, as its node served it. */
+const recordedTx = (
+  name: string,
+  source: "local-network" | "testnet" = "local-network",
+): TxEffect => {
+  const { hex } = recordedBlock(name, source);
   const [tx] = L2Block.fromBuffer(Buffer.from(hex, "hex")).body.txEffects;
   return tx;
 };
@@ -110,7 +113,9 @@ const idOf = ({ block, hash }: ScriptedBlock): BlockId => ({
  * step later, and the proven and finalized tips stay at the prune target.
  * Then 7′–12′ become proven and finalized, 13′–16′ grow, and the node
  * prunes them the other way: it serves the shorter chain, tip 12′, for one
- * step before it proposes 13″ and grows 13″–16″.
+ * step before it proposes 13″ and grows 13″–16″. Last, two more prunes
+ * replaced at once, for the crash scenarios: 17″–18″ by 17‴–19‴, then
+ * 20‴–21‴ by 20⁗–22⁗, each moving one tx.
  */
 export const buildScript = async (): Promise<Script> => {
   const { l1ChainId, rollupVersion } = recordedNodeInfo();
@@ -122,8 +127,11 @@ export const buildScript = async (): Promise<Script> => {
   const classTx = recordedTx("block-1");
   const deployTx = recordedTx("block-2");
   const secondTx = recordedTx("block-11");
-  const [contractAddress] =
-    recordedBlock("block-2").expected.contractInstanceAddresses;
+  // Only their hashes and effects matter here, not the chain they came from.
+  const thirdTx = recordedTx("block-46973", "testnet");
+  const fourthTx = recordedTx("block-46974", "testnet");
+  const [contractAddress] = recordedBlock("block-2", "local-network").expected
+    .contractInstanceAddresses;
 
   const grow = async (
     chain: ScriptedBlock[],
@@ -157,6 +165,24 @@ export const buildScript = async (): Promise<Script> => {
     16,
     (h) => h + 11,
     { 13: [secondTx] },
+  );
+  const third = await grow(secondReplacing.slice(0, 17), 18, (h) => h + 11, {
+    18: [thirdTx],
+  });
+  const thirdReplacing = await grow(
+    secondReplacing.slice(0, 17),
+    19,
+    (h) => h + 14,
+    { 17: [thirdTx] },
+  );
+  const fourth = await grow(thirdReplacing.slice(0, 20), 21, (h) => h + 14, {
+    21: [fourthTx],
+  });
+  const fourthReplacing = await grow(
+    thirdReplacing.slice(0, 20),
+    22,
+    (h) => h + 17,
+    { 20: [fourthTx] },
   );
 
   const states: NodeState[] = [];
@@ -197,6 +223,28 @@ export const buildScript = async (): Promise<Script> => {
   for (let h = 14; h <= 16; h++) {
     at(`add ${h}″`, secondReplacing.slice(0, h + 1), h, 12, 12);
   }
+  const secondEndAt = states.length - 1;
+
+  for (let h = 17; h <= 18; h++) {
+    at(`add ${h}″`, third.slice(0, h + 1), h, 12, 12);
+  }
+  const thirdPruneAt = states.length;
+  at("prune 17″–18″, propose 17‴", thirdReplacing.slice(0, 18), 16, 12, 12);
+  at("checkpoint 17‴", thirdReplacing.slice(0, 18), 17, 12, 12);
+  for (let h = 18; h <= 19; h++) {
+    at(`add ${h}‴`, thirdReplacing.slice(0, h + 1), h, 12, 12);
+  }
+  const thirdEndAt = states.length - 1;
+
+  for (let h = 20; h <= 21; h++) {
+    at(`add ${h}‴`, fourth.slice(0, h + 1), h, 12, 12);
+  }
+  const fourthPruneAt = states.length;
+  at("prune 20‴–21‴, propose 20⁗", fourthReplacing.slice(0, 21), 19, 12, 12);
+  at("checkpoint 20⁗", fourthReplacing.slice(0, 21), 20, 12, 12);
+  for (let h = 21; h <= 22; h++) {
+    at(`add ${h}⁗`, fourthReplacing.slice(0, h + 1), h, 12, 12);
+  }
 
   return {
     states,
@@ -218,13 +266,37 @@ export const buildScript = async (): Promise<Script> => {
         {
           pruneAt: secondPruneAt,
           shorterSteps: 1,
-          endAt: states.length - 1,
+          endAt: secondEndAt,
           dead: second.slice(13).map(idOf),
           final: secondReplacing.slice(1).map(idOf),
           movedTx: {
             hash: secondTx.txHash.toString(),
             deadHeight: 14,
             finalHeight: 13,
+          },
+        },
+        {
+          pruneAt: thirdPruneAt,
+          shorterSteps: 0,
+          endAt: thirdEndAt,
+          dead: third.slice(17).map(idOf),
+          final: thirdReplacing.slice(1).map(idOf),
+          movedTx: {
+            hash: thirdTx.txHash.toString(),
+            deadHeight: 18,
+            finalHeight: 17,
+          },
+        },
+        {
+          pruneAt: fourthPruneAt,
+          shorterSteps: 0,
+          endAt: states.length - 1,
+          dead: fourth.slice(20).map(idOf),
+          final: fourthReplacing.slice(1).map(idOf),
+          movedTx: {
+            hash: fourthTx.txHash.toString(),
+            deadHeight: 21,
+            finalHeight: 20,
           },
         },
       ],

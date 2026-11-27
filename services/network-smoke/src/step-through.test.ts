@@ -98,6 +98,22 @@ describe("stepping through a shorter chain", () => {
     expect(short?.unhandled).toEqual([]);
   });
 
+  it("runs afterPrune once, while the node serves the prune's first state", async () => {
+    const replacedAtOnce: PruneFacts = { ...prune, shorterSteps: 0, endAt: 3 };
+    const { control, view } = fakeNode([]);
+    const seenAt: number[] = [];
+    await stepThrough(control, replacedAtOnce, {
+      beforePrune: () => Promise.resolve(),
+      afterPrune: async () => {
+        seenAt.push((await control.status()).current);
+      },
+      view,
+      times: TIMES,
+    });
+    expect(seenAt).toEqual([replacedAtOnce.pruneAt]);
+    expect((await control.status()).current).toBe(replacedAtOnce.endAt);
+  });
+
   it("names a state no pass handled once its hold runs out", async () => {
     const { control, view } = fakeNode(
       Array.from({ length: 1_000 }, () => TIPS),

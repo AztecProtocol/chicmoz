@@ -138,7 +138,7 @@ describe("scripted node", () => {
         }
       }
     }
-    expect(prunes.map((p) => p.shorterSteps)).toEqual([0, 1]);
+    expect(prunes.map((p) => p.shorterSteps)).toEqual([0, 1, 0, 0]);
   }, 120_000);
 
   it("answers a method it does not implement with Method not found", async () => {

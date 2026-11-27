@@ -43,22 +43,25 @@ const isTipRead = (r: StateRead) => !("height" in r);
 
 /**
  * Steps the node to the prune's last state; `beforePrune` runs before the
- * prune. Each state of the shorter chain is held until a pass of the listener
- * has handled it, or `holdLimitMs`, and for at least `holdMs`, so the scenario
- * plays the order it names. Returns what it saw of the shorter chain, if the
- * prune has one. Its window opens at the listener's first read of the shorter
- * tip, when the pass that read the old chain has ended and what it sent is
- * stamped before it.
+ * prune, `afterPrune` once the node serves the prune's first state and
+ * before it moves on. Each state of the shorter chain is held until a pass of
+ * the listener has handled it, or `holdLimitMs`, and for at least `holdMs`,
+ * so the scenario plays the order it names. Returns what it saw of the
+ * shorter chain, if the prune has one. Its window opens at the listener's
+ * first read of the shorter tip, when the pass that read the old chain has
+ * ended and what it sent is stamped before it.
  */
 export const stepThrough = async <V>(
   control: StepControl,
   prune: PruneFacts,
   {
     beforePrune,
+    afterPrune,
     view,
     times,
   }: {
     beforePrune: () => Promise<void>;
+    afterPrune?: () => Promise<void>;
     view: () => Promise<V>;
     times: StepTimes;
   },
@@ -110,6 +113,9 @@ export const stepThrough = async <V>(
         short.unhandled.push(current);
       }
       await sleep(Math.max(0, steppedAt + times.holdMs - Date.now()));
+    }
+    if (current === prune.pruneAt) {
+      await afterPrune?.();
     }
   }
   return short;

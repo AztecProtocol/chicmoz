@@ -24,8 +24,13 @@ const pruneFactsSchema = z.object({
 /** What the explorer must end up serving, as the scripted node built it. */
 export const scriptFactsSchema = z.object({
   states: z.array(z.string()),
-  /** First a prune whose replacing block is there at once, then one that serves the shorter chain first. */
-  prunes: z.tuple([pruneFactsSchema, pruneFactsSchema]),
+  /** A prune whose replacing block is there at once, one that serves the shorter chain first, then two more of the first kind. */
+  prunes: z.tuple([
+    pruneFactsSchema,
+    pruneFactsSchema,
+    pruneFactsSchema,
+    pruneFactsSchema,
+  ]),
   /** Deployed by the first prune's moved tx. */
   contractAddress: z.string(),
 });

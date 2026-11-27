@@ -273,7 +273,7 @@ export const startScriptedNode = async ({
   });
   const controlBound = await listen(control, host, controlPort);
   log(
-    `state 0 ${state().label}; ${states.length} states, prunes at ${facts.prunes.map((p) => p.pruneAt).join(" and ")}`,
+    `state 0 ${state().label}; ${states.length} states, prunes at ${facts.prunes.map((p) => p.pruneAt).join(", ")}`,
   );
 
   return {
