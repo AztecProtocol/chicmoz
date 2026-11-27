@@ -19,6 +19,9 @@ type Service = {
 
 const STRICT = ["--unhandled-rejections=strict", "--enable-source-maps"];
 
+/** The listener's block poll: each pass waits this long after the last ends. */
+export const LISTENER_POLL_MS = 1_000;
+
 // Entry points and Node flags as in each service's `start` script.
 export const SERVICES = {
   "explorer-api": {
@@ -139,7 +142,7 @@ export const startServices = (
     "aztec-listener": () => ({
       INSTANCE_NAME: "smoke-aztec-listener",
       AZTEC_RPC_URLS: `sandbox::${aztecNodeUrl}`,
-      BLOCK_POLL_INTERVAL_MS: "1000",
+      BLOCK_POLL_INTERVAL_MS: String(LISTENER_POLL_MS),
       // Tips that arrive before their blocks are degraded until the next
       // tips event; the 60 s default heartbeat would hold that for a minute.
       L2_TIPS_HEARTBEAT_INTERVAL_MS: "5000",

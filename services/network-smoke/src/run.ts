@@ -35,6 +35,7 @@ import { claimRunPorts } from "./ports.js";
 import { createProcessGroups, startTimeOf } from "./processes.js";
 import { type RpcTap, startRpcTap } from "./rpc-tap.js";
 import {
+  LISTENER_POLL_MS,
   SMOKE_NETWORK,
   type ServiceName,
   missingBuilds,
@@ -69,6 +70,7 @@ const NO_REPAIR = {
 // whether blocks still reach the API in order.
 const BLOCK_PARTITIONS = 3;
 const BLOCK_TOPIC: keyof L2_MESSAGES = "NEW_BLOCK_EVENT";
+const TIPS_TOPIC: keyof L2_MESSAGES = "L2_TIPS_EVENT";
 
 const MODES: Record<
   Mode,
@@ -446,11 +448,13 @@ export const run = async (mode: Mode): Promise<number> => {
       aztecNodeUrl,
       explorerApiUrl,
       consumerLogs: [...services],
+      listenerPollMs: LISTENER_POLL_MS,
       broker: {
         brokers: infraStack.env.KAFKA_CONNECTION,
         username: infraStack.env.KAFKA_SASL_USERNAME,
         password: infraStack.env.KAFKA_SASL_PASSWORD,
         blockTopic,
+        tipsTopic: withKafkaNamespace(`${SMOKE_NETWORK}__${TIPS_TOPIC}`, runId),
         // getConsumerGroupId's ids: `<service>_<network>_<handler>`.
         apiGroupPrefix: withKafkaNamespace(
           `explorer-api_${SMOKE_NETWORK}_`,

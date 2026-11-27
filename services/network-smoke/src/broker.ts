@@ -8,6 +8,8 @@ export const brokerAccessSchema = z.object({
   password: z.string(),
   /** The block topic, under the run's namespace. */
   blockTopic: z.string(),
+  /** The listener's tips topic, under the run's namespace. */
+  tipsTopic: z.string(),
   /** Every consumer group of the explorer API starts with it. */
   apiGroupPrefix: z.string(),
 });
@@ -118,6 +120,11 @@ export const brokerReads = ({
         partition,
         records: high - low,
       }));
+    },
+    /** How many records `topic` has taken in all, over its partitions. */
+    published: async (topic: string) => {
+      await ready();
+      return (await ends(topic)).reduce((sum, { high }) => sum + high, 0);
     },
     /**
      * Takes the end offsets of the API's assigned partitions once, then waits

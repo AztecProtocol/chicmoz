@@ -17,6 +17,7 @@ import {
   type BlockId,
   type PruneFacts,
   type ScriptStatus,
+  type StateTipRead,
   scriptControl,
 } from "./script-control.js";
 
@@ -91,35 +92,78 @@ const apiHolds = (blocks: BlockId[], label: string) =>
   );
 
 /**
- * Steps the node to the prune's last state. `beforePrune` runs before the
- * prune, and a state of the shorter chain is held until the listener has read
- * its tip, so the scenario always plays the order it names.
+ * Whether a pass of the listener that read this state has ended. A pass reads
+ * the tip at its start and the next starts a poll interval after it ends, so
+ * two reads by one method that far apart come from two passes. A single read
+ * can be another poller's, or a node election's probe.
+ */
+const passedOver = (reads: StateTipRead[]) =>
+  (["getBlockNumber", "getChainTips"] as const).some((method) => {
+    const times = reads.filter((r) => r.method === method).map((r) => r.at);
+    return (
+      times.length > 1 &&
+      Math.max(...times) - Math.min(...times) >= endpoints.listenerPollMs
+    );
+  });
+
+// Longer than today's 5 s tips poll, so a tips timer would show.
+const SHORT_HOLD_MS = 7_000;
+
+/** What must not move while the node serves the shorter chain. */
+const quietView = async (prune: PruneFacts) => ({
+  published: {
+    block: await broker.published(endpoints.broker.blockTopic),
+    tips: await broker.published(endpoints.broker.tipsTopic),
+  },
+  api: {
+    latestHeight: await api.latestHeight(),
+    dead: await Promise.all(prune.dead.map((b) => api.blockAt(b.height))),
+    reorgs: byRoot(await api.reorgs()),
+  },
+});
+
+type QuietView = Awaited<ReturnType<typeof quietView>>;
+
+/**
+ * Steps the node to the prune's last state; `beforePrune` runs before the
+ * prune. Each state of the shorter chain is held until a pass of the listener
+ * over it has ended, and for at least SHORT_HOLD_MS, so the scenario plays
+ * the order it names. Returns what must not move, read just before the prune
+ * and at the end of the hold, when the prune has a shorter chain.
  */
 const stepThrough = async (
   prune: PruneFacts,
   beforePrune: () => Promise<void>,
 ) => {
   let { current } = await control.status();
+  let short: { start: QuietView; end?: QuietView } | undefined;
   while (current < prune.endAt) {
     await sleep(STEP_MS);
     if (current + 1 === prune.pruneAt) {
       await beforePrune();
+      if (prune.shorterSteps > 0) {
+        short = { start: await quietView(prune) };
+      }
     }
     ({ current } = await control.step());
-    if (
-      current >= prune.pruneAt &&
-      current < prune.pruneAt + prune.shorterSteps
-    ) {
+    const steppedAt = Date.now();
+    const lastShort = prune.pruneAt + prune.shorterSteps - 1;
+    if (current >= prune.pruneAt && current <= lastShort) {
       await vi.waitFor(
         async () =>
           expect(
-            (await control.status()).stateReads,
-            `the listener's reads of the shorter chain, state ${current}`,
-          ).toBeGreaterThan(0),
+            passedOver((await control.status()).stateTipReads),
+            `a pass of the listener over state ${current}`,
+          ).toBe(true),
         { timeout: 30_000, interval: 250 },
       );
+      await sleep(Math.max(0, SHORT_HOLD_MS - (Date.now() - steppedAt)));
+      if (current === lastShort && short) {
+        short.end = await quietView(prune);
+      }
     }
   }
+  return short;
 };
 
 const COMPARE_CHAIN = fileURLToPath(
@@ -317,6 +361,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
 describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', before 13''-16'", () => {
   let prune: PruneFacts;
   let baseline: ReorgRecord[];
+  let short: Awaited<ReturnType<typeof stepThrough>>;
   let want: Partial<Snapshot>;
   let seen: Snapshot;
 
@@ -325,7 +370,7 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
     const deadHolder = prune.dead.find(
       (b) => b.height === prune.movedTx.deadHeight,
     );
-    await stepThrough(prune, async () => {
+    short = await stepThrough(prune, async () => {
       await apiHolds(prune.dead, "blocks 13'-16' before the prune");
       await vi.waitFor(
         async () =>
@@ -343,11 +388,21 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
       plusReorg(baseline, reorgOf(prune)),
       false,
     );
+    process.stdout.write(
+      `while the node served the shorter chain:\n${JSON.stringify(short, null, 2)}\n`,
+    );
     seen = await settled(
       () => snapshot(prune, prune.dead[0].height),
       want,
       "the API after the second prune",
     );
+  });
+
+  it("publishes no block and no tips record, and keeps its state, while the node serves the shorter chain", () => {
+    expect
+      .soft(short?.end?.published, "records published")
+      .toEqual(short?.start.published);
+    expect.soft(short?.end?.api, "the API's state").toEqual(short?.start.api);
   });
 
   it("serves the node's chain above 12' as canonical, and nothing above it", () => {

@@ -34,15 +34,22 @@ export type ScriptFacts = z.infer<typeof scriptFactsSchema>;
 export type PruneFacts = z.infer<typeof pruneFactsSchema>;
 export type BlockId = z.infer<typeof blockIdSchema>;
 
+const stateTipReadSchema = z.object({
+  method: z.enum(["getChainTips", "getBlockNumber"]),
+  /** When the node answered, in ms since the epoch. */
+  at: z.number(),
+});
+
 export const scriptStatusSchema = scriptFactsSchema.extend({
   current: z.number().int(),
   /** `getChainTips` and `getBlockNumber` calls served so far: the listener's polls. */
   tipReads: z.number().int(),
-  /** Reads of the proposed tip answered in the current state. */
-  stateReads: z.number().int(),
+  /** Each read of the proposed tip answered in the current state. */
+  stateTipReads: z.array(stateTipReadSchema),
 });
 
 export type ScriptStatus = z.infer<typeof scriptStatusSchema>;
+export type StateTipRead = z.infer<typeof stateTipReadSchema>;
 
 const stepSchema = z.object({ current: z.number().int(), label: z.string() });
 

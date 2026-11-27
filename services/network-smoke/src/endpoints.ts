@@ -11,6 +11,8 @@ const commonSchema = z.object({
   explorerApiUrl: z.string().url(),
   /** Log files (without `.log`) of the services that consume Kafka. */
   consumerLogs: z.array(z.string()),
+  /** The listener's block poll interval, as the run set it. */
+  listenerPollMs: z.number().int().positive(),
   /** The run's broker, with the harness's local credentials. */
   broker: brokerAccessSchema,
 });

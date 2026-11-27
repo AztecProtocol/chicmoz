@@ -43,9 +43,10 @@ const PREFIX_GRACE_MS = 3_000;
 // 15 of the listener's block polls, and longer than its tips cadence (a 5 s
 // poll and the 5 s heartbeat set here), so today's tips timer shows.
 const PREFIX_WAIT_MS = 15_000;
-// The listener polls every second here: a longer gap between its tip reads
-// than the tips cadence means it stopped reading the node.
-const LISTENER_READ_GAP_MS = 5_000;
+// A pass reads the tip and the next starts a poll interval after it ends:
+// four intervals between two reads leave three for a pass, so a longer gap
+// means the listener stopped reading the node.
+const LISTENER_READ_GAP_MS = 4 * endpoints.listenerPollMs;
 
 const t0 = Date.now();
 const log = (line: string) =>

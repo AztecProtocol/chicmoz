@@ -49,12 +49,13 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 4. Each dead block is served by its hash, as orphaned.
 5. `scripts/compare-chain.ts` finds no mismatch before the prune, and after it names the same first divergence as the checks above, without printing either URL.
 
-That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, which the test holds until the listener has read it, before it proposes 13″ with that tx and grows 13″–16″. The checks:
+That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, before it proposes 13″ with that tx and grows 13″–16″. The test holds the shorter chain for at least 7 s and until a pass of the listener over it has ended: two of its tip reads by one method, a poll interval apart, since one read can be another poller's or an election's probe. The checks:
 
-1. Heights 13–16 serve 13″–16″, and nothing exists at 17.
-2. `/l2/reorgs` is the list from before the prune plus one reorg: height 13, 4 blocks, rooted at the dead 13′.
-3. The moved tx is not dropped, and its effect is on 13″.
-4. Each dead block is served by its hash, as orphaned.
+1. While the node serves the shorter chain, no block or tips record reaches the broker, and the API keeps serving 13′–16′ and its reorgs.
+2. Heights 13–16 serve 13″–16″, and nothing exists at 17.
+3. `/l2/reorgs` is the list from before the prune plus one reorg: height 13, 4 blocks, rooted at the dead 13′.
+4. The moved tx is not dropped, and its effect is on 13″.
+5. Each dead block is served by its hash, as orphaned.
 
 Before each prune the test waits until the API holds the blocks it removes, with the moved tx's effect (and in the first, its contract) on its dead block, so neither can pass as a first insert. After both, the broker must hold every block record in one of the topic's 3 partitions: steps 2 s apart reach the API in order from any partition, so only a single partition shows the order is kept.
 

@@ -36,6 +36,12 @@ describe("scripted node", () => {
         expect((await control.step()).current).toBe(i);
       }
       const tips = await client.getChainTips();
+      await client.getBlockNumber();
+      await client.getBlockNumber("proven");
+      expect(
+        (await control.status()).stateTipReads.map((r) => r.method),
+        `${states[i]}: its reads of the proposed tip`,
+      ).toEqual(["getChainTips", "getBlockNumber"]);
       const heights = [
         tips.finalized.block.number,
         tips.proven.block.number,

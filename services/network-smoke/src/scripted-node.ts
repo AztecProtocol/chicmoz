@@ -26,7 +26,7 @@ import {
   type BlockResponse,
   type BlocksIncludeOptions,
 } from "@aztec-labs/stdlib/interfaces/client";
-import { type ScriptStatus } from "./script-control.js";
+import { type ScriptStatus, type StateTipRead } from "./script-control.js";
 import {
   type NodeState,
   type ScriptedBlock,
@@ -143,14 +143,14 @@ export const startScriptedNode = async ({
   const nodeInfo = recordedNodeInfo();
   let current = 0;
   let tipReads = 0;
-  let stateReads = 0;
+  let stateTipReads: StateTipRead[] = [];
   const state = () => states[current];
 
   const handler = {
     getNodeInfo: () => Promise.resolve(nodeInfo),
     getChainTips: (): Promise<L2Tips> => {
       tipReads++;
-      stateReads++;
+      stateTipReads.push({ method: "getChainTips", at: Date.now() });
       const s = state();
       const proposed = s.chain.length - 1;
       return Promise.resolve({
@@ -167,7 +167,7 @@ export const startScriptedNode = async ({
       const tier = tag ?? "proposed";
       tipReads++;
       if (tier === "proposed") {
-        stateReads++;
+        stateTipReads.push({ method: "getBlockNumber", at: Date.now() });
       }
       return Promise.resolve(BlockNumber(heightAt(state(), tier)));
     },
@@ -224,7 +224,7 @@ export const startScriptedNode = async ({
     ...facts,
     current,
     tipReads,
-    stateReads,
+    stateTipReads,
   });
   const control = createServer((req, res) => {
     const reply = (code: number, body: unknown) => {
@@ -239,7 +239,7 @@ export const startScriptedNode = async ({
         return;
       }
       current++;
-      stateReads = 0;
+      stateTipReads = [];
       const s = state();
       log(
         `state ${current} ${s.label}: proposed ${s.chain.length - 1} ${s.chain.at(-1)?.hash}, checkpointed ${s.checkpointed}, proven ${s.proven}, finalized ${s.finalized}`,
