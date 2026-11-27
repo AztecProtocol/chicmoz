@@ -39,6 +39,11 @@ export const blockedBy = (
   return chain;
 };
 
+// A harness statement that stalls, a lock wait included, fails the step it
+// serves instead of holding it until the test's timeout.
+const session = (access: PgAccess, database: string) =>
+  new pg.Client({ ...access, database, statement_timeout: 10_000 });
+
 /** Rows of one query in its own session, which ends with it. */
 export const queryRows = async <T extends QueryResultRow>(
   access: PgAccess,
@@ -46,7 +51,7 @@ export const queryRows = async <T extends QueryResultRow>(
   text: string,
   values: unknown[] = [],
 ): Promise<T[]> => {
-  const client = new pg.Client({ ...access, database });
+  const client = session(access, database);
   await client.connect();
   try {
     return (await client.query<T>(text, values)).rows;
@@ -67,11 +72,11 @@ export const lockRows = async (
   lockQuery: string,
   values: unknown[] = [],
 ) => {
-  const client = new pg.Client({ ...access, database });
+  const client = session(access, database);
   // Inside a transaction, pg_stat_activity shows each session's query as it
   // was at the transaction's first read of it, so the waiters are read from
   // a session that holds none open.
-  const watcher = new pg.Client({ ...access, database });
+  const watcher = session(access, database);
   let pid: number;
   try {
     await client.connect();
