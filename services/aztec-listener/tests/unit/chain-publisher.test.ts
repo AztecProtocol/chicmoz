@@ -207,6 +207,20 @@ describe("ChainPublisher after the node replaces published heights", () => {
     },
   );
 
+  it("sends a pass longer than one batch whole, each block with the pass's tip", async () => {
+    const x = new FakeNode("x", prefix(main, 5));
+    const { sent, pass, head } = setup({ nodes: [x] });
+    await pass();
+    sent.length = 0;
+    x.chain = prefix(main, 20);
+
+    await pass();
+
+    const heights = Array.from({ length: 15 }, (_, i) => 6 + i);
+    expect(sent).toEqual(sentOf(main, heights, 20));
+    expect(await head()).toEqual({ number: 20, hash: main.hashes[20] });
+  });
+
   it("stops the pass at a failed send, and the next pass sends again from that block", async () => {
     const x = new FakeNode("x", prefix(main, 5));
     const { sent, failing, pass, head } = setup({ nodes: [x] });
