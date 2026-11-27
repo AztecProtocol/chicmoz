@@ -95,7 +95,11 @@ const processL2BlockRangeRequest = async (
     return;
   }
   // One node answers the whole request, so its tips attest the blocks it serves.
-  const reader = await openAttestedReader(getRpcNode(), streamRollupVersion());
+  const reader = await openAttestedReader(
+    getRpcNode(),
+    streamRollupVersion(),
+    heartbeat,
+  );
   const proposedHeight = toSafeHeight(reader.tips.proposed.number);
   const provenHeight = toSafeHeight(reader.tips.proven.block.number);
   const maxBlocks = Math.min(
@@ -121,7 +125,8 @@ const processL2BlockRangeRequest = async (
     }
 
     for (let height = range.from; height <= range.to && publishedBlocks < maxBlocks; height++) {
-      // Hundreds of serial reads can outlast the Kafka session.
+      // Before every read and publish: two slow calls in a row can outlast the
+      // Kafka session.
       await heartbeat();
       const read = await reader.getBlock(height);
       if (!read) {
@@ -129,6 +134,7 @@ const processL2BlockRangeRequest = async (
         logger.warn(`Requested catchup block ${height} not found for ${event.requestId}`);
         continue;
       }
+      await heartbeat();
       await onCatchupBlock(
         read.block,
         range.statusHint,

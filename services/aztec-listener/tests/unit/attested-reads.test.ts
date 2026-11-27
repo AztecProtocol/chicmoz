@@ -36,14 +36,18 @@ const nodeAt = (finalized: number) => {
 };
 
 describe("openAttestedReader", () => {
-  it("reads the node's tips and version before its blocks, and marks a block final only at or below its finalized tip", async () => {
+  it("reads the node's tips and version before its blocks, with the caller's heartbeat between the two, and marks a block final only at or below its finalized tip", async () => {
     const node = nodeAt(2);
-    const reader = await openAttestedReader(node.rpc, ROLLUP_VERSION);
+    const reader = await openAttestedReader(node.rpc, ROLLUP_VERSION, () => {
+      node.calls.push("heartbeat");
+      return Promise.resolve();
+    });
 
     const [two, three] = [await reader.getBlock(2), await reader.getBlock(3)];
 
     expect(node.calls).toEqual([
       "getChainTips",
+      "heartbeat",
       "getNodeInfo",
       "getBlock",
       "getBlock",

@@ -124,7 +124,11 @@ describe("L2 block range request", () => {
       () => Promise.resolve(),
     );
 
-    expect(openAttestedReader).toHaveBeenCalledWith({ name: "pool-node" }, 7);
+    expect(openAttestedReader).toHaveBeenCalledWith(
+      { name: "pool-node" },
+      7,
+      expect.any(Function),
+    );
     expect(onCatchupBlock.mock.calls).toEqual(
       [1, 2, 3].map((height) => [
         { height },
@@ -138,7 +142,7 @@ describe("L2 block range request", () => {
     );
   });
 
-  it("heartbeats before each block read, and stops and rejects on a failed heartbeat", async () => {
+  it("hands its heartbeat to the reader's setup, heartbeats before each block read and each publish, and stops and rejects on a failed heartbeat", async () => {
     const calls: string[] = [];
     openAttestedReader.mockResolvedValue({
       tips: { proposed: { number: 4 }, proven: { block: { number: 4 } } },
@@ -148,11 +152,15 @@ describe("L2 block range request", () => {
       },
     });
     onCatchupBlock.mockClear();
+    onCatchupBlock.mockImplementation(({ height }: { height: number }) => {
+      calls.push(`publish ${height}`);
+      return Promise.resolve();
+    });
     const rebalance = new Error("The group is rebalancing");
     let beats = 0;
     const heartbeat = () => {
       calls.push("heartbeat");
-      return ++beats === 3 ? Promise.reject(rebalance) : Promise.resolve();
+      return ++beats === 5 ? Promise.reject(rebalance) : Promise.resolve();
     };
 
     await expect(
@@ -167,11 +175,20 @@ describe("L2 block range request", () => {
       ),
     ).rejects.toBe(rebalance);
 
+    expect(openAttestedReader).toHaveBeenLastCalledWith(
+      { name: "pool-node" },
+      7,
+      heartbeat,
+    );
     expect(calls).toEqual([
       "heartbeat",
       "read 1",
       "heartbeat",
+      "publish 1",
+      "heartbeat",
       "read 2",
+      "heartbeat",
+      "publish 2",
       "heartbeat",
     ]);
     expect(onCatchupBlock).toHaveBeenCalledTimes(2);

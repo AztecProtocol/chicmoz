@@ -20,12 +20,16 @@ export type AttestedReader = {
  * Pins `node` for one request. Its tips and rollup version are read before
  * its blocks, and a finalized block cannot change, so `final` holds for every
  * block read after them. Only the stream's own `rollupVersion` gets `final`.
+ * A caller whose session two slow reads can outlast passes its `heartbeat`,
+ * which runs between them.
  */
 export const openAttestedReader = async (
   node: RpcNode,
   rollupVersion: number | undefined,
+  heartbeat?: () => Promise<void>,
 ): Promise<AttestedReader> => {
   const tips = await callNodeFunction("getChainTips", [], node);
+  await heartbeat?.();
   const info = await callNodeFunction("getNodeInfo", [], node);
   // The RPC client resolves a null answer to undefined, whatever the type.
   if (tips === undefined || info === undefined) {
