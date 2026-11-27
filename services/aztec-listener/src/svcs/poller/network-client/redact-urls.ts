@@ -61,12 +61,15 @@ export const urlRedactor = (configured: string[]) => {
   const parts = [...new Set(configured.flatMap(partsOf))]
     .filter((p) => p.length > 0)
     .sort((a, b) => b.length - a.length);
+  // Case-sensitive, so a host such as `gateway` leaves the offline marker
+  // `Bad Gateway` whole. An error names a part as configured or as `URL`
+  // normalized it, and `parts` holds both.
   const exact =
     parts.length === 0
       ? undefined
       : new RegExp(
           parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
-          "gi",
+          "g",
         );
   return (text: string) =>
     (exact === undefined ? text : text.replace(exact, "<url>")).replace(

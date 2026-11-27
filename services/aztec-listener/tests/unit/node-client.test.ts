@@ -29,6 +29,10 @@ const events = vi.hoisted(() => ({
 }));
 vi.mock("../../src/logger.js", () => ({ logger }));
 vi.mock("../../src/events/emitted/index.js", () => events);
+vi.mock("../../src/environment.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/environment.js")>()),
+  AZTEC_RPC_URLS: [{ name: "gateway", url: "http://gateway:8080" }],
+}));
 
 const KEYS = /key123secret|key456secret/;
 const sdkOutput: string[] = [];
@@ -127,5 +131,34 @@ describe("node client", () => {
     expect(JSON.stringify(error) + ours() + sdkOutput.join("")).not.toMatch(
       KEYS,
     );
+  });
+
+  it("still marks a node offline on Bad Gateway when a pool host is named gateway", async () => {
+    const url = "http://gateway:8080";
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: { message: "Bad Gateway" } }), {
+          status: 502,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    try {
+      await expect(
+        callNodeFunction("getNodeInfo", [], {
+          name: "gateway",
+          url,
+          instance: nodeClient(url),
+        }),
+      ).rejects.toThrow("Bad Gateway");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(events.onL2RpcNodeError).toHaveBeenCalledTimes(1);
+    const [error] = events.onL2RpcNodeError.mock.calls[0] as [
+      { message: string },
+    ];
+    expect(error.message).toBe("Error 502 from server <url>: Bad Gateway");
   });
 });
