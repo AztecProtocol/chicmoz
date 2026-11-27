@@ -46,6 +46,7 @@
     "migrate": "yarn node build/scripts/migrate.js",
     "test": "vitest run",
     "test-once": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "yarn run lint-base --ext .ts .",

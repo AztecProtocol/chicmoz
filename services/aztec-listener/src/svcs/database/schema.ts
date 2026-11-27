@@ -1,7 +1,14 @@
+import type { L2BlockTag } from "@aztec-labs/stdlib/block";
 import { generateAztecAddressColumn } from "@chicmoz-pkg/backend-utils";
 import { HexString } from "@chicmoz-pkg/types";
 import { sql } from "drizzle-orm";
-import { bigint, integer, pgTable, varchar } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  integer,
+  pgTable,
+  primaryKey,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const generateTimestampColumn = (name: string) =>
   bigint(name, { mode: "number" });
@@ -39,3 +46,29 @@ export const txsTable = pgTable("txs_table", {
     .default(sql`EXTRACT(EPOCH FROM NOW()) * 1000`),
   txState: varchar("tx_state").notNull().$type<TxState>(),
 });
+
+export const l2BlockStreamTipTable = pgTable(
+  "l2_block_stream_tip",
+  {
+    rollupVersion: bigint("rollup_version", { mode: "number" }).notNull(),
+    tag: varchar("tag").notNull().$type<L2BlockTag>(),
+    blockNumber: integer("block_number").notNull(),
+    checkpointNumber: integer("checkpoint_number"),
+    checkpointHash: varchar("checkpoint_hash"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.rollupVersion, t.tag] }),
+  }),
+);
+
+export const l2BlockStreamHashTable = pgTable(
+  "l2_block_stream_hash",
+  {
+    rollupVersion: bigint("rollup_version", { mode: "number" }).notNull(),
+    blockNumber: integer("block_number").notNull(),
+    blockHash: varchar("block_hash").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.rollupVersion, t.blockNumber] }),
+  }),
+);

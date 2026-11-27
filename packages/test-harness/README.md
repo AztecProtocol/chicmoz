@@ -4,18 +4,18 @@ Test infrastructure for the backend: Docker-free checks that run in `yarn test`,
 
 ## Commands
 
-| Command                   | Needs                | What it runs                                                                                                |
-| ------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `yarn test`               | nothing              | migration journal order, applied-migration immutability, aggregate status jobs (with every other unit test) |
-| `yarn test:integration`   | Docker, `yarn build` | migrations against real Postgres (this package), then explorer-api handler and route tests                  |
-| `yarn harness ls`         | Docker               | harness compose projects on this host: run id, container states, created, worktree                          |
-| `yarn harness down <run>` | Docker               | removes one harness project and its volumes; refuses anything without the harness label                     |
+| Command                   | Needs                | What it runs                                                                                                                |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `yarn test`               | nothing              | migration journal order, applied-migration immutability, aggregate status jobs (with every other unit test)                 |
+| `yarn test:integration`   | Docker, `yarn build` | migrations against real Postgres (this package), then explorer-api handler and route tests, then aztec-listener store tests |
+| `yarn harness ls`         | Docker               | harness compose projects on this host: run id, container states, created, worktree                                          |
+| `yarn harness down <run>` | Docker               | removes one harness project and its volumes; refuses anything without the harness label                                     |
 
 Each integration run is its own compose project (`ih<random>`). Every port is assigned by Docker on `127.0.0.1`, so parallel runs on one host do not collide, and a run removes only its own project. Set `HARNESS_KEEP=1` to keep the stack after the run; it prints the `yarn harness down` command.
 
 ## In CI
 
-`.github/workflows/integration-tests.yml` runs both suites as two jobs and reports `integration-tests-status`. On pull requests a path filter skips them when nothing they build, install, migrate or run has changed; the status check still reports, expecting `skipped`. The migrations job checks out full history and sets `MIGRATIONS_BASE_REF` (the PR base, the previous `main` commit on push, else the merge base with `origin/main`, or `HEAD^1` when that is `HEAD` itself), so the applied-migration and upgrade-path tests always run there. A failing job uploads `.harness/` as an artifact for 7 days.
+`.github/workflows/integration-tests.yml` runs each suite as its own job and reports `integration-tests-status`. On pull requests a path filter skips them when nothing they build, install, migrate or run has changed; the status check still reports, expecting `skipped`. The migrations job checks out full history and sets `MIGRATIONS_BASE_REF` (the PR base, the previous `main` commit on push, else the merge base with `origin/main`, or `HEAD^1` when that is `HEAD` itself), so the applied-migration and upgrade-path tests always run there. A failing job uploads `.harness/` as an artifact for 7 days.
 
 ## Reading a failure
 

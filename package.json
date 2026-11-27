@@ -30,7 +30,7 @@
     "build": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run build",
     "lint": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run lint",
     "test": "yarn workspaces foreach --parallel -j 1 --all --topological-dev --verbose run test-once",
-    "test:integration": "yarn workspace @chicmoz/test-harness test:integration && yarn workspace @chicmoz/explorer-api test:integration",
+    "test:integration": "yarn workspace @chicmoz/test-harness test:integration && yarn workspace @chicmoz/explorer-api test:integration && yarn workspace @chicmoz/aztec-listener test:integration",
     "harness": "yarn workspace @chicmoz/test-harness harness",
     "smoke": "yarn workspace @chicmoz/network-smoke smoke",
     "g:lint": "cd $INIT_CWD && eslint --fix",

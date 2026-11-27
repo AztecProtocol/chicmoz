@@ -43,7 +43,7 @@ type AwaitedNodeReturn<K extends keyof AztecNode> = Awaited<
 
 const offlineCauses = ["Service Unavailable", "Unauthorized", "Bad Gateway"];
 
-const callNodeFunction = async <K extends keyof AztecNode>(
+export const callNodeFunction = async <K extends keyof AztecNode>(
   fnName: K,
   args?: Parameters<AztecNode[K]>,
   forceNode?: RpcNode,
