@@ -100,10 +100,13 @@ export const withV5NodeNamespaceFallback =
     return await send(host, rewrittenBody, extraHeaders, noRetry);
   };
 
-// The SDK's fetch names the node's URL in its errors, and its client logs a
-// failed fetch's error through the SDK's logger before any caller sees it.
-// The offline markers callNodeFunction looks for in the message name no URL.
-const withRedactedErrors =
+/**
+ * `send`, with the URLs in each error it throws redacted. The SDK's fetch names
+ * the node's URL in its errors, Node's fetch names a URL with userinfo, and the
+ * SDK client logs a failed fetch's error before any caller sees it. The offline
+ * markers callNodeFunction looks for name no URL.
+ */
+export const withRedactedErrors =
   (send: JsonRpcFetch): JsonRpcFetch =>
   async (host, body, extraHeaders, noRetry) => {
     try {

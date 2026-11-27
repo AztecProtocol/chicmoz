@@ -11,6 +11,7 @@ import {
   setLogLevel,
 } from "@aztec-labs/foundation/log";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { boundedElectionReaders } from "../../src/svcs/poller/network-client/election-probe.js";
 import { callNodeFunction } from "../../src/svcs/poller/network-client/index.js";
 import { nodeClient } from "../../src/svcs/poller/network-client/pool.js";
 import { readLatestRollupVersion } from "../../src/svcs/poller/network-client/rollup-version.js";
@@ -160,5 +161,20 @@ describe("node client", () => {
       { message: string },
     ];
     expect(error.message).toBe("Error 502 from server <url>: Bad Gateway");
+  });
+
+  it("redacts a userinfo URL in the election probe's errors", async () => {
+    const url = "http://operator:pw-key123secret@127.0.0.1:1/v1/key456secret";
+    const failure = await boundedElectionReaders(10_000)({
+      name: "userinfo",
+      url,
+      instance: nodeClient(url),
+    })
+      .getChainTips()
+      .catch((e: unknown) => e);
+
+    const thrown = inspect(failure, { depth: Infinity });
+    expect(thrown).toContain("includes credentials: <url>");
+    expect(thrown + sdkOutput.join("")).not.toMatch(KEYS);
   });
 });
