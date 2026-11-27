@@ -9,9 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   type RpcTap,
   type TipRead,
+  longestTipGap,
   pruneOrder,
   readTipReads,
   startRpcTap,
+  tipGapBound,
 } from "./rpc-tap.js";
 
 const HASH = `0x${"ab".repeat(32)}`;
@@ -157,5 +159,19 @@ describe("rpc tap", () => {
           .order,
       ).toBe("replacement-first");
     });
+  });
+
+  it("bounds the gap between tip reads by the node's hold on the height past its tip", () => {
+    // A correct listener over a shorter chain, tip 6 below its 8, on the
+    // local network: each pass's walk reads 7, which the node holds 6 s.
+    const reads: TipRead[] = [
+      1795741859523, 1795741859527, 1795741865554, 1795741866591, 1795741866594,
+      1795741872625, 1795741873652, 1795741873657, 1795741879683,
+    ].map((at) => ({ at, method: "getChainTips", proposed: 6 }));
+    const gap = longestTipGap(reads, reads[0].at, reads[reads.length - 1].at);
+    expect(gap).toBe(6031);
+    expect(gap).toBeLessThanOrEqual(
+      tipGapBound({ listenerPollMs: 1_000, unseenBlockWaitMs: 6_000 }),
+    );
   });
 });

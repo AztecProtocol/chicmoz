@@ -25,6 +25,8 @@ export const endpointsSchema = commonSchema.extend({
 export const pruneEndpointsSchema = endpointsSchema.extend({
   /** The listener's tip reads, as `rpc-tap.ts` records them. */
   rpcTapFile: z.string(),
+  /** How long the node holds a read of the block one past its tip. */
+  unseenBlockWaitMs: z.number().int().nonnegative(),
 });
 
 export const scriptedEndpointsSchema = commonSchema.extend({

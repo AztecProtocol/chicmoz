@@ -26,6 +26,7 @@ import {
 import { createTopic } from "./kafka.js";
 import {
   L1_CHAIN_ID,
+  UNSEEN_BLOCK_WAIT_MS,
   startAnvil,
   startAztecNode,
   startLocalNetwork,
@@ -469,7 +470,9 @@ export const run = async (mode: Mode): Promise<number> => {
             ...common,
             anvilUrl,
             wsUrl: `ws://127.0.0.1:${ports.ws}`,
-            ...(tap ? { rpcTapFile } : {}),
+            ...(tap
+              ? { rpcTapFile, unseenBlockWaitMs: UNSEEN_BLOCK_WAIT_MS }
+              : {}),
           };
     const vitestBin = join(
       dirname(createRequire(import.meta.url).resolve("vitest/package.json")),

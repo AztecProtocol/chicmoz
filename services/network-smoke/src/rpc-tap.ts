@@ -242,6 +242,34 @@ export const readTipReads = (file: string): TipRead[] =>
     .slice(0, -1)
     .map((line) => tipReadSchema.parse(JSON.parse(line)));
 
+/** The longest stretch of [from, to] with no tip answered; its edges count as reads. */
+export const longestTipGap = (reads: TipRead[], from: number, to: number) => {
+  const instants = [
+    from,
+    ...reads
+      .filter((r) => r.proposed !== undefined && r.at >= from && r.at <= to)
+      .map((r) => r.at)
+      .sort((a, b) => a - b),
+    to,
+  ];
+  return Math.max(...instants.slice(1).map((t, i) => t - instants[i]));
+};
+
+/**
+ * The longest a listener still reading the node goes between tip answers. A
+ * pass reads the tip and the next starts a poll interval after it ends; over
+ * a shorter chain, a pass's walk back reads the height one past the node's
+ * tip, which the node holds for `unseenBlockWaitMs`. Four intervals beyond
+ * that leave three for the rest of a pass.
+ */
+export const tipGapBound = ({
+  listenerPollMs,
+  unseenBlockWaitMs,
+}: {
+  listenerPollMs: number;
+  unseenBlockWaitMs: number;
+}) => unseenBlockWaitMs + 4 * listenerPollMs;
+
 export type PruneOrder = "shorter-chain-first" | "replacement-first" | "unseen";
 
 /**

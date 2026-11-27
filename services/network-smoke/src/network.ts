@@ -8,6 +8,14 @@ import { type Toolchain } from "./toolchain.js";
 
 export const L1_CHAIN_ID = 31337;
 
+/**
+ * How long the node holds a read by number of the block one past its tip,
+ * waiting for that block: twice the 3 s block duration, the node's default,
+ * so reads are held as in production. Set rather than left to the default,
+ * so the prune scenarios can bound the listener's read gap by it.
+ */
+export const UNSEEN_BLOCK_WAIT_MS = 2 * 3_000;
+
 const LAUNCHER = fileURLToPath(
   new URL("../toolchain/local-network.mjs", import.meta.url),
 );
@@ -52,6 +60,7 @@ const nodeEnv = (toolchain: Toolchain, anvilUrl: string, tmp: string) => ({
   P2P_BLOCK_CHECK_INTERVAL_MS: "500",
   SEQ_TX_POLLING_INTERVAL_MS: "500",
   WS_BLOCK_CHECK_INTERVAL_MS: "500",
+  RPC_UNSEEN_BLOCK_BY_NUMBER_WAIT_MS: String(UNSEEN_BLOCK_WAIT_MS),
   // The toolchain installs without scripts, so bcrypto has no native build.
   NODE_BACKEND: "js",
 });

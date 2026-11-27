@@ -22,7 +22,12 @@ import {
   readNodeChain,
   watchChain,
 } from "./force-prune.js";
-import { pruneOrder, readTipReads } from "./rpc-tap.js";
+import {
+  longestTipGap,
+  pruneOrder,
+  readTipReads,
+  tipGapBound,
+} from "./rpc-tap.js";
 import { type Sender, openSender } from "./send-tx.js";
 import { type WsClient, type WsFrame, connectWs } from "./ws-client.js";
 
@@ -43,10 +48,8 @@ const PREFIX_GRACE_MS = 3_000;
 // 15 of the listener's block polls, and longer than its tips cadence (a 5 s
 // poll and the 5 s heartbeat set here), so today's tips timer shows.
 const PREFIX_WAIT_MS = 15_000;
-// A pass reads the tip and the next starts a poll interval after it ends:
-// four intervals between two reads leave three for a pass, so a longer gap
-// means the listener stopped reading the node.
-const LISTENER_READ_GAP_MS = 4 * endpoints.listenerPollMs;
+// A longer gap between the listener's tip reads means it stopped reading.
+const LISTENER_READ_GAP_MS = tipGapBound(endpoints);
 
 const t0 = Date.now();
 const log = (line: string) =>
@@ -456,16 +459,14 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
         `the websocket closed ${ws.closedAt - from} ms into the wait`,
       );
     }
-    const reads = readTipReads(endpoints.rpcTapFile).filter(
-      (r) => r.proposed !== undefined && r.at >= from && r.at <= to,
-    );
-    const instants = [from, ...reads.map((r) => r.at), to];
-    const longestGap = Math.max(
-      ...instants.slice(1).map((t, i) => t - instants[i]),
+    const longestGap = longestTipGap(
+      readTipReads(endpoints.rpcTapFile),
+      from,
+      to,
     );
     if (longestGap > LISTENER_READ_GAP_MS) {
       throw new Error(
-        `the listener read no tip for ${longestGap} ms of the wait (${reads.length} reads)`,
+        `the listener read no tip for ${longestGap} ms of the ${to - from} ms wait`,
       );
     }
     quiet = ws.frames.filter((f) => f.at >= from && f.at <= to);
