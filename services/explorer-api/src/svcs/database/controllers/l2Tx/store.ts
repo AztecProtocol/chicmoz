@@ -18,8 +18,9 @@ export const storeL2Tx = async (tx: ChicmozL2PendingTx): Promise<void> => {
 
 export const storeOrUpdateL2Tx = async (
   tx: ChicmozL2PendingTx,
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  const res = await db()
+  const res = await executor
     .insert(l2Tx)
     .values(tx)
     .onConflictDoUpdate({
@@ -56,11 +57,11 @@ export const storeOrUpdateL2Tx = async (
 
   // Store public call requests if they exist
   if (tx.publicCallRequests && tx.publicCallRequests.length > 0) {
-    await storePublicCallRequests(tx.txHash, tx.publicCallRequests);
+    await storePublicCallRequests(tx.txHash, tx.publicCallRequests, executor);
   }
 
   // Store L2-to-L1 messages if they exist
   if (tx.l2ToL1Msgs && tx.l2ToL1Msgs.length > 0) {
-    await storeL2ToL1Msgs(tx.txHash, tx.l2ToL1Msgs);
+    await storeL2ToL1Msgs(tx.txHash, tx.l2ToL1Msgs, executor);
   }
 };

@@ -14,6 +14,7 @@ import {
   getTableColumns,
   gte,
   isNotNull,
+  isNull,
   lt,
   sql,
 } from "drizzle-orm";
@@ -304,13 +305,19 @@ export const getTxEffectDynamicWhere = async (
   return chicmozL2TxEffectDeluxeSchema.parse(toParse);
 };
 
-export const txEffectExists = async (hash: HexString): Promise<boolean> => {
-  const res = await db()
+/** Whether a canonical block holds the tx: an effect a dead block keeps is not mined. */
+export const txEffectExists = async (
+  hash: HexString,
+  executor: ReturnType<typeof db> = db(),
+): Promise<boolean> => {
+  const res = await executor
     .select({
       txHash: txEffect.txHash,
     })
     .from(txEffect)
-    .where(eq(txEffect.txHash, hash))
+    .innerJoin(body, eq(txEffect.bodyId, body.id))
+    .innerJoin(l2Block, eq(body.blockHash, l2Block.hash))
+    .where(and(eq(txEffect.txHash, hash), isNull(l2Block.orphan_timestamp)))
     .limit(1)
     .execute();
 

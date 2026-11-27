@@ -17,6 +17,7 @@ import {
   orderedEvent,
 } from "./support/blocks.js";
 import { heads, loadChainReads } from "./support/chain.js";
+import { loadChainLockProbes } from "./support/chain-lock.js";
 import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
@@ -54,7 +55,7 @@ describe("the canonical chain on a real database", () => {
     event: NewBlockEvent,
   ) => Promise<{ deliveries: number; rebalances: number; beats: number }>;
   let holdChainLock: () => Promise<() => Promise<void>>;
-  let lockWaiters: () => Promise<number>;
+  let untilLockWaiters: (count: number, what: string) => Promise<void>;
   let fulfilByHeight: (height: bigint) => Promise<void>;
   let walkBound: number;
 
@@ -63,7 +64,7 @@ describe("the canonical chain on a real database", () => {
     const { blockHandler, catchupHandler } = await import(
       "../../src/events/received/on-block/index.js"
     );
-    const { WALK_BOUND, withChainLock } = await import(
+    const { WALK_BOUND } = await import(
       "../../src/svcs/database/controllers/l2block/canonical.js"
     );
     const { markOpenGapsFulfilledByHeight } = await import(
@@ -268,30 +269,7 @@ describe("the canonical chain on a real database", () => {
         await admin.disconnect();
       }
     };
-    holdChainLock = async () => {
-      let release: () => void = () => undefined;
-      let held: Promise<void> = Promise.resolve();
-      await new Promise<void>((locked) => {
-        held = withChainLock(() => {
-          locked();
-          return new Promise<void>((resolve) => {
-            release = resolve;
-          });
-        });
-      });
-      return async () => {
-        release();
-        await held;
-      };
-    };
-    // Lock requests waiting in this file's database, where the chain lock is
-    // the only advisory lock taken.
-    lockWaiters = async () => {
-      const { rows } = await db.execute<{ waiting: number }>(
-        sql`SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
-      );
-      return rows[0]?.waiting ?? 0;
-    };
+    ({ holdChainLock, untilLockWaiters } = await loadChainLockProbes());
     fulfilByHeight = markOpenGapsFulfilledByHeight;
   });
 
@@ -928,13 +906,7 @@ describe("the canonical chain on a real database", () => {
       catchup(fromCatchup).then(() => finished.push("catch-up")),
     ]);
     try {
-      const deadline = Date.now() + 5_000;
-      while ((await lockWaiters()) < 2) {
-        if (Date.now() > deadline) {
-          throw new Error("the consumers never waited on the chain lock");
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
+      await untilLockWaiters(2, "the consumers");
       expect(finished).toEqual([]);
     } finally {
       await release();

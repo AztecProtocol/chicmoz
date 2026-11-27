@@ -5,6 +5,7 @@ import { l2Tx } from "../../schema/index.js";
 
 export const deleteTx = async (
   hash: ChicmozL2PendingTx["txHash"],
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  await db().delete(l2Tx).where(eq(l2Tx.txHash, hash)).execute();
+  await executor.delete(l2Tx).where(eq(l2Tx.txHash, hash)).execute();
 };

@@ -1,5 +1,4 @@
 import { type Heartbeat } from "@chicmoz-pkg/message-bus";
-import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import { type ChicmozL2Block, type HexString } from "@chicmoz-pkg/types";
 import { and, asc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -19,6 +18,7 @@ import {
   lastArchive,
   txEffect,
 } from "../../schema/l2block/index.js";
+import { withChainLock } from "../chain-lock.js";
 import {
   storeBlockContracts,
   type BlockContracts,
@@ -51,23 +51,7 @@ import { store, writeTxEffect } from "./store.js";
 /** Walks stop after this many steps; more canonical blocks than this above a tip is corrupted state. */
 export const WALK_BOUND = 10_000;
 const HEARTBEAT_EVERY = 500;
-const LOCK_NAMESPACE = 1_815_307_112;
 const ROWS_PER_STATEMENT = 1_000;
-
-/**
- * Runs `fn` in one transaction that first takes the network's chain lock,
- * which every chain change takes; the dropped- and pending-tx handlers write
- * without it. `lock_timeout` bounds every lock wait in the transaction, this
- * one included: a wait over 10 s throws, so the message is redelivered.
- */
-export const withChainLock = <T>(fn: (dbTx: DbTx) => Promise<T>): Promise<T> =>
-  db().transaction(async (dbTx) => {
-    await dbTx.execute(sql`SET LOCAL lock_timeout = '10s'`);
-    await dbTx.execute(
-      sql`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACE}::int4, hashtext(${L2_NETWORK_ID}))`,
-    );
-    return fn(dbTx);
-  });
 
 export type IncomingBlock = {
   block: ChicmozL2Block;
