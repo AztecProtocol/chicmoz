@@ -2,11 +2,15 @@ import { inspect } from "node:util";
 import { type Logger as SdkLogger } from "@aztec-labs/foundation/log";
 import { logger } from "../../../../logger.js";
 
+// A node's URL can carry a key in its userinfo, path or query. The last
+// character class keeps a trailing colon or period out of the match.
+const URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*[^\s"'<>.,:;)]/gi;
+
 // The stream's data carries bigints and field elements, which JSON rejects.
 const line = (msg: string, ...data: unknown[]) =>
-  [msg, ...data.filter((d) => d !== undefined).map((d) => inspect(d))].join(
-    " ",
-  );
+  [msg, ...data.filter((d) => d !== undefined).map((d) => inspect(d))]
+    .join(" ")
+    .replace(URL_PATTERN, "<url>");
 
 /**
  * The SDK block stream's logger, routed to the listener's. The stream reports
