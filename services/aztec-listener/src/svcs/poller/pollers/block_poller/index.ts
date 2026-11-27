@@ -1,10 +1,6 @@
 import { inspect } from "node:util";
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
-import {
-  L2BlockStream,
-  type L2TipsStoreBase,
-  localTipsMatch,
-} from "@aztec-labs/stdlib/block";
+import { L2BlockStream, localTipsMatch } from "@aztec-labs/stdlib/block";
 import {
   AZTEC_BLOCK_STREAM_BATCH_SIZE,
   AZTEC_DISABLE_LISTEN_FOR_PROPOSED_BLOCKS,
@@ -30,6 +26,7 @@ import { PostgresL2TipsStore } from "../../../database/l2-tips-store.js";
 import { inTransaction } from "../../../database/transaction.js";
 import { openAttestedReader } from "../../network-client/attested-reads.js";
 import {
+  type ElectionStore,
   PassExit,
   StickySource,
   readGenesisBlockHash,
@@ -47,10 +44,18 @@ import { redactUrls, streamLogger } from "./stream-logger.js";
 /** One rollup version's block stream. */
 export type StreamChain = {
   rollupVersion: number;
-  store: Pick<L2TipsStoreBase, "getL2Tips" | "getL2BlockHash">;
+  store: Pick<
+    ElectionStore,
+    "getL2Tips" | "getL2BlockHash" | "holdsHashAtOrAbove"
+  >;
   source: StickySource;
   publisher: ChainPublisher;
 };
+
+// Whether the store holds a block, which its tip does not tell: a prune to
+// block 0 leaves the tip at 0 over the hashes above it.
+const holdsBlocks = (store: StreamChain["store"]) =>
+  store.holdsHashAtOrAbove(1);
 
 let started = false;
 let cancelPolling = false;
@@ -153,7 +158,7 @@ export const runPass = async ({
   const before = await store.getL2Tips();
   if ((await source.elect()) !== undefined) {
     publisher.startPass();
-    const empty = before.proposed.number === 0;
+    const empty = !(await holdsBlocks(store));
     try {
       await new L2BlockStream(
         source,
@@ -180,7 +185,7 @@ export const runPass = async ({
   // waits for the store's first block: that version lifts a 0 to the chain's
   // proven height, and would send again the blocks it sent above that.
   if (
-    after.proposed.number > 0 &&
+    (await holdsBlocks(store)) &&
     (await getBlockHeights()).processedProposedBlockHeight !==
       after.proposed.number
   ) {

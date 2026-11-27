@@ -1,3 +1,4 @@
+import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { AbortError } from "@aztec-labs/foundation/error";
 import { type BlockHash } from "@aztec-labs/stdlib/block";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -159,6 +160,23 @@ const chainOver = (
   };
 };
 
+/** As a prune to block 0 leaves a store when its first send fails: tip 0, the hashes of blocks 1-3 kept. */
+const pruneToZero = async (
+  store: ReturnType<typeof chainOver>["chain"]["store"],
+) => {
+  await store.handleBlockStreamEvent({
+    type: "blocks-added",
+    blocks: main.blocks.slice(1, 4),
+  });
+  const { checkpointed, proven } = await store.getL2Tips();
+  await store.handleBlockStreamEvent({
+    type: "chain-pruned",
+    block: { number: BlockNumber(0), hash: genesis.toString() },
+    checkpointed,
+    proven,
+  });
+};
+
 describe("block poller pass", () => {
   it("starts an empty store at the elected node's finalized block", async () => {
     const x = new FakeNode("x", prefix(main, 9));
@@ -313,6 +331,27 @@ describe("block poller pass", () => {
       expect(mocks.storeProcessedProposedBlockHeight).not.toHaveBeenCalled();
     },
   );
+
+  it("starts a store pruned to block 0 from block 1, not from the snapshot's finalized block", async () => {
+    const x = new FakeNode("x", await grow(prefix(main, 0), 9));
+    x.tiers = { checkpointed: 9, proven: 6, finalized: 6 };
+    const { chain, sent } = chainOver([x]);
+    await pruneToZero(chain.store);
+
+    await runPass(chain);
+
+    expect(sent).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("writes a tip of 0 over the legacy proposed height after a prune to block 0, as the store still holds blocks", async () => {
+    const { chain } = chainOver([]);
+    await pruneToZero(chain.store);
+    mocks.heights.processedProposedBlockHeight = 5;
+
+    await runPass(chain);
+
+    expect(mocks.storeProcessedProposedBlockHeight.mock.calls).toEqual([[0]]);
+  });
 
   it("starts a new store, from the reporting node's block 0, when node info reports a new rollup version", async () => {
     const [a, b] = [new FakeNode("a", main), new FakeNode("b", main)];

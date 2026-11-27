@@ -76,6 +76,7 @@ describe("block poller full sweep", () => {
       store: {
         getL2Tips: () =>
           Promise.resolve({ proposed: { number: tips.shift() ?? 3 } }),
+        holdsHashAtOrAbove: () => Promise.resolve(true),
       },
       source: { elect: () => Promise.resolve(undefined) },
       publisher: {},
