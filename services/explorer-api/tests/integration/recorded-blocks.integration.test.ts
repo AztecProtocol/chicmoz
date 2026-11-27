@@ -11,6 +11,7 @@ import {
   type L1L2ValidatorEvent,
   type PendingTxsEvent,
 } from "@chicmoz-pkg/message-registry";
+import { type CacheKeys } from "@chicmoz-pkg/redis-helper";
 import { BSON } from "bson";
 import { existsSync, readFileSync } from "node:fs";
 import {
@@ -130,6 +131,14 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       ).toEqual([]);
     }
     return body;
+  };
+
+  /** A chain read's keys at the current chain revision, which every stored block moves. */
+  const chainKeys = async (keys: CacheKeys) => {
+    const { onChainKeys } = await import(
+      "../../src/svcs/http-server/routes/controllers/utils/db-wrapper.js"
+    );
+    return onChainKeys(keys);
   };
 
   beforeAll(async () => {
@@ -284,8 +293,12 @@ describe("recorded chain data read back through Postgres and Redis", () => {
   describe("contract instance verification", () => {
     const [address] = INSTANCES;
     const artifact = rawArtifact("auth_registry_contract-AuthRegistry");
-    const instanceEntry = () =>
-      cacheAt(api.stack, api.namespace, ["l2", "contract-instances", address]);
+    const instanceEntry = async () =>
+      cacheAt(
+        api.stack,
+        api.namespace,
+        await chainKeys(["l2", "contract-instances", address]),
+      );
     let deploymentArguments: {
       publicKeysString: string;
       salt: string;
@@ -315,7 +328,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
     // The POST reads the instance through the cache; a 200 while the row's
     // salt disagrees proves the answer came from the committed string.
     it("POST verifies the recorded deployment from the committed string of its cache entry", async () => {
-      const entry = instanceEntry();
+      const entry = await instanceEntry();
       await entry.remove();
       const first = await verify({
         verifiedDeploymentArguments: {
@@ -416,7 +429,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       // The entry now carries the notes and metadata, which the POST's reader
       // parses too; the salt control proves the committed string answered.
       it("POST verifies from the committed cache string that carries the notes and metadata", async () => {
-        const entry = instanceEntry();
+        const entry = await instanceEntry();
         await entry.remove();
         const miss = await verify({
           verifiedDeploymentArguments: {
@@ -460,7 +473,7 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       // Their cache entries are removed, as when they expire, so the routes
       // read the rows the verification left.
       it("class and instance read back with the stored artifact, deployment arguments and notes", async () => {
-        await instanceEntry().remove();
+        await (await instanceEntry()).remove();
         expect(
           snapshotOf(
             await get(
@@ -513,11 +526,11 @@ describe("recorded chain data read back through Postgres and Redis", () => {
     it("GET /l2/rpc-nodes answers from the committed string of its cache entry", async () => {
       const path = "/l2/rpc-nodes";
       await deliverRpcNode();
-      const entry = cacheAt(api.stack, api.namespace, [
-        "l2",
-        "rpc-nodes",
-        LOCAL_TIP,
-      ]);
+      const entry = cacheAt(
+        api.stack,
+        api.namespace,
+        await chainKeys(["l2", "rpc-nodes", LOCAL_TIP]),
+      );
       await entry.remove();
       expect(await get(path, path)).toHaveLength(1);
       const committed = await pinCacheString(entry, "rpc-nodes");
@@ -533,12 +546,11 @@ describe("recorded chain data read back through Postgres and Redis", () => {
       await deliverRpcNode();
       const { rpcNodeName } = RPC_NODE.rpcNode;
       const path = `/l2/rpc-nodes/${rpcNodeName}`;
-      const entry = cacheAt(api.stack, api.namespace, [
-        "l2",
-        "rpc-nodes",
-        rpcNodeName,
-        LOCAL_TIP,
-      ]);
+      const entry = cacheAt(
+        api.stack,
+        api.namespace,
+        await chainKeys(["l2", "rpc-nodes", rpcNodeName, LOCAL_TIP]),
+      );
       await entry.remove();
       await get(path, "/l2/rpc-nodes/:rpcNodeName");
       // The node's own times come from its payload and the frozen clock; only

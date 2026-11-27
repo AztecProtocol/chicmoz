@@ -96,6 +96,11 @@ vi.mock("../../src/svcs/database/controllers/chain-lock.js", () => ({
   withChainLock: (fn: (dbTx: unknown) => Promise<unknown>) =>
     fn("chain-locked transaction"),
 }));
+// The block consumers bump it; its real module reads the Redis environment on
+// import.
+vi.mock("../../src/svcs/cache/chain-revision.js", () => ({
+  bumpChainRevision: seam.record("bumpChainRevision"),
+}));
 // Only the compile-result consumer uses it; its real module reads the Redis
 // environment on import.
 vi.mock(

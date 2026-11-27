@@ -7,6 +7,7 @@ import {
 } from "./environment.js";
 import { subscribeHandlers } from "./events/received/index.js";
 import { logger } from "./logger.js";
+import { bumpChainRevision } from "./svcs/cache/chain-revision.js";
 import { removeMinedDroppedTxs } from "./svcs/database/controllers/dropped-tx/remove.js";
 import { updateContractInstanceAztecScanNotes } from "./svcs/database/controllers/l2/aztec-scan-notes.js";
 import { initializeRollupVersionCache } from "./svcs/database/controllers/l2/chain-info/rollup-version-cache.js";
@@ -47,6 +48,8 @@ ORIGIN: ${notes.origin}`);
     return;
   }
 
+  // A crash between a block's commit and its bump left that bump undone.
+  await bumpChainRevision();
   await subscribeHandlers();
   // Through the reconciliation ticks, so a shutdown during startup waits for
   // these requests and no interval is armed after it.

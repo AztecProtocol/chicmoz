@@ -11,6 +11,7 @@ import { z } from "zod";
 import { SERVICE_NAME } from "../../../constants.js";
 import { L2_NETWORK_ID } from "../../../environment.js";
 import { logger } from "../../../logger.js";
+import { bumpChainRevision } from "../../../svcs/cache/chain-revision.js";
 import { observeRollupVersion } from "../../../svcs/database/controllers/l2/chain-info/rollup-version-cache.js";
 import {
   applyCatchupBlock,
@@ -52,6 +53,9 @@ const afterCommit = async (
   { block }: IncomingBlock,
   { canonical }: ChainOutcome,
 ) => {
+  // Any applied block can change a cached chain read: the statuses it
+  // changed, the txs and contracts it took, its children's orphan flags.
+  await bumpChainRevision();
   if (!canonical) {
     return;
   }
