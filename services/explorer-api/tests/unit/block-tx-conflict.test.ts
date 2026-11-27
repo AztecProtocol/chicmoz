@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
   store: vi.fn<() => Promise<void>>(),
   markOpenGapsFulfilledByHeight: vi.fn(() => Promise.resolve()),
+  revalidateDegradedTips: vi.fn(() => Promise.resolve()),
   removePendingAndDroppedTx: vi.fn(() => Promise.resolve()),
   storeContracts: vi.fn(() => Promise.resolve()),
   deleteL2BlockByHash: vi.fn(() => Promise.resolve()),
@@ -28,6 +29,7 @@ vi.mock("../../src/svcs/database/index.js", () => ({
       store: mocks.store,
       markOpenGapsFulfilledByHeight: mocks.markOpenGapsFulfilledByHeight,
     },
+    l2: { tips: { revalidateDegradedTips: mocks.revalidateDegradedTips } },
     l2Tx: { removePendingAndDroppedTx: mocks.removePendingAndDroppedTx },
   },
 }));
@@ -82,6 +84,7 @@ const owner = (overrides: object) => ({
 });
 const hooks = () => [
   mocks.markOpenGapsFulfilledByHeight,
+  mocks.revalidateDegradedTips,
   mocks.storeContracts,
   mocks.removePendingAndDroppedTx,
 ];

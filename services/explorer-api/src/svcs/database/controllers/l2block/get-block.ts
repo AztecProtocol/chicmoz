@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm";
 import { DB_MAX_BLOCKS } from "../../../../environment.js";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
-import { deriveNativeStatus, getTips } from "../l2/tips.js";
+import { deriveNativeStatus, getTips, statusTipHeights } from "../l2/tips.js";
 import { getLatestBlockRollupVersion } from "./get-latest.js";
 import {
   archive,
@@ -126,18 +126,13 @@ export const getBlock = async (
 export const getBlocksByNativeStatus = async (
   options: BlockQueryOptions = {},
 ): Promise<ChicmozL2BlockLight[]> => {
-  const tips = await getTips();
-  if (!tips || tips.degradedReason) {
+  const tips = statusTipHeights(await getTips());
+  if (!tips) {
     const latest = await getBlock(-1n, options);
     return latest ? [latest] : [];
   }
 
-  const heights = [
-    tips.finalized.block.number,
-    tips.proven.block.number,
-    tips.checkpointed.block.number,
-    tips.proposed.number,
-  ];
+  const heights = [tips.finalized, tips.proven, tips.checkpointed, tips.proposed];
   const blocks: ChicmozL2BlockLight[] = [];
   const seen = new Set<string>();
   for (const height of heights) {

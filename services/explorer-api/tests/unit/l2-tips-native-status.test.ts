@@ -162,7 +162,7 @@ describe("deriveNativeStatus", () => {
     expect(
       deriveNativeStatus(
         { hash: hash(1), height: 1n },
-        { ...storedTips, degradedReason: "proposed boundary block 100 is missing" },
+        { ...storedTips, degradedReason: "checkpointed boundary block 80 is missing" },
       ),
     ).toBe("unknown");
     expect(
