@@ -5,6 +5,7 @@ import { StickySource } from "../../src/svcs/poller/network-client/block-stream-
 import { ChainPublisher } from "../../src/svcs/poller/pollers/block_poller/chain-publisher.js";
 import {
   currentChain,
+  pollOnce,
   runPass,
   streamRollupVersion,
 } from "../../src/svcs/poller/pollers/block_poller/index.js";
@@ -18,6 +19,7 @@ import {
   memoryStore,
   prefix,
   readerOf,
+  respond,
   tipsOf,
 } from "./support/chain.js";
 
@@ -173,6 +175,37 @@ describe("block poller pass", () => {
     expect(mocks.publishTipsIfDue).not.toHaveBeenCalled();
     expect(runProvenSideWork).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("redacts URLs in a failed pass's log, its error's cause too, and keeps its stack frames", async () => {
+    const x = new FakeNode("x", prefix(main, 3));
+    const { chain } = chainOver([x]);
+    await runPass(chain);
+    x.chain = prefix(main, 5);
+    const url = "https://user:secret@node.example/v1/key123?apikey=key456";
+    const failure = new Error(`Error fetching from host ${url}: fetch failed`, {
+      cause: new Error(`connect ECONNREFUSED ${url}`),
+    });
+    // Node prints an ES module's frames as file URLs.
+    failure.stack = `Error: ${failure.message}\n    at read (file:///app/build/client.js:1:2)`;
+    // The walk-back reads block 3 first, the batch's parent check second.
+    let readsAt3 = 0;
+    x.getBlockOverride = (param) => {
+      const n = (param as { number: number }).number;
+      return n === 3 && ++readsAt3 >= 2
+        ? Promise.reject(failure)
+        : respond(x.chain.blocks[n], false);
+    };
+
+    await pollOnce(() => Promise.resolve(chain));
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [line] = logger.error.mock.calls[0] as [string];
+    expect(line).toContain(
+      "🐻 block stream pass failed: Error: Error fetching from host <url>: fetch failed\n    at read (file:///app/build/client.js:1:2)",
+    );
+    expect(line).toContain("[cause]: Error: connect ECONNREFUSED <url>");
+    expect(line).not.toMatch(/secret|key123|key456|node\.example/);
   });
 
   it("publishes the snapshot's tips after a pass that reaches them, and no tips or side work after one that ends on the prefix rule", async () => {

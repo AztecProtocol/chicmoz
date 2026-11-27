@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import {
   L2BlockStream,
@@ -40,7 +41,7 @@ import {
 import { publishTipsIfDue } from "../l2-tips-poller.js";
 import { ChainPublisher } from "./chain-publisher.js";
 import { runProvenSideWork } from "./proven-side-work.js";
-import { streamLogger } from "./stream-logger.js";
+import { redactUrls, streamLogger } from "./stream-logger.js";
 
 /** One rollup version's block stream. */
 export type StreamChain = {
@@ -202,14 +203,24 @@ export const runPass = async ({
   }
 };
 
-const tick = async () => {
+/** One poll: the pass of the stream `chain` gives, logging its failure. */
+export const pollOnce = async (
+  chain: () => Promise<StreamChain> = currentChain,
+) => {
   try {
-    await runPass(await currentChain());
+    await runPass(await chain());
   } catch (e) {
     // A read with no node pinned; the next pass elects one.
     if ((e as Error).name !== "AbortError") {
-      logger.error(`🐻 block stream pass failed: ${(e as Error).stack}`);
+      // A node read's error names the node's URL; inspect() adds the cause.
+      logger.error(`🐻 block stream pass failed: ${redactUrls(inspect(e))}`);
     }
+  }
+};
+
+const tick = async () => {
+  try {
+    await pollOnce();
   } finally {
     if (!cancelPolling) {
       timeoutId = setTimeout(() => void tick(), BLOCK_POLL_INTERVAL_MS);
