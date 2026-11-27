@@ -16,6 +16,7 @@ import { logger } from "../../../../logger.js";
 import { type StickySource } from "../../network-client/block-stream-source.js";
 
 type PruneEvent = Extract<L2BlockStreamEvent, { type: "chain-pruned" }>;
+type ProposedEvent = Extract<L2BlockStreamEvent, { type: "chain-proposed" }>;
 type TierEvent = Extract<
   L2BlockStreamEvent,
   { type: "chain-checkpointed" | "chain-proven" | "chain-finalized" }
@@ -94,6 +95,8 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
         return this.addBlocks(event.blocks);
       case "chain-pruned":
         return this.prune(event);
+      case "chain-proposed":
+        return this.confirmProposed(event);
       case "chain-checkpointed":
       case "chain-proven":
       case "chain-finalized":
@@ -224,6 +227,22 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
           : target.number,
       );
     });
+  }
+
+  // The stream reports the snapshot's tip even when it downloaded nothing up
+  // to it, as from a `startingBlock` past that tip; the store would then hold
+  // a tip whose block was never sent.
+  private async confirmProposed(event: ProposedEvent) {
+    if (
+      (await this.deps.store.getL2BlockHash(event.block.number)) !==
+      event.block.hash
+    ) {
+      logger.warn(
+        `Node ${this.pinnedName()} has proposed tip ${event.block.number}, which this pass did not send; the pass ends`,
+      );
+      throw new AbortError();
+    }
+    await this.deps.store.handleBlockStreamEvent(event);
   }
 
   private async moveTier(event: TierEvent) {

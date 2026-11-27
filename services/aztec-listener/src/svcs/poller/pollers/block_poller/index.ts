@@ -150,6 +150,7 @@ export const runPass = async ({
   const before = await store.getL2Tips();
   if ((await source.elect()) !== undefined) {
     publisher.startPass();
+    const empty = before.proposed.number === 0;
     try {
       await new L2BlockStream(
         source,
@@ -158,11 +159,12 @@ export const runPass = async ({
         streamLogger,
         {
           batchSize: AZTEC_BLOCK_STREAM_BATCH_SIZE,
-          // From the elected node's finalized block, inclusive: no history is replayed.
-          startingBlock:
-            before.proposed.number === 0
-              ? source.pinnedTips?.finalized.block.number
-              : undefined,
+          // The stream reads this as it plans its downloads, after it read its
+          // snapshot: an empty store starts at that snapshot's finalized
+          // block, inclusive, and no history is replayed.
+          get startingBlock() {
+            return empty ? source.lastTips?.finalized.block.number : undefined;
+          },
         },
       ).sync();
     } finally {

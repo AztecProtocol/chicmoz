@@ -18,6 +18,7 @@ import {
   memoryStore,
   prefix,
   readerOf,
+  tipsOf,
 } from "./support/chain.js";
 
 const mocks = vi.hoisted(() => ({
@@ -133,6 +134,23 @@ describe("block poller pass", () => {
 
     expect(sent).toEqual([6, 7, 8, 9]);
     expect((await chain.store.getL2Tips()).finalized.block.number).toBe(6);
+  });
+
+  it("starts an empty store at the finalized block of the stream's own snapshot when it lags the election's", async () => {
+    const x = new FakeNode("x", prefix(main, 4));
+    x.tiers = { checkpointed: 4, proven: 3, finalized: 3 };
+    // The election's probe reached a backend further ahead.
+    x.probeTipsOverride = () =>
+      tipsOf(prefix(main, 9), { checkpointed: 9, proven: 7, finalized: 6 });
+    const { chain, sent } = chainOver([x]);
+
+    await runPass(chain);
+
+    expect(sent).toEqual([3, 4]);
+    expect((await chain.store.getL2Tips()).proposed).toEqual({
+      number: 4,
+      hash: main.hashes[4],
+    });
   });
 
   it("logs a failed send through the listener's logger and publishes no tips", async () => {

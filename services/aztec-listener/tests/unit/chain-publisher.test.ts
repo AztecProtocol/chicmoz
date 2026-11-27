@@ -103,12 +103,13 @@ const setup = ({
     { maxPruneDepth, prefixAlertMs: 60_000 },
   );
   /** One listener pass: the election, then the stream when a node is pinned. */
-  const pass = async () => {
+  const pass = async (startingBlock?: number) => {
     const pinned = await source.elect();
     if (pinned !== undefined) {
       publisher.startPass();
       await new L2BlockStream(source, source.localData, publisher, undefined, {
         batchSize: 10,
+        startingBlock,
       }).sync();
       publisher.finishPass();
     }
@@ -327,6 +328,19 @@ describe("ChainPublisher checks", () => {
       expect(loggedTimes(logger.warn, reason)).toBe(1);
     },
   );
+
+  it("stores no proposed tip that the pass did not send", async () => {
+    const x = new FakeNode("x", prefix(main, 4));
+    x.tiers = { checkpointed: 4, proven: 4, finalized: 4 };
+    const { sent, pass, head } = setup({ nodes: [x] });
+
+    // Past the node's tip: the stream downloads nothing and reports the tip.
+    expect(await pass(6)).toBe(x.rpc);
+
+    expect(sent).toEqual([]);
+    expect((await head()).number).toBe(0);
+    expect(loggedTimes(logger.warn, "which this pass did not send")).toBe(1);
+  });
 
   it("refuses a prune to block 0 through heights the store holds no hash for", async () => {
     const x = new FakeNode("x", await grow(base, 12));

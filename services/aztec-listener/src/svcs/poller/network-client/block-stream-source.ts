@@ -235,11 +235,6 @@ export class StickySource implements L2BlockStreamSource {
     return this.pin?.node;
   }
 
-  /** The tips the pinned node's election probe showed. */
-  get pinnedTips(): L2Tips | undefined {
-    return this.pin?.tips;
-  }
-
   get lastTips(): L2Tips | undefined {
     return this.latestTips;
   }
