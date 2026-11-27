@@ -8389,11 +8389,14 @@
                         "type": "string"
                       },
                       "nbrOfOrphanedBlocks": {
+                        "description": "How many of the record's blocks are still orphaned.",
                         "maximum": 9007199254740991,
                         "minimum": 0,
                         "type": "integer"
                       },
-                      "orphanedBlockHash": {},
+                      "orphanedBlockHash": {
+                        "description": "The lowest of the record's blocks that are still orphaned."
+                      },
                       "timestamp": {
                         "format": "date-time",
                         "type": "string"
