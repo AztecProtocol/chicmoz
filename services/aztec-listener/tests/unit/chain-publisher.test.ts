@@ -401,6 +401,60 @@ describe("ChainPublisher checks", () => {
     },
   );
 
+  // The node forks from block 5, below the stored proven tip 6 and above the
+  // stored finalized tip 4.
+  it.each([
+    {
+      fault: "another block 4 as its proven tip",
+      reason: "has another block at its proven height 4",
+      tiers: { checkpointed: 9, proven: 4, finalized: 4 },
+      provenHash: () => main.hashes[3],
+    },
+    {
+      fault: "tiers out of order",
+      reason: "sent tips out of order",
+      tiers: { checkpointed: 6, proven: 7, finalized: 4 },
+      provenHash: undefined,
+    },
+  ])(
+    "stores nothing from a prune with $fault, sets the node aside, and follows an honest node",
+    async ({ reason, tiers, provenHash }) => {
+      const x = new FakeNode("x", prefix(main, 8));
+      x.tiers = { checkpointed: 8, proven: 6, finalized: 4 };
+      const y = new FakeNode("y", prefix(main, 8));
+      y.tiers = x.tiers;
+      const { store, world, sent, lowered, pass } = setup({
+        nodes: [x, y],
+        online: [x],
+      });
+      await pass();
+      sent.length = 0;
+      const fork = await grow(prefix(main, 5), 9);
+      x.chain = fork;
+      x.chainTipsOverride = () => {
+        const tips = tipsOf(fork, tiers);
+        return provenHash === undefined
+          ? tips
+          : {
+              ...tips,
+              proven: {
+                ...tips.proven,
+                block: { ...tips.proven.block, hash: provenHash() },
+              },
+            };
+      };
+      const before = await store.getL2Tips();
+
+      expect(await pass()).toBe(x.rpc);
+      expect(sent).toEqual([]);
+      expect(lowered).toEqual([]);
+      expect(await store.getL2Tips()).toEqual(before);
+      expect(loggedTimes(logger.warn, reason)).toBe(1);
+      world.online = [x, y];
+      expect(await pass()).toBe(y.rpc);
+    },
+  );
+
   it.each([
     {
       change: "a prune past a proof",

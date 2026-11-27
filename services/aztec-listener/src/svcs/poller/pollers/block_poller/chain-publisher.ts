@@ -2,6 +2,7 @@ import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import { AbortError } from "@aztec-labs/foundation/error";
 import {
   type L2Block,
+  type L2BlockId,
   type L2BlockStreamEvent,
   type L2BlockStreamEventHandler,
   type L2Tips,
@@ -195,6 +196,18 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
         alert: true,
       });
     }
+    this.checkOrder(snapshot);
+    // The store writes each tier it lowers over the hash at that height, which
+    // can be the finalized witness; at or below the target, no block of this
+    // pass writes it back.
+    for (const [tier, { block }] of [
+      ["checkpointed", event.checkpointed],
+      ["proven", event.proven],
+    ] as const) {
+      if (block.number <= target.number) {
+        await this.checkStored(tier, block);
+      }
+    }
     const depth = local.proposed.number - target.number;
     if (depth > this.config.maxPruneDepth) {
       logger.error(
@@ -214,22 +227,10 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
   }
 
   private async moveTier(event: TierEvent) {
-    const snapshot = this.snapshot();
-    if (!tiersOrdered(snapshot)) {
-      this.reject({
-        reason: `sent tips out of order: proposed ${snapshot.proposed.number}, checkpointed ${snapshot.checkpointed.block.number}, proven ${snapshot.proven.block.number}, finalized ${snapshot.finalized.block.number}`,
-      });
-    }
+    this.checkOrder(this.snapshot());
     // The store writes a tier's hash over the one at its height, and the
     // finalized tier deletes the hashes below it.
-    if (
-      (await this.deps.store.getL2BlockHash(event.block.number)) !==
-      event.block.hash
-    ) {
-      this.reject({
-        reason: `has another block at its ${event.type.slice("chain-".length)} height ${event.block.number} than the one the block stream stored`,
-      });
-    }
+    await this.checkStored(event.type.slice("chain-".length), event.block);
     if (event.type === "chain-proven") {
       const proven = (await this.deps.store.getL2Tips()).proven.block.number;
       if (event.block.number < proven) {
@@ -241,6 +242,22 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       }
     }
     await this.deps.store.handleBlockStreamEvent(event);
+  }
+
+  private checkOrder(snapshot: L2Tips) {
+    if (!tiersOrdered(snapshot)) {
+      this.reject({
+        reason: `sent tips out of order: proposed ${snapshot.proposed.number}, checkpointed ${snapshot.checkpointed.block.number}, proven ${snapshot.proven.block.number}, finalized ${snapshot.finalized.block.number}`,
+      });
+    }
+  }
+
+  private async checkStored(tier: string, block: L2BlockId) {
+    if ((await this.deps.store.getL2BlockHash(block.number)) !== block.hash) {
+      this.reject({
+        reason: `has another block at its ${tier} height ${block.number} than the one the block stream stored`,
+      });
+    }
   }
 
   private snapshot(): L2Tips {
