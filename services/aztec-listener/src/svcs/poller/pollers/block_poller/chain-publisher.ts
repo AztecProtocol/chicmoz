@@ -54,7 +54,7 @@ export type ChainPublisherConfig = {
   prefixAlertMs: number;
 };
 
-/** The block stream's handler: it stores a block only once the block is sent. */
+/** The block stream's handler: it stores a batch only once every block in it is sent. */
 export class ChainPublisher implements L2BlockStreamEventHandler {
   private prefixWait: { since: number; alertedAt?: number } | undefined;
   private endedOnPrefix = false;
@@ -132,22 +132,16 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       this.reject(rejection);
     }
     await this.confirmTip(tip, blocks);
-    const sent: L2Block[] = [];
-    try {
-      for (const block of blocks) {
-        await this.deps.publishBlock(block, tip.number);
-        sent.push(block);
-      }
-    } finally {
-      // The next pass resumes after the last stored block, so a block whose
-      // send failed goes out again.
-      if (sent.length > 0) {
-        await this.deps.store.handleBlockStreamEvent({
-          type: "blocks-added",
-          blocks: sent,
-        });
-      }
+    for (const block of blocks) {
+      await this.deps.publishBlock(block, tip.number);
     }
+    // The blocks sent so far carry this pass's tip, which the node may drop
+    // before the next pass; storing none of them after a failed send makes
+    // that pass send them again with its own tip.
+    await this.deps.store.handleBlockStreamEvent({
+      type: "blocks-added",
+      blocks,
+    });
   }
 
   private async batchFault(blocks: L2Block[]): Promise<Rejection | undefined> {

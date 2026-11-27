@@ -221,23 +221,26 @@ describe("ChainPublisher after the node replaces published heights", () => {
     expect(await head()).toEqual({ number: 20, hash: main.hashes[20] });
   });
 
-  it("stops the pass at a failed send, and the next pass sends again from that block", async () => {
+  it("stores no block of a batch with a failed send, and the next pass sends the whole batch again with its own tip", async () => {
     const x = new FakeNode("x", prefix(main, 5));
     const { sent, failing, pass, head } = setup({ nodes: [x] });
     await pass();
     sent.length = 0;
     x.chain = prefix(main, 9);
 
-    failing.add(7);
+    failing.add(8);
     await expect(pass()).rejects.toThrow("send rejected");
-    expect(sent).toEqual(sentOf(main, [6], 9));
-    expect((await head()).number).toBe(6);
+    expect(sent).toEqual(sentOf(main, [6, 7], 9));
+    expect(await head()).toEqual({ number: 5, hash: main.hashes[5] });
 
+    // The node dropped blocks 8-9 since.
+    x.chain = prefix(main, 7);
     await pass();
     expect(sent).toEqual([
-      ...sentOf(main, [6], 9),
-      ...sentOf(main, [7, 8, 9], 9),
+      ...sentOf(main, [6, 7], 9),
+      ...sentOf(main, [6, 7], 7),
     ]);
+    expect(await head()).toEqual({ number: 7, hash: main.hashes[7] });
   });
 });
 
