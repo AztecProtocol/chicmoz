@@ -1,9 +1,15 @@
 import { execFile } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { brokerReads } from "./broker.js";
+import {
+  type HeightRange,
+  checkRanges,
+  firstMismatch,
+} from "./compare-ranges.js";
 import { readScriptedEndpoints } from "./endpoints.js";
 import {
   type ReorgRecord,
@@ -172,39 +178,52 @@ const COMPARE_CHAIN = fileURLToPath(
 
 /** One check of the read-only checker against this run's node and API. */
 const compareChain = (check: "sample" | "window") =>
-  new Promise<{ code: number; output: string; firstMismatch: unknown }>(
-    (resolve, reject) =>
-      execFile(
-        process.execPath,
-        [COMPARE_CHAIN, check],
-        {
-          env: {
-            ...process.env,
-            COMPARE_NODE_URL: endpoints.aztecNodeUrl,
-            COMPARE_API_URL: endpoints.explorerApiUrl,
-          },
-          timeout: 60_000,
+  new Promise<{
+    code: number;
+    output: string;
+    range?: HeightRange;
+    firstMismatch: unknown;
+  }>((resolve, reject) =>
+    execFile(
+      process.execPath,
+      [COMPARE_CHAIN, check],
+      {
+        env: {
+          ...process.env,
+          COMPARE_NODE_URL: endpoints.aztecNodeUrl,
+          COMPARE_API_URL: endpoints.explorerApiUrl,
         },
-        (error, stdout, stderr) => {
-          const code = typeof error?.code === "number" ? error.code : 0;
-          if (error && code === 0) {
-            reject(error);
-            return;
-          }
-          let last: unknown;
-          try {
-            last = JSON.parse(stdout.trim().split("\n").at(-1) ?? "");
-          } catch {
-            // Not a JSON line: the raw output stands in for the result.
-          }
-          const line = z.object({ firstMismatch: z.unknown() }).safeParse(last);
-          resolve({
-            code,
-            output: stdout + stderr,
-            firstMismatch: line.success ? line.data.firstMismatch : stdout,
-          });
-        },
-      ),
+        timeout: 60_000,
+      },
+      (error, stdout, stderr) => {
+        const code = typeof error?.code === "number" ? error.code : 0;
+        if (error && code === 0) {
+          reject(error);
+          return;
+        }
+        let last: unknown;
+        try {
+          last = JSON.parse(stdout.trim().split("\n").at(-1) ?? "");
+        } catch {
+          // Not a JSON line: the raw output stands in for the result.
+        }
+        const line = z
+          .object({
+            from: z.number(),
+            to: z.number(),
+            firstMismatch: z.unknown(),
+          })
+          .safeParse(last);
+        resolve({
+          code,
+          output: stdout + stderr,
+          range: line.success
+            ? { from: line.data.from, to: line.data.to }
+            : undefined,
+          firstMismatch: line.success ? line.data.firstMismatch : stdout,
+        });
+      },
+    ),
   );
 
 /** The node's block at each height from `from`, and a 404 one past its tip. */
@@ -250,7 +269,11 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
   let want: Partial<Snapshot>;
   let seen: Snapshot;
   let checkerBefore: Awaited<ReturnType<typeof compareChain>>;
-  let checkerAfter: Awaited<ReturnType<typeof compareChain>>[];
+  let checkerAfter: Record<
+    "sample" | "window",
+    Awaited<ReturnType<typeof compareChain>>
+  >;
+  let nodeTips: { finalized: number; proposed: number };
 
   beforeAll(async () => {
     script = await control.status();
@@ -302,32 +325,50 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
       want,
       "the API after the first prune",
     );
-    checkerAfter = [await compareChain("sample"), await compareChain("window")];
+    checkerAfter = {
+      sample: await compareChain("sample"),
+      window: await compareChain("window"),
+    };
+    const tips = await createAztecNodeClient(
+      endpoints.aztecNodeUrl,
+    ).getChainTips();
+    nodeTips = {
+      finalized: Number(tips.finalized.block.number),
+      proposed: Number(tips.proposed.number),
+    };
   });
 
-  it("has compare-chain name the API's first divergence from the node, and never print the endpoints", () => {
-    const expected = expectedFrom(prune, 1);
-    const diverged = seen.canonical.findIndex(
-      (b, i) => JSON.stringify(b) !== JSON.stringify(expected[i]),
+  it("has compare-chain name the API's first divergence from the node in each check's own range, and never print the endpoints", () => {
+    const onApi = new Map(
+      seen.canonical.flatMap((b) =>
+        "hash" in b && !b.orphaned ? [[b.height, b.hash] as const] : [],
+      ),
     );
-    const firstHeight = diverged < 0 ? undefined : diverged + 1;
+    const onNode = new Map(
+      prune.final.map((b) => [b.height, b.hash.toLowerCase()] as const),
+    );
+    const ranges = checkRanges({
+      apiLatest: typeof seen.latestHeight === "number" ? seen.latestHeight : 0,
+      nodeFinalized: nodeTips.finalized,
+      nodeProposed: nodeTips.proposed,
+    });
     expect
       .soft(checkerBefore, "before the prune")
       .toMatchObject({ code: 0, firstMismatch: null });
-    for (const [i, run] of checkerAfter.entries()) {
-      const check = ["sample", "window"][i];
+    for (const check of ["sample", "window"] as const) {
+      const run = checkerAfter[check];
+      const height = firstMismatch(ranges[check], onApi, onNode);
+      expect.soft(run.range, `${check}: its range`).toEqual(ranges[check]);
       expect
         .soft(run.code, `${check}: exit code`)
-        .toBe(firstHeight === undefined ? 0 : 1);
+        .toBe(height === undefined ? 0 : 1);
       expect
         .soft(run.firstMismatch, `${check}: first mismatch`)
         .toEqual(
-          firstHeight === undefined
-            ? null
-            : expect.objectContaining({ height: firstHeight }),
+          height === undefined ? null : expect.objectContaining({ height }),
         );
     }
-    for (const run of [checkerBefore, ...checkerAfter]) {
+    for (const run of [checkerBefore, ...Object.values(checkerAfter)]) {
       for (const url of [endpoints.aztecNodeUrl, endpoints.explorerApiUrl]) {
         expect.soft(run.output).not.toContain(new URL(url).host);
       }

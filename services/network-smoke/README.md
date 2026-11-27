@@ -47,7 +47,7 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 2. `/l2/reorgs` lists one reorg: height 7, 4 blocks, rooted at the dead 7.
 3. The moved tx is not dropped, its effect is on 7′, and the contract instance is on 7′.
 4. Each dead block is served by its hash, as orphaned.
-5. `scripts/compare-chain.ts` finds no mismatch before the prune, and after it names the same first divergence as the checks above, without printing either URL.
+5. `scripts/compare-chain.ts` finds no mismatch before the prune. After it, `sample` and `window` each read the heights they should (the API's top 40; the node's finalized to proposed tip) and name the first divergence within them, without printing either URL.
 
 That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, before it proposes 13″ with that tx and grows 13″–16″. The test holds the shorter chain for at least 7 s and until a pass of the listener over it has ended: two of its tip reads by one method, a poll interval apart, since one read can be another poller's or an election's probe. The checks:
 
