@@ -3,11 +3,13 @@ import { AxiosError, type AxiosAdapter, type AxiosResponse } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import client from "./client";
 import { DroppedTxAPI } from "./dropped-tx";
+import { TxAPI } from "./tx";
 
 vi.mock("~/service/constants", () => ({
   API_URL: "https://api.test/key",
   aztecExplorer: {
     getL2DroppedTxByHash: (hash: string) => `/l2/dropped-txs/${hash}`,
+    getL2PendingTxsByHash: (hash: string) => `/l2/txs/${hash}`,
   },
 }));
 
@@ -42,32 +44,37 @@ afterEach(() => {
   client.defaults.adapter = adapter;
 });
 
-describe("DroppedTxAPI.getDroppedTxByHash", () => {
-  it("answers null once the tx has no dropped row, so a refetch clears the drop it found before", async () => {
+describe.each([
+  {
+    name: "DroppedTxAPI.getDroppedTxByHash",
+    lookup: DroppedTxAPI.getDroppedTxByHash,
+    row: { txHash: TX, createdAsPendingAt: 1, droppedAt: 2 },
+  },
+  {
+    name: "TxAPI.getPendingTxsByHash",
+    lookup: TxAPI.getPendingTxsByHash,
+    row: { txHash: TX, feePayer: `0x${"0e".repeat(32)}`, birthTimestamp: 1 },
+  },
+])("$name", ({ name, lookup, row }) => {
+  it("answers null once the tx has no row, so a refetch clears the row it found before", async () => {
     const queryClient = new QueryClient();
-    const lookup = {
-      queryKey: ["droppedTxByHash", TX],
-      queryFn: () => DroppedTxAPI.getDroppedTxByHash(TX),
+    const query = {
+      queryKey: [name, TX],
+      queryFn: (): Promise<unknown> => lookup(TX),
       retry: false,
     };
-    client.defaults.adapter = answer(200, {
-      txHash: TX,
-      createdAsPendingAt: 1,
-      droppedAt: 2,
-    });
-    await queryClient.fetchQuery(lookup);
+    client.defaults.adapter = answer(200, row);
+    await queryClient.fetchQuery(query);
 
     client.defaults.adapter = answer(404, "not found");
-    await queryClient.refetchQueries({ queryKey: lookup.queryKey });
+    await queryClient.refetchQueries({ queryKey: query.queryKey });
 
-    expect(queryClient.getQueryData(lookup.queryKey)).toBeNull();
+    expect(queryClient.getQueryData(query.queryKey)).toBeNull();
   });
 
   it("still fails on any other error", async () => {
     client.defaults.adapter = answer(500, "boom");
 
-    await expect(DroppedTxAPI.getDroppedTxByHash(TX)).rejects.toMatchObject({
-      status: 500,
-    });
+    await expect(lookup(TX)).rejects.toMatchObject({ status: 500 });
   });
 });

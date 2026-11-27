@@ -32,18 +32,12 @@ import {
 
 type Tab = "notes" | "nulls" | "public" | "l1" | "logs" | "calls";
 
-// An orphaned block's height now names the block that replaced it.
+// By hash: a height names whichever block is canonical there when the link
+// is followed, which can be another block by then.
 const EffectBlockLink: FC<{ effect: ChicmozL2TxEffectDeluxe }> = ({
   effect,
 }) => (
-  <Link
-    to="/blocks/$blockNumber"
-    params={{
-      blockNumber: effect.isOrphaned
-        ? effect.blockHash
-        : String(effect.blockHeight),
-    }}
-  >
+  <Link to="/blocks/$blockNumber" params={{ blockNumber: effect.blockHash }}>
     #{fmtNum(Number(effect.blockHeight))}
   </Link>
 );
@@ -115,7 +109,7 @@ export const TxDetailPage: FC = () => {
               {historical ? "was in" : "in"} <EffectBlockLink effect={effect} />
             </span>
           )}
-          {dropped && (
+          {status === "dropped" && dropped && (
             <span className="meta-line" style={{ color: "var(--red)" }}>
               dropped at {toIsoUtc(dropped.droppedAt)}
             </span>
@@ -317,7 +311,7 @@ export const TxDetailPage: FC = () => {
         </>
       )}
 
-      {!mined && pending && (
+      {status === "pending" && pending && (
         <>
           <div className="panel">
             <div className="panel-head">
@@ -381,7 +375,7 @@ export const TxDetailPage: FC = () => {
         </>
       )}
 
-      {!mined && !pending && dropped && (
+      {status === "dropped" && dropped && (
         <div className="panel">
           <div className="panel-head">
             <h3>
