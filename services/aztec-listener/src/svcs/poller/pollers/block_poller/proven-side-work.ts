@@ -1,4 +1,5 @@
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
+import { type L2Block } from "@aztec-labs/stdlib/block";
 import {
   AZTEC_BLOCK_STREAM_BATCH_SIZE,
   AZTEC_PROVEN_SIDE_WORK_MAX,
@@ -12,24 +13,47 @@ import {
 
 export type ProvenSideWorkDeps = {
   source: Pick<StickySource, "getBlocks" | "pinnedRead">;
+  rollupVersion: number;
   /** The pinned node's proven tip, as the store holds it after a settled pass. */
   provenTip: number;
+  /** The store's finalized tip; the store keeps no hashes below it. */
+  finalizedTip: number;
+  storedHash: (height: number) => Promise<string | undefined>;
   readCursor: () => Promise<number>;
   storeCursor: (height: number) => Promise<void>;
+};
+
+// The node can serve another block at a height once the pass has settled.
+// Below the finalized tip the store keeps no hash, and a block cannot change.
+const onStoredChain = async (
+  block: L2Block,
+  { rollupVersion, finalizedTip, storedHash }: ProvenSideWorkDeps,
+) => {
+  if (
+    block.header.globalVariables.version.toBigInt() !== BigInt(rollupVersion)
+  ) {
+    return false;
+  }
+  const stored = await storedHash(block.number);
+  return stored === undefined
+    ? block.number < finalizedTip
+    : stored === (await block.hash()).toString();
 };
 
 /**
  * Runs the proven blocks above the cursor, at most `max` of them, from the
  * pinned node, and moves the cursor past each block that completed. A failed
- * block stops the run, so the next pass retries it.
+ * block, or one off the stored chain, stops the run, so the next pass retries
+ * it.
  */
 export const runProvenSideWork = async (
-  { source, provenTip, readCursor, storeCursor }: ProvenSideWorkDeps,
+  deps: ProvenSideWorkDeps,
   { max, batchSize } = {
     max: AZTEC_PROVEN_SIDE_WORK_MAX,
     batchSize: AZTEC_BLOCK_STREAM_BATCH_SIZE,
   },
 ) => {
+  const { source, provenTip, readCursor, storeCursor } = deps;
   let cursor = await readCursor();
   // The cursor spans rollup versions, and a new version's heights start over.
   if (cursor > provenTip) {
@@ -49,6 +73,12 @@ export const runProvenSideWork = async (
       return;
     }
     for (const block of blocks) {
+      if (!(await onStoredChain(block, deps))) {
+        logger.warn(
+          `Proven side work stopped at block ${block.number}, which is not the block the block stream stored there; the next pass retries`,
+        );
+        return;
+      }
       const outcome = await handleProvenTransactions(block, readStorage);
       if (!outcome.ok) {
         logger.warn(

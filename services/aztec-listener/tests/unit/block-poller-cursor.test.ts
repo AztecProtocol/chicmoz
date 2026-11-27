@@ -45,9 +45,10 @@ vi.mock("../../src/svcs/message-bus/index.js", () => ({
 }));
 
 const PAYER = `0x${"11".repeat(32)}`;
+const VERSION = 7;
 
-// The side work reads a block's number, tx hashes, hash and fee recipient.
-const blockAt = (n: number, txHashes: string[] = []) =>
+// The side work reads a block's number, version, tx hashes, hash and fee recipient.
+const blockAt = (n: number, txHashes: string[] = [], version = VERSION) =>
   ({
     number: n,
     body: {
@@ -56,6 +57,7 @@ const blockAt = (n: number, txHashes: string[] = []) =>
     header: {
       globalVariables: {
         blockNumber: n,
+        version: { toBigInt: () => BigInt(version) },
         feeRecipient: { toString: () => "0xfee" },
       },
     },
@@ -93,6 +95,24 @@ const cursorAt = (start: number) => {
   };
 };
 
+/** A store that holds every served block's hash, unless `stored` says otherwise. */
+const depsOf = (
+  source: ProvenSideWorkDeps["source"],
+  provenTip: number,
+  cursors: Pick<ProvenSideWorkDeps, "readCursor" | "storeCursor">,
+  {
+    finalizedTip = 0,
+    stored = (height: number) => `block-${height}` as string | undefined,
+  } = {},
+): ProvenSideWorkDeps => ({
+  source,
+  rollupVersion: VERSION,
+  provenTip,
+  finalizedTip,
+  storedHash: (height) => Promise.resolve(stored(height)),
+  ...cursors,
+});
+
 const balances = () =>
   db.published.map(
     ({ contractAddress, balance, sourceTxHash, blockNumber }) => ({
@@ -115,7 +135,7 @@ describe("proven side work", () => {
       Array.from({ length: 201 }, (_, i) => blockAt(i + 1)),
     );
     const { cursor, ...cursors } = cursorAt(0);
-    const run = () => runProvenSideWork({ source, provenTip: 201, ...cursors });
+    const run = () => runProvenSideWork(depsOf(source, 201, cursors));
 
     await run();
     expect(cursor.value).toBe(200);
@@ -137,7 +157,7 @@ describe("proven side work", () => {
       new Set([2]),
     );
     const { cursor, ...cursors } = cursorAt(0);
-    const run = () => runProvenSideWork({ source, provenTip: 3, ...cursors });
+    const run = () => runProvenSideWork(depsOf(source, 3, cursors));
 
     await run();
     expect(cursor.value).toBe(1);
@@ -162,17 +182,74 @@ describe("proven side work", () => {
     const { source } = sourceOf([blockAt(1), blockAt(2), blockAt(3)]);
     const { cursor, ...cursors } = cursorAt(50);
 
-    await runProvenSideWork({ source, provenTip: 2, ...cursors });
+    await runProvenSideWork(depsOf(source, 2, cursors));
     expect(cursor.value).toBe(2);
-    await runProvenSideWork({ source, provenTip: 3, ...cursors });
+    await runProvenSideWork(depsOf(source, 3, cursors));
     expect(cursor.value).toBe(3);
   });
+
+  it.each([
+    {
+      at2: "another hash than the stored one",
+      stored: "block-2'",
+      finalizedTip: 0,
+      version: VERSION,
+      runs: false,
+    },
+    {
+      at2: "no hash, below the finalized tip",
+      stored: undefined,
+      finalizedTip: 3,
+      version: VERSION,
+      runs: true,
+    },
+    {
+      at2: "no hash, at the finalized tip",
+      stored: undefined,
+      finalizedTip: 2,
+      version: VERSION,
+      runs: false,
+    },
+    {
+      at2: "a block of another rollup version",
+      stored: "block-2",
+      finalizedTip: 0,
+      version: VERSION + 1,
+      runs: false,
+    },
+  ])(
+    "with $at2 at block 2, runs it: $runs",
+    async ({ stored, finalizedTip, version, runs }) => {
+      db.txs.set("tx-2", {
+        txHash: "tx-2",
+        feePayer: PAYER,
+        txState: "proposed",
+      });
+      const { source } = sourceOf([
+        blockAt(1),
+        blockAt(2, ["tx-2"], version),
+        blockAt(3),
+      ]);
+      const { cursor, ...cursors } = cursorAt(0);
+
+      await runProvenSideWork(
+        depsOf(source, 3, cursors, {
+          finalizedTip,
+          stored: (height) => (height === 2 ? stored : `block-${height}`),
+        }),
+      );
+
+      expect(cursor.value).toBe(runs ? 3 : 1);
+      expect(db.txs.get("tx-2")?.txState).toBe(runs ? "proven" : "proposed");
+      expect(logger.warn).toHaveBeenCalledTimes(runs ? 0 : 1);
+    },
+  );
 
   it("sends the same updates when its cursor moves back over a block whose txs it marked proven", async () => {
     db.txs.set("tx-1", { txHash: "tx-1", feePayer: PAYER, txState: "pending" });
     const { source } = sourceOf([blockAt(1, ["tx-1"]), blockAt(2)]);
     const { cursor, ...cursors } = cursorAt(0);
-    const run = () => runProvenSideWork({ source, provenTip: 2, ...cursors });
+    const run = () => runProvenSideWork(depsOf(source, 2, cursors));
 
     await run();
     const first = balances();

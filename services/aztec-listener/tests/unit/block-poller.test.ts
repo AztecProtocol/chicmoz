@@ -178,6 +178,13 @@ describe("block poller pass", () => {
     });
     expect(mocks.storeProcessedProposedBlockHeight).toHaveBeenCalledWith(7);
     expect(runProvenSideWork).toHaveBeenCalledTimes(1);
+    const [deps] = vi.mocked(runProvenSideWork).mock.calls[0];
+    expect(deps).toMatchObject({
+      rollupVersion: ROLLUP_VERSION,
+      provenTip: 0,
+      finalizedTip: 0,
+    });
+    expect(await deps.storedHash(7)).toBe(main.hashes[7]);
 
     x.chain = prefix(main, 5);
     await runPass(chain);

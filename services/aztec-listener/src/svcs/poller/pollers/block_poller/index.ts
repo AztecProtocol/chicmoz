@@ -1,3 +1,4 @@
+import { BlockNumber } from "@aztec-labs/foundation/branded-types";
 import {
   L2BlockStream,
   type L2TipsStoreBase,
@@ -44,7 +45,7 @@ import { streamLogger } from "./stream-logger.js";
 /** One rollup version's block stream. */
 export type StreamChain = {
   rollupVersion: number;
-  store: Pick<L2TipsStoreBase, "getL2Tips">;
+  store: Pick<L2TipsStoreBase, "getL2Tips" | "getL2BlockHash">;
   source: StickySource;
   publisher: ChainPublisher;
 };
@@ -184,7 +185,10 @@ export const runPass = async ({
   if (settled && !AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS) {
     await runProvenSideWork({
       source,
+      rollupVersion,
       provenTip: after.proven.block.number,
+      finalizedTip: after.finalized.block.number,
+      storedHash: (height) => store.getL2BlockHash(BlockNumber(height)),
       readCursor: readProvenCursor,
       storeCursor: storeProcessedProvenBlockHeight,
     });
