@@ -66,30 +66,59 @@ const decoded = (part: string) => {
   }
 };
 
-// A base path, a query, a user or a password can carry a key, so each is
-// redacted on its own as well as the whole URL; the host and the hostname
-// too, since an error can name either.
-const secrets = [nodeUrl, apiUrl]
-  .flatMap((u) => {
-    const { href, host, hostname, pathname, search, username, password } =
-      new URL(u);
-    return [
-      u,
-      href,
-      host,
-      hostname,
-      pathname.length > 1 ? pathname : "",
-      search,
-      username,
-      decoded(username),
-      password,
-      decoded(password),
-    ];
-  })
-  .filter((s) => s.length > 0)
-  .sort((a, b) => b.length - a.length);
-const redact = (text: string) =>
-  secrets.reduce((t, s) => t.split(s).join("<redacted>"), text);
+// Below this, a path segment, query value or fragment is redacted only as part
+// of its URL, so a segment like `v1` does not blank every line.
+const MIN_PART = 8;
+
+// A server can echo any one part of a URL alone, even inside a valid answer
+// (a hex key as a block hash), so each part is redacted on its own, raw and
+// decoded, besides the whole URL; the host and the hostname too, since an
+// error can name either.
+const partsOf = (u: string) => {
+  const url = new URL(u);
+  const { href, host, hostname, pathname, search, hash, username, password } =
+    url;
+  const pieces = [
+    ...pathname.split("/"),
+    ...search
+      .slice(1)
+      .split("&")
+      .map((p) => p.slice(p.indexOf("=") + 1)),
+    ...url.searchParams.values(),
+    hash,
+    hash.slice(1),
+  ]
+    .flatMap((p) => [p, decoded(p)])
+    .filter((p) => p.length >= MIN_PART);
+  return [
+    u,
+    href,
+    host,
+    hostname,
+    pathname.length > 1 ? pathname : "",
+    search,
+    username,
+    decoded(username),
+    password,
+    decoded(password),
+    ...pieces,
+  ];
+};
+const secrets = [
+  ...new Set(
+    [nodeUrl, apiUrl]
+      .flatMap(partsOf)
+      // As it reads inside a printed JSON string.
+      .flatMap((s) => [s, JSON.stringify(s).slice(1, -1)])
+      .filter((s) => s.length > 0),
+  ),
+].sort((a, b) => b.length - a.length);
+// Blind to case: hashes are printed in lowercase.
+const secretPattern = new RegExp(
+  secrets.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+  "gi",
+);
+const redact = (text: string) => text.replace(secretPattern, "<redacted>");
 
 const print = (line: Record<string, unknown>) =>
   process.stdout.write(

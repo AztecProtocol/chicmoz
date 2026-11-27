@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { type IncomingMessage, type Server, createServer } from "node:http";
 import { type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
+import { loadFixture } from "@chicmoz/test-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { startScriptedNode } from "./scripted-node.js";
 
 const SCRIPT = fileURLToPath(
   new URL("../scripts/compare-chain.ts", import.meta.url),
@@ -82,7 +84,7 @@ const echo200 = () =>
     );
   });
 
-describe("compare-chain on a failing node or API", () => {
+describe("compare-chain against a failing or echoing node or API", () => {
   let server: Server;
   let echoPort: number;
   let closedPort: number;
@@ -152,6 +154,52 @@ describe("compare-chain on a failing node or API", () => {
     } finally {
       ok.closeAllConnections();
       ok.close();
+    }
+  }, 60_000);
+
+  it("redacts a key that the API echoes inside a valid answer", async () => {
+    // Hex, so it passes as a block hash; in capitals, as hashes print in
+    // lowercase.
+    const key = "5C1EA7E5".repeat(4);
+    const block = loadFixture("local-network", "api-body", "block-by-height")
+      .data.body as Record<string, unknown>;
+    const echoing = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://api");
+      const [quoted, ...route] = url.pathname.split("/").filter(Boolean);
+      const from = Number(url.searchParams.get("from"));
+      const to = Number(url.searchParams.get("to"));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify(
+          route.join("/") === "l2/latest-height"
+            ? 3
+            : Array.from({ length: to - from }, (_, i) => ({
+                ...block,
+                height: String(from + i),
+                hash: `0x${quoted}`,
+              })),
+        ),
+      );
+    });
+    const port = await listen(echoing);
+    const node = await startScriptedNode({
+      rpcPort: 0,
+      controlPort: 0,
+      log: () => undefined,
+    });
+    try {
+      const { code, output } = await run(
+        "sample",
+        node.rpcUrl,
+        `http://127.0.0.1:${port}/${key}`,
+      );
+      expect.soft(code, "exit code").toBe(1);
+      expect.soft(output, "the mismatch").toContain('"firstMismatch":{');
+      expect(output.toLowerCase()).not.toContain(key.toLowerCase());
+    } finally {
+      await node.close();
+      echoing.closeAllConnections();
+      echoing.close();
     }
   }, 60_000);
 
