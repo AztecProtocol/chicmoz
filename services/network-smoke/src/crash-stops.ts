@@ -379,6 +379,23 @@ export type ApiStop = {
 };
 
 /**
+ * Whether the API's state at its stop is the one its kill needs: the batch's
+ * one record on the topic, its chain change committed, and the block group,
+ * the only API group on that partition, still before the record.
+ */
+export const apiStateAtStop = (
+  { canonical, sent, committed }: NonNullable<ApiStop["atKill"]>,
+  deadBlocks: number,
+) =>
+  sent.length === 1 &&
+  sent[0].to - sent[0].from === 1 &&
+  isDeepStrictEqual(canonical, {
+    replacing: true,
+    dead: Array.from({ length: deadBlocks }, () => false),
+  }) &&
+  isDeepStrictEqual(committed, { blockHandler: [sent[0].from] });
+
+/**
  * Kills the API after a block's chain change commits and before its offset
  * does. `arm`, once every API group has committed through the topic's end,
  * locks the API's rollup-version observation rows, which the block handler
@@ -500,22 +517,9 @@ export const apiStop = ({
           sent,
           committed: await committedOn(partitions),
         };
-        // The batch's one record is on the topic, its chain change is
-        // committed, and every API group on that partition is still before it.
-        const [range] = sent;
-        const groups = Object.values(result.atKill.committed);
-        if (
-          sent.length !== 1 ||
-          range.to - range.from !== 1 ||
-          !isDeepStrictEqual(result.atKill.canonical, {
-            replacing: true,
-            dead: dead.map(() => false),
-          }) ||
-          groups.length === 0 ||
-          !groups.every((offsets) => isDeepStrictEqual(offsets, [range.from]))
-        ) {
+        if (!apiStateAtStop(result.atKill, dead.length)) {
           result.missed =
-            "the state at the stop is not one record sent, committed in the database and not by any group";
+            "the state at the stop is not one record sent, committed in the database, and the block group alone before it";
           return;
         }
         await killWaiting(lock, database, services, "explorer-api");
