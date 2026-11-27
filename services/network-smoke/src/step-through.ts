@@ -26,6 +26,14 @@ export type StepTimes = {
   pollMs: number;
 };
 
+/** What a scenario does around a prune, as `stepThrough` runs it. */
+export type PruneHooks = {
+  beforePrune: () => Promise<void>;
+  afterPrune?: () => Promise<void>;
+  /** Lets go of what the other hooks took. */
+  onEnd?: () => Promise<void>;
+};
+
 /** What `stepThrough` saw while the node served the shorter chain. */
 export type ShortHold<V> = {
   /** When the node answered the listener's first read of the shorter tip; when it moved there, if no read came. */
@@ -44,12 +52,13 @@ const isTipRead = (r: StateRead) => !("height" in r);
 /**
  * Steps the node to the prune's last state; `beforePrune` runs before the
  * prune, `afterPrune` once the node serves the prune's first state and
- * before it moves on. Each state of the shorter chain is held until a pass of
- * the listener has handled it, or `holdLimitMs`, and for at least `holdMs`,
- * so the scenario plays the order it names. Returns what it saw of the
- * shorter chain, if the prune has one. Its window opens at the listener's
- * first read of the shorter tip, when the pass that read the old chain has
- * ended and what it sent is stamped before it.
+ * before it moves on, and `onEnd` once the stepping ends, however it ends,
+ * a failed step included. Each state of the shorter chain is held until a
+ * pass of the listener has handled it, or `holdLimitMs`, and for at least
+ * `holdMs`, so the scenario plays the order it names. Returns what it saw of
+ * the shorter chain, if the prune has one. Its window opens at the
+ * listener's first read of the shorter tip, when the pass that read the old
+ * chain has ended and what it sent is stamped before it.
  */
 export const stepThrough = async <V>(
   control: StepControl,
@@ -57,11 +66,10 @@ export const stepThrough = async <V>(
   {
     beforePrune,
     afterPrune,
+    onEnd,
     view,
     times,
-  }: {
-    beforePrune: () => Promise<void>;
-    afterPrune?: () => Promise<void>;
+  }: PruneHooks & {
     view: () => Promise<V>;
     times: StepTimes;
   },
@@ -81,42 +89,46 @@ export const stepThrough = async <V>(
       await sleep(times.pollMs);
     }
   };
-  let { current } = await control.status();
   let short: ShortHold<V> | undefined;
-  while (current < prune.endAt) {
-    await sleep(times.stepMs);
-    if (current + 1 === prune.pruneAt) {
-      await beforePrune();
-    }
-    if (short && current === lastShort) {
-      short.end = await view();
-    }
-    const stepped = await control.step();
-    current = stepped.current;
-    if (short && current === lastShort + 1) {
-      short.to = stepped.at;
-    }
-    if (current >= prune.pruneAt && current <= lastShort) {
-      const steppedAt = Date.now();
-      const deadline = steppedAt + times.holdLimitMs;
-      const read = await until((s) => s.stateReads.find(isTipRead), deadline);
-      short ??= {
-        from: read?.at ?? stepped.at,
-        start: await view(),
-        unhandled: [],
-      };
-      const handled = await until(
-        (s) => (prefixHandled(s.stateReads, target) ? true : undefined),
-        deadline,
-      );
-      if (handled === undefined) {
-        short.unhandled.push(current);
+  try {
+    let { current } = await control.status();
+    while (current < prune.endAt) {
+      await sleep(times.stepMs);
+      if (current + 1 === prune.pruneAt) {
+        await beforePrune();
       }
-      await sleep(Math.max(0, steppedAt + times.holdMs - Date.now()));
+      if (short && current === lastShort) {
+        short.end = await view();
+      }
+      const stepped = await control.step();
+      current = stepped.current;
+      if (short && current === lastShort + 1) {
+        short.to = stepped.at;
+      }
+      if (current >= prune.pruneAt && current <= lastShort) {
+        const steppedAt = Date.now();
+        const deadline = steppedAt + times.holdLimitMs;
+        const read = await until((s) => s.stateReads.find(isTipRead), deadline);
+        short ??= {
+          from: read?.at ?? stepped.at,
+          start: await view(),
+          unhandled: [],
+        };
+        const handled = await until(
+          (s) => (prefixHandled(s.stateReads, target) ? true : undefined),
+          deadline,
+        );
+        if (handled === undefined) {
+          short.unhandled.push(current);
+        }
+        await sleep(Math.max(0, steppedAt + times.holdMs - Date.now()));
+      }
+      if (current === prune.pruneAt) {
+        await afterPrune?.();
+      }
     }
-    if (current === prune.pruneAt) {
-      await afterPrune?.();
-    }
+  } finally {
+    await onEnd?.();
   }
   return short;
 };

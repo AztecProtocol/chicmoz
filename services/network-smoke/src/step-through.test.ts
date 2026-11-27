@@ -98,20 +98,49 @@ describe("stepping through a shorter chain", () => {
     expect(short?.unhandled).toEqual([]);
   });
 
-  it("runs afterPrune once, while the node serves the prune's first state", async () => {
+  it("runs afterPrune once, while the node serves the prune's first state, and onEnd once at its last", async () => {
     const replacedAtOnce: PruneFacts = { ...prune, shorterSteps: 0, endAt: 3 };
     const { control, view } = fakeNode([]);
     const seenAt: number[] = [];
+    const endedAt: number[] = [];
     await stepThrough(control, replacedAtOnce, {
       beforePrune: () => Promise.resolve(),
       afterPrune: async () => {
         seenAt.push((await control.status()).current);
       },
+      onEnd: async () => {
+        endedAt.push((await control.status()).current);
+      },
       view,
       times: TIMES,
     });
     expect(seenAt).toEqual([replacedAtOnce.pruneAt]);
-    expect((await control.status()).current).toBe(replacedAtOnce.endAt);
+    expect(endedAt).toEqual([replacedAtOnce.endAt]);
+  });
+
+  it("runs onEnd when the step after beforePrune fails, and fails with that step's error", async () => {
+    const { control, view } = fakeNode([]);
+    const ran: string[] = [];
+    const refused = new Error("step refused");
+    await expect(
+      stepThrough({ ...control, step: () => Promise.reject(refused) }, prune, {
+        beforePrune: () => {
+          ran.push("beforePrune");
+          return Promise.resolve();
+        },
+        afterPrune: () => {
+          ran.push("afterPrune");
+          return Promise.resolve();
+        },
+        onEnd: () => {
+          ran.push("onEnd");
+          return Promise.resolve();
+        },
+        view,
+        times: TIMES,
+      }),
+    ).rejects.toBe(refused);
+    expect(ran).toEqual(["beforePrune", "onEnd"]);
   });
 
   it("names a state no pass handled once its hold runs out", async () => {

@@ -25,7 +25,12 @@ import {
   scriptControl,
 } from "./script-control.js";
 import { serviceControl } from "./service-control.js";
-import { type ShortHold, type StepTimes, stepThrough } from "./step-through.js";
+import {
+  type PruneHooks,
+  type ShortHold,
+  type StepTimes,
+  stepThrough,
+} from "./step-through.js";
 
 const endpoints = readScriptedEndpoints();
 const control = scriptControl(endpoints.controlUrl);
@@ -145,14 +150,9 @@ const apiView = async (prune: PruneFacts) => ({
 type ApiView = Awaited<ReturnType<typeof apiView>>;
 
 /** Steps the node through `prune`, as `stepThrough` does, viewing the API. */
-const stepPrune = (
-  prune: PruneFacts,
-  beforePrune: () => Promise<void>,
-  afterPrune?: () => Promise<void>,
-) =>
+const stepPrune = (prune: PruneFacts, hooks: PruneHooks) =>
   stepThrough(control, prune, {
-    beforePrune,
-    afterPrune,
+    ...hooks,
     view: () => apiView(prune),
     times: STEP_TIMES,
   });
@@ -326,7 +326,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
     const deadHolder = prune.dead.find(
       (b) => b.height === prune.movedTx.deadHeight,
     );
-    await stepPrune(prune, async () => {
+    const beforePrune = async () => {
       // The prune tests something only once the API holds what it removes,
       // the moved tx and its contract on their dead block included: on the
       // replacing block alone they would pass as a first insert.
@@ -351,7 +351,8 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
         { timeout: 30_000, interval: 1_000 },
       );
       checkerBefore = await compareChain("sample");
-    });
+    };
+    await stepPrune(prune, { beforePrune });
     want = wantAfter(script, prune, 1, contractBlock(script));
     seen = await settled(
       () => snapshot(prune, 1, script.contractAddress),
@@ -426,9 +427,9 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
   beforeAll(async () => {
     script = await control.status();
     prune = script.prunes[1];
-    short = await stepPrune(prune, () =>
-      apiHoldsDead(prune, "blocks 13'-16' before the prune"),
-    );
+    short = await stepPrune(prune, {
+      beforePrune: () => apiHoldsDead(prune, "blocks 13'-16' before the prune"),
+    });
     want = wantAfter(script, prune, prune.dead[0].height);
     process.stdout.write(
       `while the node served the shorter chain:\n${JSON.stringify(short, null, 2)}\n`,
@@ -494,14 +495,14 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
       blockTopic: endpoints.broker.blockTopic,
       services,
     });
-    await stepPrune(
-      prune,
-      async () => {
+    await stepPrune(prune, {
+      beforePrune: async () => {
         await apiHoldsDead(prune, "blocks 17''-18'' before the prune");
         await stop.arm(prune.dead);
       },
-      () => stop.fire(replacing),
-    );
+      afterPrune: () => stop.fire(replacing),
+      onEnd: stop.release,
+    });
     process.stdout.write(
       `the listener's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
     );
@@ -588,14 +589,15 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
       blockTopic: endpoints.broker.blockTopic,
       services,
     });
-    await stepPrune(
-      prune,
-      async () => {
+    await stepPrune(prune, {
+      beforePrune: async () => {
         await apiHoldsDead(prune, "blocks 20'''-21''' before the prune");
         await stop.arm();
       },
-      () => stop.fire(prune.final[prune.dead[0].height - 1], prune.dead),
-    );
+      afterPrune: () =>
+        stop.fire(prune.final[prune.dead[0].height - 1], prune.dead),
+      onEnd: stop.release,
+    });
     process.stdout.write(
       `the API's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
     );

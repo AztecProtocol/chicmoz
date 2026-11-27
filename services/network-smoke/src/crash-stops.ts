@@ -325,6 +325,10 @@ export const listenerStop = ({
         await lock.release();
       }
     },
+    /** Releases the lock `arm` took, if `fire` has not. */
+    release: async () => {
+      await armed?.lock.release();
+    },
   };
 };
 
@@ -538,6 +542,10 @@ export const apiStop = ({
       } finally {
         await lock.release();
       }
+    },
+    /** Releases the lock `arm` took, if `fire` has not. */
+    release: async () => {
+      await armed?.lock.release();
     },
   };
 };
