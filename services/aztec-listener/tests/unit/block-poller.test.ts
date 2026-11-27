@@ -29,6 +29,9 @@ const mocks = vi.hoisted(() => {
   const heights = { processedProposedBlockHeight: 0 };
   return {
     heights,
+    // An apostrophe in its path stops the generic URL pattern.
+    configuredUrl:
+      "https://node.example:8443/v1/it's-key123secret?apikey=key456secret",
     sweep: false,
     openAttestedReader: vi.fn(() =>
       Promise.resolve({ getBlock: () => Promise.resolve(undefined) }),
@@ -53,6 +56,7 @@ const logger = vi.hoisted(() => ({
 vi.mock("../../src/logger.js", () => ({ logger }));
 vi.mock("../../src/environment.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/environment.js")>()),
+  AZTEC_RPC_URLS: [{ name: "configured", url: mocks.configuredUrl }],
   get AZTEC_ENABLE_FULL_SWEEP_CATCHUP() {
     return mocks.sweep;
   },
@@ -244,10 +248,14 @@ describe("block poller pass", () => {
     const { chain } = chainOver([x]);
     await runPass(chain);
     x.chain = prefix(main, 5);
-    const url = "https://user:secret@node.example/v1/key123?apikey=key456";
-    const failure = new Error(`Error fetching from host ${url}: fetch failed`, {
-      cause: new Error(`connect ECONNREFUSED ${url}`),
-    });
+    const failure = new Error(
+      `Error fetching from host ${mocks.configuredUrl}: fetch failed`,
+      {
+        cause: new Error(
+          "connect ECONNREFUSED node.example:8443; key key456secret refused by https://user:secret@other.example/v1/key789",
+        ),
+      },
+    );
     // Node prints an ES module's frames as file URLs.
     failure.stack = `Error: ${failure.message}\n    at read (file:///app/build/client.js:1:2)`;
     // The walk-back reads block 3 first, the batch's parent check second.
@@ -266,8 +274,10 @@ describe("block poller pass", () => {
     expect(line).toContain(
       "🐻 block stream pass failed: Error: Error fetching from host <url>: fetch failed\n    at read (file:///app/build/client.js:1:2)",
     );
-    expect(line).toContain("[cause]: Error: connect ECONNREFUSED <url>");
-    expect(line).not.toMatch(/secret|key123|key456|node\.example/);
+    expect(line).toContain(
+      "[cause]: Error: connect ECONNREFUSED <url>; key <url> refused by <url>",
+    );
+    expect(line).not.toMatch(/secret|key123|key456|key789|it's|\.example|8443/);
   });
 
   it("publishes the snapshot's tips after a pass that reaches them, and no tips or side work after one that ends on the prefix rule", async () => {
