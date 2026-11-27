@@ -9,6 +9,7 @@ import {
   checkRanges,
   firstMismatch,
 } from "./compare-ranges.js";
+import { listenerStop } from "./crash-stops.js";
 import { readScriptedEndpoints } from "./endpoints.js";
 import {
   type ReorgRecord,
@@ -24,12 +25,15 @@ import {
   type ScriptStatus,
   scriptControl,
 } from "./script-control.js";
+import { serviceControl } from "./service-control.js";
 import { type ShortHold, type StepTimes, stepThrough } from "./step-through.js";
 
 const endpoints = readScriptedEndpoints();
 const control = scriptControl(endpoints.controlUrl);
 const api = explorerReads(endpoints.explorerApiUrl);
 const broker = brokerReads(endpoints.broker);
+const services = serviceControl(endpoints.servicesUrl);
+const { databases, ...pgAccess } = endpoints.postgres;
 
 afterAll(() => broker.close());
 
@@ -136,9 +140,14 @@ const apiView = async (prune: PruneFacts) => ({
 type ApiView = Awaited<ReturnType<typeof apiView>>;
 
 /** Steps the node through `prune`, as `stepThrough` does, viewing the API. */
-const stepPrune = (prune: PruneFacts, beforePrune: () => Promise<void>) =>
+const stepPrune = (
+  prune: PruneFacts,
+  beforePrune: () => Promise<void>,
+  afterPrune?: () => Promise<void>,
+) =>
   stepThrough(control, prune, {
     beforePrune,
+    afterPrune,
     view: () => apiView(prune),
     times: STEP_TIMES,
   });
@@ -457,7 +466,108 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
   });
 });
 
-describe("the block topic, after both prunes", () => {
+describe("a prune of 17''-18'' replaced by 17''' at once, with the listener killed between sending 17''' and storing it", () => {
+  let script: ScriptStatus;
+  let prune: PruneFacts;
+  let replacing: BlockId;
+  let baseline: ReorgRecord[];
+  let stop: ReturnType<typeof listenerStop>;
+  let want: Partial<Snapshot>;
+  let seen: Snapshot;
+
+  beforeAll(async () => {
+    script = await control.status();
+    prune = script.prunes[2];
+    replacing = prune.final[prune.dead[0].height - 1];
+    stop = listenerStop({
+      pg: pgAccess,
+      database: databases.listener,
+      broker,
+      blockTopic: endpoints.broker.blockTopic,
+      services,
+    });
+    await stepPrune(
+      prune,
+      async () => {
+        await apiHoldsDead(prune, "blocks 17''-18'' before the prune");
+        baseline = await api.reorgList();
+        await stop.arm(prune.dead);
+      },
+      () => stop.fire(replacing),
+    );
+    process.stdout.write(
+      `the listener's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
+    );
+    want = wantAfter(
+      prune,
+      prune.dead[0].height,
+      plusReorg(baseline, reorgOf(prune)),
+      contractBlock(script),
+    );
+    seen = await settled(
+      () => snapshot(prune, prune.dead[0].height, script.contractAddress),
+      want,
+      "the API after the listener's restart",
+    );
+  });
+
+  it("kills the listener while its store's write of 17''' waits on the lock, with 17''' sent and the store on the prune's tip", () => {
+    const { missed, waiting, atKill } = stop.result;
+    expect.soft(missed, "why nothing was killed").toBeUndefined();
+    expect.soft(waiting, "the write that waited").toEqual({
+      database: databases.listener,
+      statement: 'insert into "l2_block_stream_hash"',
+    });
+    expect
+      .soft(
+        atKill?.sent.map((r) => r.to - r.from),
+        "records the batch had sent, per partition",
+      )
+      .toEqual([1]);
+    expect.soft(atKill?.store, "the listener's store").toEqual({
+      proposed: prune.dead[0].height - 1,
+      hash: prune.dead[0].hash.toLowerCase(),
+    });
+  });
+
+  it("sends 17''' again once restarted, under the same key", () => {
+    const { records = [], recoveryMs } = stop.result;
+    process.stdout.write(
+      `from the listener's restart to its store holding 17''': ${recoveryMs} ms\n`,
+    );
+    const copy = {
+      height: replacing.height,
+      tip: replacing.height,
+      hash: replacing.hash.toLowerCase(),
+    };
+    expect
+      .soft(
+        records.map(({ height, tip, hash, sentBeforeKill }) => ({
+          height,
+          tip,
+          hash,
+          sentBeforeKill,
+        })),
+        "block records sent from the prune on",
+      )
+      .toEqual([
+        { ...copy, sentBeforeKill: true },
+        { ...copy, sentBeforeKill: false },
+      ]);
+    const [first, second] = records;
+    expect.soft(first?.key, "the first copy's key").toBeTruthy();
+    expect.soft(second?.key, "the second copy's key").toBe(first?.key);
+  });
+
+  itServesTheScript(() => ({ seen, want }), {
+    chain:
+      "serves the node's chain above 16'' as canonical, and nothing above it",
+    reorgs: "adds one reorg to those before it: the 2 blocks from height 17",
+    tx: "keeps the moved tx mined, not dropped, on the replacing block, and the contract on 7'",
+  });
+});
+
+describe("the block topic, after every prune", () => {
   // Spaced steps reach the API in order from any partition, so the scenarios
   // cannot show where the block records went; the broker can.
   it("holds every block record in one of its partitions", async () => {

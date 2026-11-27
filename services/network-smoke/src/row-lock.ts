@@ -1,4 +1,3 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import pg, { type QueryResultRow } from "pg";
 
 export type PgAccess = {
@@ -80,19 +79,9 @@ export const lockRows = async (
       query: r.query,
     }));
 
+  let released = false;
   return {
     waiters,
-    /** The first waiter `match` accepts, or undefined once `timeoutMs` passed without one. */
-    waitFor: async (match: (w: Waiter) => boolean, timeoutMs: number) => {
-      const deadline = Date.now() + timeoutMs;
-      for (;;) {
-        const found = (await waiters()).find(match);
-        if (found !== undefined || Date.now() >= deadline) {
-          return found;
-        }
-        await sleep(100);
-      }
-    },
     /**
      * Ends another session, so its open transaction rolls back and its
      * waiting statement never runs; resolves once that session is gone.
@@ -106,7 +95,12 @@ export const lockRows = async (
         throw new Error(`session ${other} did not end`);
       }
     },
+    /** Ends the lock's session; a second call does nothing. */
     release: async () => {
+      if (released) {
+        return;
+      }
+      released = true;
       try {
         await client.query("ROLLBACK");
       } finally {
