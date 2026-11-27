@@ -19,8 +19,8 @@ import {
 import { type BlockHeader } from "@aztec-labs/stdlib/tx";
 import {
   AZTEC_MAX_PRUNE_DEPTH,
-  AZTEC_STREAM_PREFIX_ALERT_MS,
-  AZTEC_TIPS_PROBE_TIMEOUT_MS,
+  AZTEC_NODE_PROBE_TIMEOUT_MS,
+  AZTEC_STREAM_STALL_ALERT_MS,
 } from "../../../environment.js";
 import { logger } from "../../../logger.js";
 import {
@@ -231,12 +231,12 @@ export class StickySource implements L2BlockStreamSource {
     private readonly deps: StickySourceDeps,
     private readonly config: StickySourceConfig = {
       maxPruneDepth: AZTEC_MAX_PRUNE_DEPTH,
-      waitAlertMs: AZTEC_STREAM_PREFIX_ALERT_MS,
+      waitAlertMs: AZTEC_STREAM_STALL_ALERT_MS,
     },
   ) {
     this.nodes = deps.nodes ?? getOnlineRpcNodes;
     this.openReader =
-      deps.openReader ?? boundedElectionReaders(AZTEC_TIPS_PROBE_TIMEOUT_MS);
+      deps.openReader ?? boundedElectionReaders(AZTEC_NODE_PROBE_TIMEOUT_MS);
     this.now = deps.now ?? (() => Date.now());
     this.localData = {
       getL2Tips: () => deps.store.getL2Tips(),

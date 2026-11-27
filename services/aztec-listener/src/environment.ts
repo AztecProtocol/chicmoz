@@ -81,18 +81,18 @@ export const AZTEC_MAX_PRUNE_DEPTH = z.coerce
   .positive()
   .default(10_000)
   .parse(process.env.AZTEC_MAX_PRUNE_DEPTH);
-export const AZTEC_STREAM_PREFIX_ALERT_MS = z.coerce
+export const AZTEC_STREAM_STALL_ALERT_MS = z.coerce
   .number()
   .int()
   .positive()
   .default(300_000)
-  .parse(process.env.AZTEC_STREAM_PREFIX_ALERT_MS);
-export const AZTEC_TIPS_PROBE_TIMEOUT_MS = z.coerce
+  .parse(process.env.AZTEC_STREAM_STALL_ALERT_MS);
+export const AZTEC_NODE_PROBE_TIMEOUT_MS = z.coerce
   .number()
   .int()
   .positive()
   .default(2_000)
-  .parse(process.env.AZTEC_TIPS_PROBE_TIMEOUT_MS);
+  .parse(process.env.AZTEC_NODE_PROBE_TIMEOUT_MS);
 export const L2_BLOCK_RANGE_REQUEST_MAX_RANGES = z.coerce
   .number()
   .int()
@@ -194,8 +194,8 @@ L2_TIPS_HEARTBEAT_INTERVAL_MS:                             ${L2_TIPS_HEARTBEAT_I
 AZTEC_ENABLE_FULL_SWEEP_CATCHUP:                           ${AZTEC_ENABLE_FULL_SWEEP_CATCHUP ? "✅" : "❌"
   }
 AZTEC_MAX_PRUNE_DEPTH:                                     ${AZTEC_MAX_PRUNE_DEPTH}
-AZTEC_STREAM_PREFIX_ALERT_MS:                              ${AZTEC_STREAM_PREFIX_ALERT_MS / 1000}s
-AZTEC_TIPS_PROBE_TIMEOUT_MS:                               ${AZTEC_TIPS_PROBE_TIMEOUT_MS / 1000}s
+AZTEC_STREAM_STALL_ALERT_MS:                               ${AZTEC_STREAM_STALL_ALERT_MS / 1000}s
+AZTEC_NODE_PROBE_TIMEOUT_MS:                               ${AZTEC_NODE_PROBE_TIMEOUT_MS / 1000}s
 MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS:                        ${MAX_BATCH_SIZE_FETCH_MISSED_BLOCKS}
 L2_BLOCK_RANGE_REQUEST_MAX_RANGES:                         ${L2_BLOCK_RANGE_REQUEST_MAX_RANGES}
 L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS:                         ${L2_BLOCK_RANGE_REQUEST_MAX_BLOCKS}
