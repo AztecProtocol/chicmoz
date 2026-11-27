@@ -22,9 +22,10 @@ const STOP_WAIT_MS = 15_000;
 // member's 30 s session has run out, and the listener polls only after that.
 const RECOVERY_WAIT_MS = 120_000;
 
-// What the listener's store sends for the row the scenario locks; Drizzle
-// writes it as an upsert.
+// What the listener's store and the API's post-commit step send for the row
+// each scenario locks; Drizzle writes them as upserts.
 const LISTENER_WRITE = /^insert into "l2_block_stream_hash"/i;
+const API_WRITE = /^insert into "l2_rollup_version_observation"/i;
 
 /** The waiting write a stop caught, as `pg_stat_activity` showed it. */
 export type CaughtWrite = { database: string; statement: string };
@@ -86,8 +87,8 @@ const caughtWrite = ({ database, query }: Waiter): CaughtWrite => ({
   statement: query.split("(")[0].trim(),
 });
 
-const missedStop = async (lock: RowLock, writer: string) =>
-  `no write of the ${writer} waited on the lock within ${STOP_WAIT_MS / 1000} s (waiting: ${JSON.stringify(await lock.waiters())})`;
+const missedStop = async (lock: RowLock, writer: string, more = {}) =>
+  `no write of the ${writer} waited on the lock within ${STOP_WAIT_MS / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
 
 /**
  * Kills `name`, ends its sessions that wait on `lock`, which would never see
@@ -277,6 +278,158 @@ export const listenerStop = ({
             .flat()
             .map(({ record, beforeKill }) => blockRecord(record, beforeKill)),
         );
+      } finally {
+        await lock.release();
+      }
+    },
+  };
+};
+
+export type ApiStop = {
+  /** Why nothing was crashed; absent once the API was. */
+  missed?: string;
+  waiting?: CaughtWrite;
+  /** How many of the API's writes waited, and its other groups that had not committed a record, when the stop was proven. */
+  writesWaiting?: number;
+  othersBehind?: string[];
+  /**
+   * At the kill: whether the replacing block and the dead blocks are
+   * canonical in the API's database, what the batch put on the topic, and
+   * the API groups' committed offsets on the partitions it went to.
+   */
+  atKill?: {
+    canonical: { replacing?: boolean; dead: (boolean | undefined)[] };
+    sent: OffsetRange[];
+    committed: Record<string, (number | undefined)[]>;
+  };
+  /** The same offsets once the restarted API committed past the batch. */
+  afterRestart?: { committed: Record<string, (number | undefined)[]> };
+  /** From the restart to that commit. */
+  recoveryMs?: number;
+};
+
+/**
+ * Kills the API after a block's chain change commits and before its offset
+ * does. `arm`, once every API group has committed through the topic's end,
+ * locks the API's rollup-version observation rows, which the block handler
+ * upserts after the commit; the run's database holds its network's alone.
+ * `fire`, once the node has pruned, waits for that upsert to wait on the
+ * lock, kills the API and starts it again, which consumes the record again.
+ */
+export const apiStop = ({
+  pg,
+  database,
+  apiGroupPrefix,
+  broker,
+  blockTopic,
+  services,
+}: {
+  pg: PgAccess;
+  database: string;
+  apiGroupPrefix: string;
+  broker: BrokerReads;
+  blockTopic: string;
+  services: Services;
+}) => {
+  const result: ApiStop = {};
+  let armed: { lock: RowLock; before: Map<number, number> } | undefined;
+  const canonical = async (hash: string) => {
+    const [row] = await queryRows<{ canonical: boolean }>(
+      pg,
+      database,
+      `SELECT orphan_timestamp IS NULL AS canonical FROM "l2Block" WHERE lower(hash) = lower($1)`,
+      [hash],
+    );
+    return row?.canonical;
+  };
+  const committedOn = async (partitions: number[]) =>
+    Object.fromEntries(
+      [...(await broker.apiCommitted(blockTopic)).entries()].map(
+        ([group, offsets]) => [
+          group.slice(apiGroupPrefix.length),
+          partitions.map((p) => offsets.get(p)),
+        ],
+      ),
+    );
+  return {
+    result,
+    /** Before the prune. */
+    arm: async () => {
+      await broker.apiConsumedThrough(30_000);
+      const before = await broker.endOffsets(blockTopic);
+      armed = {
+        lock: await lockRows(
+          pg,
+          database,
+          "SELECT 1 FROM l2_rollup_version_observation FOR UPDATE",
+        ),
+        before,
+      };
+    },
+    /** Once the node serves the prune, whose replacing block is `replacing`. */
+    fire: async (replacing: BlockId, dead: BlockId[]) => {
+      if (armed === undefined) {
+        return;
+      }
+      const { lock, before } = armed;
+      try {
+        // The API's chain-info and node-info handlers upsert the row too, each
+        // holding a record its group cannot commit while the row is locked,
+        // and a group handles one record at a time: more waiting upserts than
+        // other groups behind means one is the block handler's. Waiters are
+        // read before the groups, so none of them is missed.
+        let othersBehind: string[] = [];
+        const waiting = await poll(async () => {
+          const writes = await writesWaiting(lock, database, API_WRITE);
+          if (writes.length === 0) {
+            return undefined;
+          }
+          othersBehind = await broker.apiGroupsBehind(blockTopic);
+          return writes.length > othersBehind.length ? writes : undefined;
+        }, STOP_WAIT_MS);
+        if (waiting === undefined) {
+          result.missed = await missedStop(lock, "API's block handler", {
+            othersBehind,
+          });
+          return;
+        }
+        result.waiting = caughtWrite(waiting[0]);
+        result.writesWaiting = waiting.length;
+        result.othersBehind = othersBehind;
+        const atKill = await broker.endOffsets(blockTopic);
+        const sent = grown(before, atKill);
+        const partitions = sent.map((r) => r.partition);
+        result.atKill = {
+          canonical: {
+            replacing: await canonical(replacing.hash),
+            dead: await Promise.all(dead.map((b) => canonical(b.hash))),
+          },
+          sent,
+          committed: await committedOn(partitions),
+        };
+        const restartedAt = await crash(
+          lock,
+          database,
+          services,
+          "explorer-api",
+        );
+        result.afterRestart = {
+          committed: await until(
+            async () => {
+              const committed = await committedOn(partitions);
+              const groups = Object.values(committed);
+              return groups.length > 0 &&
+                groups.every((offsets) =>
+                  offsets.every((o, i) => o !== undefined && o >= sent[i].to),
+                )
+                ? committed
+                : undefined;
+            },
+            RECOVERY_WAIT_MS,
+            "commit by the restarted API past the batch",
+          ),
+        };
+        result.recoveryMs = Date.now() - restartedAt;
       } finally {
         await lock.release();
       }

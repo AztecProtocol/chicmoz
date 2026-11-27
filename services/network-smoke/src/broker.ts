@@ -146,6 +146,19 @@ export const brokerReads = ({
       return committed;
     },
     /**
+     * The API's groups not assigned `topic` that have not committed a record
+     * published before the call, which they may still be handling; a group
+     * without a stable assignment counts as one of them.
+     */
+    apiGroupsBehind: async (topic: string) => {
+      const { marks, unsettled } = await apiMarks();
+      const onTopic = new Set(
+        marks.filter((m) => m.topic === topic).map((m) => m.group),
+      );
+      const late = await behind(marks.filter((m) => !onTopic.has(m.group)));
+      return [...new Set(late.map((m) => m.group)), ...unsettled];
+    },
+    /**
      * The records of one partition of `topic` from offset `from` up to `to`,
      * read by a consumer of a group of its own; throws if they are not all
      * there within `timeoutMs`.

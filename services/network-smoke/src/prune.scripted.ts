@@ -9,7 +9,7 @@ import {
   checkRanges,
   firstMismatch,
 } from "./compare-ranges.js";
-import { listenerStop } from "./crash-stops.js";
+import { apiStop, listenerStop } from "./crash-stops.js";
 import { readScriptedEndpoints } from "./endpoints.js";
 import {
   type ReorgRecord,
@@ -563,6 +563,95 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
     chain:
       "serves the node's chain above 16'' as canonical, and nothing above it",
     reorgs: "adds one reorg to those before it: the 2 blocks from height 17",
+    tx: "keeps the moved tx mined, not dropped, on the replacing block, and the contract on 7'",
+  });
+});
+
+describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed between committing 20'''' and committing its offset", () => {
+  let script: ScriptStatus;
+  let prune: PruneFacts;
+  let baseline: ReorgRecord[];
+  let stop: ReturnType<typeof apiStop>;
+  let want: Partial<Snapshot>;
+  let seen: Snapshot;
+
+  beforeAll(async () => {
+    script = await control.status();
+    prune = script.prunes[3];
+    stop = apiStop({
+      pg: pgAccess,
+      database: databases.api,
+      apiGroupPrefix: endpoints.broker.apiGroupPrefix,
+      broker,
+      blockTopic: endpoints.broker.blockTopic,
+      services,
+    });
+    await stepPrune(
+      prune,
+      async () => {
+        await apiHoldsDead(prune, "blocks 20'''-21''' before the prune");
+        baseline = await api.reorgList();
+        await stop.arm();
+      },
+      () => stop.fire(prune.final[prune.dead[0].height - 1], prune.dead),
+    );
+    process.stdout.write(
+      `the API's stop:\n${JSON.stringify(stop.result, null, 2)}\n`,
+    );
+    want = wantAfter(
+      prune,
+      prune.dead[0].height,
+      plusReorg(baseline, reorgOf(prune)),
+      contractBlock(script),
+    );
+    seen = await settled(
+      () => snapshot(prune, prune.dead[0].height, script.contractAddress),
+      want,
+      "the API after its restart",
+    );
+  });
+
+  it("kills the API while its block handler's upsert after 20'''' waits on the lock, with 20'''' committed and its offset not", () => {
+    const { missed, waiting, atKill } = stop.result;
+    const [sent] = atKill?.sent ?? [];
+    expect.soft(missed, "why nothing was killed").toBeUndefined();
+    expect.soft(waiting, "the write that waited").toEqual({
+      database: databases.api,
+      statement: 'insert into "l2_rollup_version_observation"',
+    });
+    expect
+      .soft(
+        atKill?.sent.map((r) => r.to - r.from),
+        "records the batch put on the topic, per partition",
+      )
+      .toEqual([1]);
+    expect
+      .soft(
+        atKill?.canonical,
+        "20'''' and the dead blocks in the API's database",
+      )
+      .toEqual({ replacing: true, dead: prune.dead.map(() => false) });
+    expect
+      .soft(atKill?.committed, "the API's committed offsets on that partition")
+      .toEqual({ blockHandler: [sent?.from] });
+  });
+
+  it("consumes 20'''' again once restarted, and commits past it", () => {
+    const { atKill, afterRestart, recoveryMs } = stop.result;
+    const [sent] = atKill?.sent ?? [];
+    process.stdout.write(
+      `from the API's restart to its commit past 20'''': ${recoveryMs} ms\n`,
+    );
+    expect(afterRestart?.committed).toEqual({ blockHandler: [sent?.to] });
+  });
+
+  // The replayed batch is 20'''' alone, so the replay has no dead block to
+  // bring back, and no record to write again.
+  itServesTheScript(() => ({ seen, want }), {
+    chain:
+      "serves the node's chain above 19''' as canonical, and nothing above it",
+    reorgs:
+      "adds one reorg to those before it, the 2 blocks from height 20, and none from the replay",
     tx: "keeps the moved tx mined, not dropped, on the replacing block, and the contract on 7'",
   });
 });
