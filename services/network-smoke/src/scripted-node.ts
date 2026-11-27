@@ -26,7 +26,11 @@ import {
   type BlockResponse,
   type BlocksIncludeOptions,
 } from "@aztec-labs/stdlib/interfaces/client";
-import { type ScriptStatus, type StateTipRead } from "./script-control.js";
+import {
+  type ScriptStatus,
+  type StateBlockRead,
+  type StateTipRead,
+} from "./script-control.js";
 import {
   type NodeState,
   type ScriptedBlock,
@@ -84,6 +88,16 @@ const find = (
     return state.chain.find((b) => b.block.archive.root.equals(param.archive));
   }
   return state.chain[heightAt(state, param.tag)];
+};
+
+const heightIn = (param: BlockParameter): number | undefined => {
+  if (typeof param === "number") {
+    return param;
+  }
+  if (typeof param === "string" || BlockHash.isBlockHash(param)) {
+    return undefined;
+  }
+  return "number" in param ? param.number : undefined;
 };
 
 const responseOf = async (
@@ -144,7 +158,17 @@ export const startScriptedNode = async ({
   let current = 0;
   let tipReads = 0;
   let stateTipReads: StateTipRead[] = [];
+  let stateBlockReads: StateBlockRead[] = [];
   const state = () => states[current];
+  const readBlock = (
+    method: StateBlockRead["method"],
+    param: BlockParameter,
+  ) => {
+    const height = heightIn(param);
+    if (height !== undefined) {
+      stateBlockReads.push({ method, height, at: Date.now() });
+    }
+  };
 
   const handler = {
     getNodeInfo: () => Promise.resolve(nodeInfo),
@@ -172,6 +196,7 @@ export const startScriptedNode = async ({
       return Promise.resolve(BlockNumber(heightAt(state(), tier)));
     },
     getBlock: async (param: BlockParameter, options?: BlockIncludeOptions) => {
+      readBlock("getBlock", param);
       const block = find(state(), param);
       log(
         `state ${current} getBlock ${inspectBlockParameter(param)}: ${block?.hash ?? "none"}`,
@@ -181,6 +206,7 @@ export const startScriptedNode = async ({
     getBlockData: async (
       param: BlockParameter,
     ): Promise<BlockData | undefined> => {
+      readBlock("getBlockData", param);
       const found = find(state(), param);
       return found
         ? {
@@ -225,6 +251,7 @@ export const startScriptedNode = async ({
     current,
     tipReads,
     stateTipReads,
+    stateBlockReads,
   });
   const control = createServer((req, res) => {
     const reply = (code: number, body: unknown) => {
@@ -240,6 +267,7 @@ export const startScriptedNode = async ({
       }
       current++;
       stateTipReads = [];
+      stateBlockReads = [];
       const s = state();
       log(
         `state ${current} ${s.label}: proposed ${s.chain.length - 1} ${s.chain.at(-1)?.hash}, checkpointed ${s.checkpointed}, proven ${s.proven}, finalized ${s.finalized}`,

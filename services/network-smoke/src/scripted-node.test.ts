@@ -42,6 +42,20 @@ describe("scripted node", () => {
         (await control.status()).stateTipReads.map((r) => r.method),
         `${states[i]}: its reads of the proposed tip`,
       ).toEqual(["getChainTips", "getBlockNumber"]);
+      const { stateBlockReads: earlier } = await control.status();
+      const above = BlockNumber(tips.proposed.number + 1);
+      expect(await client.getBlockData({ number: above })).toBeUndefined();
+      await client.getBlock(tips.proposed.number);
+      await client.getBlockData(BlockHash.fromString(tips.proposed.hash));
+      expect(
+        (await control.status()).stateBlockReads
+          .slice(earlier.length)
+          .map((r) => [r.method, r.height]),
+        `${states[i]}: its reads of a block by height`,
+      ).toEqual([
+        ["getBlockData", above],
+        ["getBlock", tips.proposed.number],
+      ]);
       const heights = [
         tips.finalized.block.number,
         tips.proven.block.number,

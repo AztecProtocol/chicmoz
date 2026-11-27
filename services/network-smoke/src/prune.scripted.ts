@@ -23,7 +23,7 @@ import {
   type BlockId,
   type PruneFacts,
   type ScriptStatus,
-  type StateTipRead,
+  prefixHandled,
   scriptControl,
 } from "./script-control.js";
 
@@ -97,23 +97,24 @@ const apiHolds = (blocks: BlockId[], label: string) =>
     { timeout: 60_000, interval: 1_000 },
   );
 
-/**
- * Whether a pass of the listener that read this state has ended. A pass reads
- * the tip at its start and the next starts a poll interval after it ends, so
- * two reads by one method that far apart come from two passes. A single read
- * can be another poller's, or a node election's probe.
- */
-const passedOver = (reads: StateTipRead[]) =>
-  (["getBlockNumber", "getChainTips"] as const).some((method) => {
-    const times = reads.filter((r) => r.method === method).map((r) => r.at);
-    return (
-      times.length > 1 &&
-      Math.max(...times) - Math.min(...times) >= endpoints.listenerPollMs
-    );
-  });
+/** Whether a pass of the listener handles the current state by `deadline`. */
+const handledBy = async (tip: number, deadline: number) => {
+  for (;;) {
+    if (prefixHandled(await control.status(), tip, endpoints.listenerPollMs)) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await sleep(250);
+  }
+};
 
 // Longer than today's 5 s tips poll, so a tips timer would show.
 const SHORT_HOLD_MS = 7_000;
+// Many passes of the listener's poll: a listener that never handles the
+// shorter chain fails the check that needs it, not the whole scenario.
+const SHORT_HOLD_LIMIT_MS = 15_000;
 
 /** What must not move while the node serves the shorter chain. */
 const quietView = async (prune: PruneFacts) => ({
@@ -133,36 +134,35 @@ type QuietView = Awaited<ReturnType<typeof quietView>>;
 /**
  * Steps the node to the prune's last state; `beforePrune` runs before the
  * prune. Each state of the shorter chain is held until a pass of the listener
- * over it has ended, and for at least SHORT_HOLD_MS, so the scenario plays
- * the order it names. Returns what must not move, read just before the prune
- * and at the end of the hold, when the prune has a shorter chain.
+ * has handled it, or SHORT_HOLD_LIMIT_MS, and for at least SHORT_HOLD_MS, so
+ * the scenario plays the order it names. Returns what must not move, read just
+ * before the prune and at the end of the hold, and the states no pass handled,
+ * when the prune has a shorter chain.
  */
 const stepThrough = async (
   prune: PruneFacts,
   beforePrune: () => Promise<void>,
 ) => {
   let { current } = await control.status();
-  let short: { start: QuietView; end?: QuietView } | undefined;
+  let short:
+    | { start: QuietView; end?: QuietView; unhandled: number[] }
+    | undefined;
+  const target = prune.dead[0].height - 1;
   while (current < prune.endAt) {
     await sleep(STEP_MS);
     if (current + 1 === prune.pruneAt) {
       await beforePrune();
       if (prune.shorterSteps > 0) {
-        short = { start: await quietView(prune) };
+        short = { start: await quietView(prune), unhandled: [] };
       }
     }
     ({ current } = await control.step());
     const steppedAt = Date.now();
     const lastShort = prune.pruneAt + prune.shorterSteps - 1;
     if (current >= prune.pruneAt && current <= lastShort) {
-      await vi.waitFor(
-        async () =>
-          expect(
-            passedOver((await control.status()).stateTipReads),
-            `a pass of the listener over state ${current}`,
-          ).toBe(true),
-        { timeout: 30_000, interval: 250 },
-      );
+      if (!(await handledBy(target, steppedAt + SHORT_HOLD_LIMIT_MS))) {
+        short?.unhandled.push(current);
+      }
       await sleep(Math.max(0, SHORT_HOLD_MS - (Date.now() - steppedAt)));
       if (current === lastShort && short) {
         short.end = await quietView(prune);
@@ -440,6 +440,9 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
   });
 
   it("publishes no block and no tips record, and keeps its state, while the node serves the shorter chain", () => {
+    expect
+      .soft(short?.unhandled, "states of the shorter chain no pass handled")
+      .toEqual([]);
     expect
       .soft(short?.end?.published, "records published")
       .toEqual(short?.start.published);

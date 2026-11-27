@@ -49,9 +49,9 @@ The node serves the SDK's `AztecNodeApiSchema` through the SDK's own server and 
 4. Each dead block is served by its hash, as orphaned.
 5. `scripts/compare-chain.ts` finds no mismatch before the prune. After it, `sample` and `window` each read the heights they should (the API's top 40; the node's finalized to proposed tip) and name the first divergence within them, without printing either URL.
 
-That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, before it proposes 13″ with that tx and grows 13″–16″. The test holds the shorter chain for at least 7 s and until a pass of the listener over it has ended: two of its tip reads by one method, a poll interval apart, since one read can be another poller's or an election's probe. The checks:
+That prune's replacing block is there at once. Then the script prunes the other way: 7′–12′ become proven and finalized, 13′–16′ grow with a tx at 14′, and the node serves the shorter chain, tip 12′, before it proposes 13″ with that tx and grows 13″–16″. The test holds the shorter chain for at least 7 s and until a pass of the listener has handled it, 15 s at most. Holding a longer chain, the SDK's block stream walks back from its own tip and reads heights the node lacks, and a tip read a poll interval after that walk is the next pass's. Tip reads alone show neither, since an election probes nodes it may not follow. The checks:
 
-1. While the node serves the shorter chain, no block or tips record reaches the broker, and the API keeps serving 13′–16′ and its reorgs.
+1. While the node serves the shorter chain, a pass of the listener handles it, no block or tips record reaches the broker, and the API keeps serving 13′–16′ and its reorgs.
 2. Heights 13–16 serve 13″–16″, and nothing exists at 17.
 3. `/l2/reorgs` is the list from before the prune plus one reorg: height 13, 4 blocks, rooted at the dead 13′.
 4. The moved tx is not dropped, and its effect is on 13″.
