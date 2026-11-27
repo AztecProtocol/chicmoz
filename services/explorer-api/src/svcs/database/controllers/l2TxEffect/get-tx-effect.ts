@@ -106,14 +106,15 @@ export const getLatestTxEffects = async (): Promise<
   });
 };
 
+// Height 0 is a bound like any other, so presence is checked, not truthiness.
 const generateWhereQuery = (from?: bigint, to?: bigint) => {
-  if (from && !to) {
+  if (from !== undefined && to === undefined) {
     return gte(l2Block.height, from);
-  } else if (!from && to) {
+  } else if (from === undefined && to !== undefined) {
     return lt(l2Block.height, to);
   }
   assert(
-    from && to,
+    from !== undefined && to !== undefined,
     "FATAL: cannot have both from and to undefined when generating where query",
   );
   return and(gte(l2Block.height, from), lt(l2Block.height, to));
@@ -156,7 +157,7 @@ const _getTxEffects = async (
 
   switch (args.getType) {
     case GetTypes.BlockHeightRange:
-      if (args.from ?? args.to) {
+      if (args.from !== undefined || args.to !== undefined) {
         whereQuery = joinQuery
           .where(and(generateWhereQuery(args.from, args.to), heightFilter))
           .orderBy(desc(l2Block.height), desc(txEffect.index))
