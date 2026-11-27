@@ -580,25 +580,6 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.repairOpen(19_001)).toBe(true);
   });
 
-  it("keeps a repair open when an older rollup version's block fills its height, and closes it with the newer version's", async () => {
-    const older = freshVersion();
-    const newer = freshVersion();
-    const [o1, o2] = await buildChain(22_001n, 2, { version: older });
-    const [n1, n2] = await buildChain(22_001n, 2, { version: newer });
-    // Each version's block at 22_002 lacks its parent, so 22_001 is requested.
-    await ordered(o2);
-    await ordered(n2);
-    expect(await reads.repairOpen(22_001)).toBe(true);
-
-    await catchup(o1);
-    expect(await reads.stateOf(o1.hash)).toBe("canonical");
-    expect(await reads.repairOpen(22_001)).toBe(true);
-
-    await catchup(n1);
-    expect(await reads.stateOf(n1.hash)).toBe("canonical");
-    expect(await reads.repairOpen(22_001)).toBe(false);
-  });
-
   it("flags a new off-chain block whose stored parent is off the chain, whichever of the two arrives first", async () => {
     const version = freshVersion();
     const live = await buildChain(20_000n, 3, { version });

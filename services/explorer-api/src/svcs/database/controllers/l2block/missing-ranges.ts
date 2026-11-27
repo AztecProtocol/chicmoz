@@ -176,14 +176,12 @@ export const recordRepairHeights = async (
 
 /**
  * Closes the repair of `height`, in the transaction whose block message made
- * the block of rollup `version` there canonical. Repair rows carry no
- * version, so the block closes one only while no newer version is stored:
- * an older version's block must not close a newer version's repair.
+ * the block there canonical. Repair rows carry no rollup version, so any
+ * version's block at the height closes it.
  */
 export const fulfilRepairHeight = async (
   executor: ReturnType<typeof db>,
   height: bigint,
-  version: number,
 ) => {
   await executor
     .update(l2OpenGapTable)
@@ -195,9 +193,6 @@ export const fulfilRepairHeight = async (
         eq(l2OpenGapTable.status, "open"),
         eq(l2OpenGapTable.fromHeight, Number(height)),
         eq(l2OpenGapTable.toHeight, Number(height)),
-        // max() reads one entry of l2block_version_idx; a NOT EXISTS on newer
-        // versions is planned as a scan past every older version's row.
-        lte(sql`(SELECT max(${l2Block.version}) FROM ${l2Block})`, version),
       ),
     );
 };

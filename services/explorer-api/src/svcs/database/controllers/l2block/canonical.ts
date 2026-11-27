@@ -737,7 +737,7 @@ const settle = async (
     (part) => recordRepairHeights(change.dbTx, part),
   );
   if (canonical) {
-    await fulfilRepairHeight(change.dbTx, block.height, change.version);
+    await fulfilRepairHeight(change.dbTx, block.height);
   }
 };
 

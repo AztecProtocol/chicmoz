@@ -110,7 +110,7 @@ describe("open gap scheduling on a real database", () => {
     };
     repair = (height) => recordRepairHeights(db, [BigInt(height)]);
     // What a block message's change does when it makes its block canonical.
-    fulfil = (height) => fulfilRepairHeight(db, BigInt(height), CURRENT);
+    fulfil = (height) => fulfilRepairHeight(db, BigInt(height));
     seedGaps = async (rows) => {
       const now = Date.now();
       await db.insert(l2OpenGapTable).values(
