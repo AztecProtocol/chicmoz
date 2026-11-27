@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { EventHandler, type Heartbeat } from "@chicmoz-pkg/message-bus";
 import {
   generateL2TopicName,
   getConsumerGroupId,
@@ -83,7 +83,10 @@ export const clampRangeRequest = ({
   };
 };
 
-const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
+const processL2BlockRangeRequest = async (
+  event: L2BlockRangeRequestEvent,
+  heartbeat: Heartbeat,
+) => {
   const requestAgeMs = Date.now() - event.requestedAt;
   if (requestAgeMs > L2_BLOCK_RANGE_REQUEST_MAX_AGE_MS) {
     logger.warn(
@@ -118,6 +121,8 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
     }
 
     for (let height = range.from; height <= range.to && publishedBlocks < maxBlocks; height++) {
+      // Hundreds of serial reads can outlast the Kafka session.
+      await heartbeat();
       const read = await reader.getBlock(height);
       if (!read) {
         failedHeights++;
@@ -142,7 +147,10 @@ const processL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
   );
 };
 
-const onL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
+const onL2BlockRangeRequest = async (
+  event: L2BlockRangeRequestEvent,
+  heartbeat: Heartbeat,
+) => {
   const dedupKey = getL2BlockRangeRequestDedupKey(event);
   if (inFlightRequests.has(dedupKey)) {
     logger.info(`Deduped in-flight L2 block range request ${event.requestId}; key=${dedupKey}`);
@@ -151,7 +159,9 @@ const onL2BlockRangeRequest = async (event: L2BlockRangeRequestEvent) => {
 
   inFlightRequests.add(dedupKey);
   try {
-    await requestLimiter.schedule(() => processL2BlockRangeRequest(event));
+    await requestLimiter.schedule(() =>
+      processL2BlockRangeRequest(event, heartbeat),
+    );
   } catch (error) {
     if (error instanceof Bottleneck.BottleneckError) {
       logger.warn(`Skipped queued L2 block range request ${event.requestId}: ${error.message}`);
@@ -170,5 +180,8 @@ export const l2BlockRangeRequestHandler: EventHandler = {
     handlerName: "blockRangeRequestHandler",
   }),
   topic: generateL2TopicName(L2_NETWORK_ID, "L2_BLOCK_RANGE_REQUEST_EVENT"),
-  cb: onL2BlockRangeRequest as (arg0: unknown) => Promise<void>,
+  cb: onL2BlockRangeRequest as (
+    arg0: unknown,
+    heartbeat: Heartbeat,
+  ) => Promise<void>,
 };

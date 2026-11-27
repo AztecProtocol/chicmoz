@@ -137,4 +137,43 @@ describe("L2 block range request", () => {
       ]),
     );
   });
+
+  it("heartbeats before each block read, and stops and rejects on a failed heartbeat", async () => {
+    const calls: string[] = [];
+    openAttestedReader.mockResolvedValue({
+      tips: { proposed: { number: 4 }, proven: { block: { number: 4 } } },
+      getBlock: (height: number) => {
+        calls.push(`read ${height}`);
+        return Promise.resolve({ block: { height }, final: false });
+      },
+    });
+    onCatchupBlock.mockClear();
+    const rebalance = new Error("The group is rebalancing");
+    let beats = 0;
+    const heartbeat = () => {
+      calls.push("heartbeat");
+      return ++beats === 3 ? Promise.reject(rebalance) : Promise.resolve();
+    };
+
+    await expect(
+      l2BlockRangeRequestHandler.cb(
+        {
+          requestId: "request-4",
+          requestedAt: Date.now(),
+          reason: "cadence",
+          ranges: [{ from: 1, to: 4 }],
+        },
+        heartbeat,
+      ),
+    ).rejects.toBe(rebalance);
+
+    expect(calls).toEqual([
+      "heartbeat",
+      "read 1",
+      "heartbeat",
+      "read 2",
+      "heartbeat",
+    ]);
+    expect(onCatchupBlock).toHaveBeenCalledTimes(2);
+  });
 });
