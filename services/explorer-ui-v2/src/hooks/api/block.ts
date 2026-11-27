@@ -36,8 +36,8 @@ export const useGetBlockByIdentifier = (
         ? BlockAPI.getBlockByHash(heightOrHash)
         : BlockAPI.getBlockByHeight(heightOrHash),
     enabled: !!heightOrHash,
-    // Historical blocks don't mutate; cache them for a while so walking
-    // next/prev on the detail page is instant.
+    // Cached so walking next/prev on the detail page is instant; block and
+    // tips frames refresh it when the chain changes.
     staleTime: 5 * 60_000,
   });
 };
