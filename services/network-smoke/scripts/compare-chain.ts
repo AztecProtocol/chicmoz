@@ -202,7 +202,7 @@ const api = async (path: string): Promise<unknown> => {
 /** A parse error can quote what the API sent, which can echo a key. */
 const apiParsed = async <T>(
   path: string,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  schema: z.ZodType<T, unknown>,
 ): Promise<T> => {
   const body = await api(path);
   try {
