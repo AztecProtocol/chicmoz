@@ -28,12 +28,11 @@ describe("request validation errors", () => {
         errors: [
           {
             code: "too_small",
-            exact: false,
             inclusive: true,
-            message: "Number must be greater than or equal to 1",
+            message: "Too small: expected number to be >=1",
             minimum: 1,
+            origin: "number",
             path: ["query", "hours"],
-            type: "number",
           },
         ],
       },

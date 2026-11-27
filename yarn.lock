@@ -29,18 +29,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@anatine/zod-openapi@npm:2.2.6":
-  version: 2.2.6
-  resolution: "@anatine/zod-openapi@npm:2.2.6"
-  dependencies:
-    ts-deepmerge: "npm:^6.0.3"
-  peerDependencies:
-    openapi3-ts: ^4.1.2
-    zod: ^3.20.0
-  checksum: 10c0/06f0dad3d653dfe2dfd5ac04052418014f5d4d13572b90aa023281899e126a07e5a2e2468fd642ab0b18ec214646108125025da95e428c42125424a1717bd1a4
-  languageName: node
-  linkType: hard
-
 "@aws-crypto/crc32@npm:5.2.0":
   version: 5.2.0
   resolution: "@aws-crypto/crc32@npm:5.2.0"
@@ -1801,7 +1789,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1818,7 +1806,7 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     express: "npm:4.22.3"
     typescript: "npm:5.8.3"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1923,7 +1911,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1937,7 +1925,7 @@ __metadata:
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-import: "npm:2.29.0"
     typescript: "npm:5.8.3"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -1969,7 +1957,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2004,7 +1992,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2029,7 +2017,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2065,7 +2053,7 @@ __metadata:
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
     ws: "npm:8.23.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2093,6 +2081,7 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     typescript: "npm:5.8.3"
     viem: "npm:2.20.0"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2100,7 +2089,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@chicmoz/explorer-api@workspace:services/explorer-api"
   dependencies:
-    "@anatine/zod-openapi": "npm:2.2.6"
     "@aztec-labs/aztec.js": "npm:6.0.0"
     "@aztec-labs/foundation": "npm:6.0.0"
     "@aztec-labs/noir-contracts.js": "npm:6.0.0"
@@ -2144,7 +2132,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2190,7 +2178,7 @@ __metadata:
     typescript: "npm:5.8.3"
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2216,7 +2204,7 @@ __metadata:
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
     ws: "npm:8.23.0"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -2245,7 +2233,7 @@ __metadata:
     vite: "npm:8.3.8"
     vitest: "npm:5.1.0"
     yaml: "npm:2.7.1"
-    zod: "npm:^3.23.8"
+    zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
 
@@ -13246,13 +13234,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ts-deepmerge@npm:^6.0.3":
-  version: 6.2.1
-  resolution: "ts-deepmerge@npm:6.2.1"
-  checksum: 10c0/b73bc0a0530b26b3969f994483abbb33a8514a9b345e7095cf2add5242cd1fe388c1007c4989e2d8b193fe608f9d7a443025a635fd4331bd0ceb76c73f748adf
-  languageName: node
-  linkType: hard
-
 "ts-interface-checker@npm:^0.1.9":
   version: 0.1.13
   resolution: "ts-interface-checker@npm:0.1.13"
@@ -14036,10 +14017,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:3.23.8, zod@npm:^3.23.8":
+"zod@npm:^3.23.8":
   version: 3.23.8
   resolution: "zod@npm:3.23.8"
   checksum: 10c0/8f14c87d6b1b53c944c25ce7a28616896319d95bc46a9660fe441adc0ed0a81253b02b5abdaeffedbeb23bdd25a0bf1c29d2c12dd919aef6447652dd295e3e69
+  languageName: node
+  linkType: hard
+
+"zod@npm:^4.6.7":
+  version: 4.6.7
+  resolution: "zod@npm:4.6.7"
+  checksum: 10c0/4ce2eb14034317b7254e347ca37b5ad591cf8333147030cf05b9b5d31692d45073f7f2747aa50cf8c6b29012194d2b22978cecc89969cf34a0d18e89d0ee7d7b
   languageName: node
   linkType: hard
 

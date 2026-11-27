@@ -353,7 +353,7 @@ describe("finalized poller heights", () => {
   // Catches an invalid log, which fails on every read, holding its stream back for good.
   it("rollup: a log that fails its schema is skipped and the stored height still advances", async () => {
     const [first, invalid, last] = logsAt(ROLLUP, [B1, B2, B3]);
-    // No args: the schema's bigint coercion throws a TypeError, not a ZodError.
+    // No args: the missing checkpoint number and prover id fail the schema.
     seam.chain.set(stream(ROLLUP), [first, { ...invalid, args: {} }, last]);
     await poll();
     expect(seam.published).toEqual([B1, B3]);

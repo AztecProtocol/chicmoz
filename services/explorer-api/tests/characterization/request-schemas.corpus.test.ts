@@ -256,32 +256,33 @@ describe("request schemas", () => {
     expect(canonicalParse(schema, request)).toMatchSnapshot();
   });
 
-  // Each case pins today's outcome for an input zod 4 treats differently.
   describe("known changes", () => {
-    it("accepts a job id without the RFC 4122 variant bits (.uuid() check)", () => {
-      const jobId = "11111111-1111-1111-1111-111111111111";
-
+    it("refuses a job id without the RFC 4122 variant bits (.uuid() check)", () => {
       expect(
         canonicalParse(routes.getVerifySourceJobSchema, {
-          params: { contractClassId: HASH, version: "1", jobId },
+          params: {
+            contractClassId: HASH,
+            version: "1",
+            jobId: "11111111-1111-1111-1111-111111111111",
+          },
         }),
-      ).toEqual({ params: { contractClassId: HASH, jobId, version: 1 } });
+      ).toEqual({ $fails: ["params"] });
     });
 
-    it("throws a SyntaxError, not a validation error, for a non-numeric bigint path value (coerce.bigint)", () => {
-      expect(() =>
-        routes.getGovernanceSignalsByRoundSchema.safeParse({
+    it("refuses a non-numeric bigint path value as a validation error (coerce.bigint)", () => {
+      expect(
+        canonicalParse(routes.getGovernanceSignalsByRoundSchema, {
           params: { round: "abc" },
         }),
-      ).toThrow(SyntaxError);
+      ).toEqual({ $fails: ["params"] });
     });
 
-    it("accepts offset=Infinity on a contract list route (non-finite numbers)", () => {
+    it("refuses offset=Infinity on a contract list route (non-finite numbers)", () => {
       expect(
         canonicalParse(routes.getContractInstancesSchema, {
           query: { offset: "Infinity" },
         }),
-      ).toEqual({ query: { offset: { $number: "Infinity" } } });
+      ).toEqual({ $fails: ["query"] });
     });
   });
 });
