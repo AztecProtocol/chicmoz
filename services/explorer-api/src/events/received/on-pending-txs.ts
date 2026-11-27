@@ -39,7 +39,6 @@ const onPendingTxs = async ({ txs }: PendingTxsEvent, heartbeat: Heartbeat) => {
           `🔄 Resubmitted tx ${res.txHash}: removed from dropped table`,
         );
       }
-      // Store/update in pending table (handles both new and resubmitted transactions)
       await storeOrUpdateL2Tx(res, dbTx);
       logger.debug(`✅ Stored/updated pending tx: ${res.txHash}`);
     });

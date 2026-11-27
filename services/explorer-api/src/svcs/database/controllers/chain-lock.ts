@@ -6,12 +6,11 @@ import { type DbTx } from "./utils.js";
 const LOCK_NAMESPACE = 1_815_307_112;
 
 /**
- * Runs `fn` in one transaction that first takes the network's chain lock.
- * Every chain change takes it, and so does every write that depends on
- * which blocks are canonical: the dropped- and pending-tx handlers, the
- * start-up sweep and the tips. `lock_timeout` bounds every lock wait in the
- * transaction, this one included: a wait over 10 s throws, so the message is
- * redelivered.
+ * Runs `fn` in one transaction that takes the network's chain lock before
+ * any other: every write that depends on which blocks are canonical takes
+ * it first, so those writers queue on it rather than deadlock over rows.
+ * `lock_timeout` bounds every lock wait in the transaction, this one
+ * included: a wait over 10 s throws.
  */
 export const withChainLock = <T>(fn: (dbTx: DbTx) => Promise<T>): Promise<T> =>
   db().transaction(async (dbTx) => {

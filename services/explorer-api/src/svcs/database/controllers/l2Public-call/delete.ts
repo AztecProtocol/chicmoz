@@ -7,7 +7,6 @@ export const deletePublicCall = async (
   txHash: ChicmozL2PendingTx["txHash"],
   executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  // Delete existing public call requests for this txHash
   await executor
     .delete(l2TxPublicCallRequest)
     .where(eq(l2TxPublicCallRequest.txHash, txHash));

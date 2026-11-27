@@ -169,11 +169,8 @@ export type BlockContracts = {
 };
 
 /**
- * Stores a canonical block's contract rows inside its transaction, each in a
- * savepoint: a row another canonical block keeps is logged, and one that
- * fails (an instance whose class was never stored) is logged and skipped
- * without aborting the block; a failed heartbeat, taken before each row,
- * aborts it.
+ * Stores a canonical block's contract rows, each in a savepoint: a row that
+ * fails is logged and skipped, and a failed heartbeat aborts the block.
  */
 export const storeBlockContracts = async (
   dbTx: DbTx,

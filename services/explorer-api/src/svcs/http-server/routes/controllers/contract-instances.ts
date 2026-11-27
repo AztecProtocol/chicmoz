@@ -510,7 +510,6 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       constructorArgs,
     });
 
-    // Keyed before the read, as `onChainKeys` requires.
     const instanceKeys = await dbWrapper.onChainKeys(
       contractInstanceKeys(address),
     );
