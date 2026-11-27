@@ -36,8 +36,9 @@ export const useGetBlockByIdentifier = (
         ? BlockAPI.getBlockByHash(heightOrHash)
         : BlockAPI.getBlockByHeight(heightOrHash),
     enabled: !!heightOrHash,
-    // Cached so walking next/prev on the detail page is instant; block and
-    // tips frames refresh it when the chain changes.
+    // Cached so walking next/prev is instant; frames refresh it, but none
+    // announces a catch-up block, which can orphan it or fill its txs.
+    refetchInterval: SLOW_REFETCH_INTERVAL,
     staleTime: 5 * 60_000,
   });
 };
