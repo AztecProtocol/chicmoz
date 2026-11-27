@@ -87,6 +87,7 @@ export const prepareDatabases = (
     }),
   );
 
+/** Starts each service; the result starts one again, with the same command and environment. */
 export const startServices = (
   groups: ProcessGroups,
   names: readonly ServiceName[],
@@ -153,7 +154,7 @@ export const startServices = (
       KAFKA_CONNECTION_URL: stack.env.KAFKA_CONNECTION,
     }),
   };
-  return names.map((name) => {
+  const startOne = (name: ServiceName) => {
     const svc: Service = SERVICES[name];
     return groups.start(name, process.execPath, [...svc.nodeArgs, svc.entry], {
       cwd: serviceDir(name),
@@ -165,5 +166,9 @@ export const startServices = (
         ...(svc.database ? { POSTGRES_DB_NAME: svc.database } : {}),
       },
     });
-  });
+  };
+  for (const name of names) {
+    startOne(name);
+  }
+  return startOne;
 };

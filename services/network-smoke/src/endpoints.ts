@@ -32,6 +32,17 @@ export const pruneEndpointsSchema = endpointsSchema.extend({
 export const scriptedEndpointsSchema = commonSchema.extend({
   /** The scripted node's control port (`script-control.ts`). */
   controlUrl: z.string().url(),
+  /** The runner's control of its own services (`service-control.ts`). */
+  servicesUrl: z.string().url(),
+  /** The run's Postgres, with the harness's local credentials. */
+  postgres: z.object({
+    host: z.string(),
+    port: z.number().int().positive(),
+    user: z.string(),
+    password: z.string(),
+    /** Each service's own database. */
+    databases: z.object({ listener: z.string(), api: z.string() }),
+  }),
 });
 
 export type Endpoints = z.infer<typeof endpointsSchema>;

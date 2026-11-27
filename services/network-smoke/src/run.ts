@@ -35,8 +35,10 @@ import { releasePorts } from "./port-registry.js";
 import { claimRunPorts } from "./ports.js";
 import { createProcessGroups, startTimeOf } from "./processes.js";
 import { type RpcTap, startRpcTap } from "./rpc-tap.js";
+import { type ServiceControl, startServiceControl } from "./service-control.js";
 import {
   LISTENER_POLL_MS,
+  SERVICES,
   SMOKE_NETWORK,
   type ServiceName,
   missingBuilds,
@@ -194,6 +196,7 @@ export const run = async (mode: Mode): Promise<number> => {
   let stack: Stack | undefined;
   let stackRemoved = false;
   let tap: RpcTap | undefined;
+  let serviceControl: ServiceControl | undefined;
 
   process.on("exit", () => {
     groups.killAllSync();
@@ -260,6 +263,7 @@ export const run = async (mode: Mode): Promise<number> => {
         removeTmpDir(tmp.node);
         removeTmpDir(tmp.wallet);
         await tap?.close();
+        await serviceControl?.close();
         // Only once every group stopped: a survivor may still bind a port.
         if (stuck.length === 0) {
           released = await releasePorts(runId);
@@ -419,7 +423,7 @@ export const run = async (mode: Mode): Promise<number> => {
         file: rpcTapFile,
       });
     }
-    startServices(groups, services, {
+    const startService = startServices(groups, services, {
       stack: infraStack,
       ports,
       runId,
@@ -427,6 +431,30 @@ export const run = async (mode: Mode): Promise<number> => {
       extraEnv,
       aztecNodeUrl: tap?.url ?? aztecNodeUrl,
     });
+    if (node === "scripted") {
+      const isRunService = (name: string): name is ServiceName =>
+        services.some((s) => s === name);
+      // The scripted mode runs no anvil; its port takes the runner's control
+      // of the services, so the groups a scenario restarts stay the run's.
+      serviceControl = await startServiceControl({
+        port: ports.anvil,
+        names: services,
+        actions: {
+          kill: async (name) => {
+            if (!(await groups.kill(name))) {
+              throw new Error(`${name} outlived SIGKILL`);
+            }
+          },
+          start: (name) => {
+            if (!isRunService(name)) {
+              throw new Error(`${name} is not one of this run's services`);
+            }
+            startService(name);
+            return Promise.resolve();
+          },
+        },
+      });
+    }
     const alive = () => services.map((name) => deathOf(name)()).find(Boolean);
     await waitUntil("explorer-api", () => httpOk(`${explorerApiUrl}/health`), {
       timeoutMs: 60_000,
@@ -464,8 +492,22 @@ export const run = async (mode: Mode): Promise<number> => {
       },
     };
     const endpoints: Endpoints | PruneEndpoints | ScriptedEndpoints =
-      node === "scripted"
-        ? { ...common, controlUrl }
+      node === "scripted" && serviceControl
+        ? {
+            ...common,
+            controlUrl,
+            servicesUrl: serviceControl.url,
+            postgres: {
+              host: infraStack.env.POSTGRES_IP,
+              port: Number(infraStack.env.POSTGRES_PORT),
+              user: infraStack.env.POSTGRES_ADMIN,
+              password: infraStack.env.POSTGRES_PASSWORD,
+              databases: {
+                listener: SERVICES["aztec-listener"].database,
+                api: SERVICES["explorer-api"].database,
+              },
+            },
+          }
         : {
             ...common,
             anvilUrl,
