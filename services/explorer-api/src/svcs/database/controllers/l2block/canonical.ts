@@ -834,18 +834,15 @@ export const applyOrderedBlock = (
 };
 
 /**
- * A catch-up block never replaces the canonical block at its own height: it
- * joins only where that height is empty, below the canonical head. It joins
- * when the lowest canonical block above descends from it, and then has that
- * block's authority below its height, as an ordered block has below its
- * own: it demotes the other canonical holders of its txs there, with their
- * linked runs, brings back its stored ancestors in place of the blocks at
- * their heights, and asks for the heights left empty. With `final` (at or
- * below the serving node's own finalized tip), it also joins when the
- * canonical block below, if any, is its parent, and asks for that height
- * when it is empty. A canonical block with a canonical child linked to it,
- * as one a walk brought back, has the same authority: the holders of its
- * txs below it go, and the heights left empty are asked for.
+ * A catch-up block fills an empty height below the canonical head, never a
+ * held one. Linked to the canonical chain above, it carries that chain's
+ * authority below its height, as an ordered block does: the other holders of
+ * its txs there go, its stored ancestors come back, and the heights left
+ * empty are asked for. An already-canonical block with a linked canonical
+ * child has the same authority. With `final` (at or below the serving node's
+ * own finalized tip), it also joins when the link is undecided and the
+ * canonical block below, if any, is its parent, asking for that height when
+ * it is empty.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
