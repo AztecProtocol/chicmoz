@@ -67,8 +67,9 @@ const echo500 = () =>
     );
   });
 
-// A 200 whose reorg record holds the quote as its height: Zod's coercion to
-// a BigInt then throws an error that names the value.
+// A 200 whose reorg record holds the quote as its height, which fails the
+// schema. Zod 4 leaves the input out of its error, so this guards a parser
+// that names the value it refused.
 const echo200 = () =>
   createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
