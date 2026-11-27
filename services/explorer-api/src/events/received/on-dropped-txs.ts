@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { type EventHandler, type Heartbeat } from "@chicmoz-pkg/message-bus";
 import {
   DroppedTxsEvent,
   generateL2TopicName,
@@ -14,10 +14,12 @@ import { txEffectExists } from "../../svcs/database/controllers/l2TxEffect/get-t
 import { deletePublicCall } from "../../svcs/database/controllers/l2Public-call/delete.js";
 import { deleteL2ToL1Msgs } from "../../svcs/database/controllers/l2PendingL2ToL1Msg/delete.js";
 
-const onDroppedTxs = async ({ txs }: DroppedTxsEvent) => {
+const onDroppedTxs = async ({ txs }: DroppedTxsEvent, heartbeat: Heartbeat) => {
   logger.info(`🗑️ Received ${txs.length} dropped txs to handle`);
 
   for (const droppedTx of txs) {
+    // Each tx waits for the chain lock on its own.
+    await heartbeat();
     await withChainLock(async (dbTx) => {
       if (await txEffectExists(droppedTx.txHash, dbTx)) {
         logger.info(`🗑️ Dropped tx ${droppedTx.txHash} is mined, skipping`);
@@ -38,5 +40,5 @@ export const droppedTxHandler: EventHandler = {
     handlerName: "droppedTxHandler",
   }),
   topic: generateL2TopicName(L2_NETWORK_ID, "DROPPED_TXS_EVENT"),
-  cb: onDroppedTxs as (arg0: unknown) => Promise<void>,
+  cb: onDroppedTxs as (arg0: unknown, heartbeat: Heartbeat) => Promise<void>,
 };

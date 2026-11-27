@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { type EventHandler, type Heartbeat } from "@chicmoz-pkg/message-bus";
 import {
   PendingTxsEvent,
   generateL2TopicName,
@@ -13,10 +13,12 @@ import { storeOrUpdateL2Tx } from "../../svcs/database/controllers/l2Tx/index.js
 import { removeDroppedTxByHash } from "../../svcs/database/controllers/dropped-tx/index.js";
 import { txEffectExists } from "../../svcs/database/controllers/l2TxEffect/get-tx-effect.js";
 
-const onPendingTxs = async ({ txs }: PendingTxsEvent) => {
+const onPendingTxs = async ({ txs }: PendingTxsEvent, heartbeat: Heartbeat) => {
   logger.info(`🕐 Received ${txs.length} pending txs to store`);
 
   for (const tx of txs) {
+    // Each tx waits for the chain lock on its own.
+    await heartbeat();
     const parsed = chicmozL2PendingTxSchema.safeParse(tx);
     if (!parsed.success) {
       logger.error(
@@ -51,5 +53,5 @@ export const pendingTxHandler: EventHandler = {
     handlerName: "pendingTxHandler",
   }),
   topic: generateL2TopicName(L2_NETWORK_ID, "PENDING_TXS_EVENT"),
-  cb: onPendingTxs as (arg0: unknown) => Promise<void>,
+  cb: onPendingTxs as (arg0: unknown, heartbeat: Heartbeat) => Promise<void>,
 };
