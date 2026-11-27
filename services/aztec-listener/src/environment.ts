@@ -159,11 +159,21 @@ export const L2_NETWORK_ID: L2NetworkId = l2NetworkIdSchema.parse(
 export const AZTEC_RPC_URLS = rpcNodePoolSchema.parse(
   process.env.AZTEC_RPC_URLS,
 );
+// A pool URL can carry a key in its userinfo, path or query.
+const printedUrl = (url: string) => {
+  try {
+    const { protocol, host, pathname, search } = new URL(url);
+    const more = pathname.length > 1 || search !== "" ? "/…" : "";
+    return `${protocol}//${host}${more}`;
+  } catch {
+    return "(not a URL)";
+  }
+};
 const printPool = () => {
   let finalString = "\n";
   AZTEC_RPC_URLS.forEach(
     (node) =>
-      (finalString = `${finalString}  Name: ${node.name}\n  URL: ${node.url}\n\n`),
+      (finalString = `${finalString}  Name: ${node.name}\n  URL: ${printedUrl(node.url)}\n\n`),
   );
   return finalString.trim();
 };
