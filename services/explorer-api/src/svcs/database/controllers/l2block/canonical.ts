@@ -839,10 +839,10 @@ export const applyOrderedBlock = (
  * linked runs, brings back its stored ancestors in place of the blocks at
  * their heights, and asks for the heights left empty. With `final` (at or
  * below the serving node's own finalized tip), it also joins when the
- * canonical block below, if any, is its parent. A canonical block with a
- * canonical child linked to it, as one a walk brought back, has the same
- * authority: the holders of its txs below it go, and the heights left empty
- * are asked for.
+ * canonical block below, if any, is its parent, and asks for that height
+ * when it is empty. A canonical block with a canonical child linked to it,
+ * as one a walk brought back, has the same authority: the holders of its
+ * txs below it go, and the heights left empty are asked for.
  */
 export const applyCatchupBlock = (
   incoming: IncomingBlock,
@@ -895,5 +895,8 @@ export const applyCatchupBlock = (
       return false;
     }
     await promote(change, stored, { walked: false });
+    if (below.length === 0 && stored.height > 1n) {
+      change.repairs.add(stored.height - 1n);
+    }
     return true;
   });

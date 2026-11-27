@@ -524,6 +524,19 @@ describe("the canonical chain on a real database", () => {
     expect(await reads.recordsOf(version)).toEqual([]);
   });
 
+  it("opens a repair at the empty height below a final catch-up block that joins with its link from above undecided", async () => {
+    const version = freshVersion();
+    // Its parent is not stored, so the walk down from it cannot decide.
+    const head = await buildBlock(26_004n, [freshTxHash()], { version });
+    const block = await buildBlock(26_002n, [freshTxHash()], { version });
+    await ordered(head);
+
+    await catchup(block, { final: true });
+
+    expect(await reads.stateOf(block.hash)).toBe("canonical");
+    expect(await reads.repairOpen(26_001)).toBe(true);
+  });
+
   it("clears the dropped rows of the effects a walk-made-canonical block owns, and attaches the rest from its repair", async () => {
     const version = freshVersion();
     const kept = freshTxHash();
