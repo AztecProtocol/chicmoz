@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const INTERVAL_MS = 120_000;
 const TIP = 104_595;
-const PROVEN_TIP = 104_539;
 const dialect = new PgDialect();
 const render = (condition: unknown) => dialect.sqlToQuery(condition as SQL);
 
@@ -37,7 +36,7 @@ const mocks = vi.hoisted(() => {
     deleted: [] as unknown[],
     updates: [] as Array<Record<string, unknown>>,
     updateTargets: [] as unknown[][],
-    tips: {} as { degradedReason?: string; provenTip?: number },
+    unresolvedHeights: [] as number[],
     publishFails: false,
     order: [] as string[],
   };
@@ -159,12 +158,8 @@ vi.mock(
   () => ({ getCurrentRollupVersionNumber: () => Promise.resolve(1) }),
 );
 vi.mock("../../src/svcs/database/controllers/l2/tips.js", () => ({
-  getTips: () =>
-    Promise.resolve({
-      proposed: { number: TIP },
-      proven: { block: { number: mocks.state.tips.provenTip ?? PROVEN_TIP } },
-      degradedReason: mocks.state.tips.degradedReason,
-    }),
+  getUnresolvedBoundaryHeights: () =>
+    Promise.resolve(mocks.state.unresolvedHeights),
 }));
 vi.mock("../../src/svcs/database/controllers/l2block/get-latest.js", () => ({
   getLatestHeight: () => Promise.resolve(BigInt(TIP)),
@@ -239,7 +234,7 @@ beforeEach(() => {
     deleted: [],
     updates: [],
     updateTargets: [],
-    tips: {},
+    unresolvedHeights: [],
     publishFails: false,
     order: [],
   });
@@ -613,20 +608,8 @@ describe("selection", () => {
 });
 
 describe("buildTipBoundaryRepairRequest", () => {
-  it("sends the window for a hash mismatch above the proven tip too", async () => {
-    mocks.state.tips = {
-      degradedReason: `proposed boundary block ${TIP - 2} hash mismatch: db=0x1 tip=0x2`,
-    };
-
-    const planned = await buildTipBoundaryRepairRequest();
-
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
-  });
-
-  it("sends the window for a missing block", async () => {
-    mocks.state.tips = {
-      degradedReason: `proposed boundary block ${TIP - 2} is missing`,
-    };
+  it("sends the window around the most recently seen open mismatch", async () => {
+    mocks.state.unresolvedHeights = [TIP - 2, 98106];
 
     const planned = await buildTipBoundaryRepairRequest();
 
@@ -636,10 +619,8 @@ describe("buildTipBoundaryRepairRequest", () => {
     expect(mocks.state.upserts[0].set).not.toHaveProperty("requestCount");
   });
 
-  it("backs off while its row is not due", async () => {
-    mocks.state.tips = {
-      degradedReason: "finalized boundary block 98106 is missing",
-    };
+  it("passes over a window that is backing off, and sends nothing while every one is", async () => {
+    mocks.state.unresolvedHeights = [98106, TIP - 2];
     mocks.state.gaps = [
       gap({
         id: "MAINNET:tip_boundary_mismatch:98101:98111",
@@ -650,6 +631,10 @@ describe("buildTipBoundaryRepairRequest", () => {
       }),
     ];
 
+    const planned = await buildTipBoundaryRepairRequest();
+    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
+
+    mocks.state.unresolvedHeights = [98106];
     await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
   });
 });

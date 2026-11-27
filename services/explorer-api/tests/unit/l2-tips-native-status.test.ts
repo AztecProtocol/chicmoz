@@ -26,9 +26,12 @@ const mocks = vi.hoisted(() => {
     return { onConflictDoUpdate };
   });
   const insert = vi.fn(() => ({ values }));
+  const update = vi.fn(() => ({
+    set: () => ({ where: () => Promise.resolve() }),
+  }));
 
   return {
-    db: { insert, select },
+    db: { insert, select, update },
     from,
     limit,
     onConflictDoUpdate,
@@ -47,6 +50,10 @@ vi.mock("@chicmoz-pkg/postgres-helper", () => ({
 
 vi.mock("../../src/environment.js", () => ({
   L2_NETWORK_ID: "SANDBOX",
+}));
+
+vi.mock("../../src/svcs/database/controllers/chain-lock.js", () => ({
+  withChainLock: (fn: (dbTx: unknown) => Promise<unknown>) => fn(mocks.db),
 }));
 
 vi.mock("../../src/logger.js", () => ({
@@ -162,7 +169,7 @@ describe("deriveNativeStatus", () => {
     expect(
       deriveNativeStatus(
         { hash: hash(1), height: 1n },
-        { ...storedTips, degradedReason: "proposed boundary block 100 is missing" },
+        { ...storedTips, degradedReason: "checkpointed boundary block 80 is missing" },
       ),
     ).toBe("unknown");
     expect(
@@ -243,7 +250,7 @@ describe("upsertTips", () => {
     await upsertTips(tipsEvent);
 
     expect(mocks.getCurrentRollupVersionNumber).toHaveBeenCalledOnce();
-    expect(mocks.where).toHaveBeenCalledTimes(4);
+    expect(mocks.limit).toHaveBeenCalledTimes(4);
     expect(mocks.state.insertValues[0]).toMatchObject({ degradedReason: null });
   });
 });

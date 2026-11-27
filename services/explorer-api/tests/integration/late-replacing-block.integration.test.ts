@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   type BuiltBlock,
   buildBlock,
+  buildChain,
   catchupEvent,
   freshTxHash,
   orderedEvent,
@@ -37,6 +38,8 @@ describe("a replaced block that stays stored on a real database", () => {
     },
   ) => Promise<void>;
   let repairRequestCovers: (height: number) => Promise<boolean>;
+  let lastSeenAgo: (height: number, ms: number) => Promise<void>;
+  let mismatchOpenAt: (height: number) => Promise<boolean>;
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
@@ -94,6 +97,24 @@ describe("a replaced block that stays stored on a real database", () => {
         ) ?? false
       );
     };
+    const { getDb } = await import("@chicmoz-pkg/postgres-helper");
+    const { and, eq, isNull } = await import("drizzle-orm");
+    const { l2TipBoundaryMismatchTable: mismatch } = await import(
+      "../../src/svcs/database/schema/l2/tips.js"
+    );
+    lastSeenAgo = async (height, ms) => {
+      await getDb()
+        .update(mismatch)
+        .set({ lastSeenAt: new Date(Date.now() - ms) })
+        .where(eq(mismatch.height, height));
+    };
+    mismatchOpenAt = async (height) =>
+      (
+        await getDb()
+          .select({ id: mismatch.id })
+          .from(mismatch)
+          .where(and(eq(mismatch.height, height), isNull(mismatch.resolvedAt)))
+      ).length > 0;
   });
 
   afterAll(async () => {
@@ -172,4 +193,30 @@ describe("a replaced block that stays stored on a real database", () => {
       expect(await repairRequestCovers(403)).toBe(true);
     },
   );
+
+  it("resolves a tip mismatch nothing fixed only a day after it was last seen", async () => {
+    const chain = await buildChain(500n, 4);
+    const [finalized, proven, checkpointed, stored] = chain;
+    for (const block of chain) {
+      await store(block);
+    }
+    const named = await buildBlock(503n, [freshTxHash()], {
+      parent: checkpointed,
+    });
+    const tipsAt = (proposed: BuiltBlock) =>
+      storeTips({
+        proposed: { number: Number(proposed.height), hash: proposed.hash },
+        finalized,
+        proven,
+        checkpointed,
+      });
+    await tipsAt(named);
+    await tipsAt(stored);
+    expect(await mismatchOpenAt(503)).toBe(true);
+
+    await lastSeenAgo(503, 25 * 60 * 60 * 1000);
+    await tipsAt(stored);
+
+    expect(await mismatchOpenAt(503)).toBe(false);
+  });
 });

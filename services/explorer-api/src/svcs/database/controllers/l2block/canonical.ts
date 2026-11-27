@@ -19,6 +19,7 @@ import {
   txEffect,
 } from "../../schema/l2block/index.js";
 import { withChainLock } from "../chain-lock.js";
+import { revalidateTips } from "../l2/tips.js";
 import {
   storeBlockContracts,
   type BlockContracts,
@@ -733,6 +734,9 @@ const settle = async (
     [...new Set([...change.walked.values(), ...change.repairs])],
     (part) => recordRepairHeights(change.dbTx, part),
   );
+  if (change.demoted.size > 0 || change.promoted.size > 0) {
+    await revalidateTips(change.dbTx);
+  }
   if (canonical) {
     await fulfilRepairHeight(change.dbTx, block.height);
   }

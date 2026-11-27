@@ -8,8 +8,8 @@ const LOCK_NAMESPACE = 1_815_307_112;
 /**
  * Runs `fn` in one transaction that first takes the network's chain lock.
  * Every chain change takes it, and so does every write that depends on
- * whether a canonical block holds a tx: the dropped- and pending-tx handlers
- * and the start-up sweep. `lock_timeout` bounds every lock wait in the
+ * which blocks are canonical: the dropped- and pending-tx handlers, the
+ * start-up sweep and the tips. `lock_timeout` bounds every lock wait in the
  * transaction, this one included: a wait over 10 s throws, so the message is
  * redelivered.
  */

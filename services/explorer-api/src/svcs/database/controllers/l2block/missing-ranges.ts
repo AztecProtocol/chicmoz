@@ -29,7 +29,7 @@ import { logger } from "../../../../logger.js";
 import { l2OpenGapTable } from "../../schema/l2/open-gap.js";
 import { l2Block } from "../../schema/l2block/index.js";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
-import { getTips } from "../l2/tips.js";
+import { getUnresolvedBoundaryHeights } from "../l2/tips.js";
 import { getLatestBlockRollupVersion, getLatestHeight } from "./get-latest.js";
 
 type GapRange = { from: number; to: number; statusHint: "proposed" };
@@ -517,11 +517,11 @@ const findPresentHeights = async (ranges: Array<{ from: number; to: number }>) =
   return new Set(rows.map((row) => Number(row.height)));
 };
 
+// Heights above the latest canonical block are still on their way in the
+// ordered stream: asking for them would race it.
 const getReconciliationUpperBound = async () => {
-  const tips = await getTips();
   const latestHeight = await getLatestHeight();
-  const upperBound = tips?.proposed.number ?? (latestHeight ? Number(latestHeight) : 0);
-  return { tips, upperBound };
+  return latestHeight === null ? 0 : Number(latestHeight);
 };
 
 export const buildMissingBlockRangeRequest = async ({
@@ -533,7 +533,7 @@ export const buildMissingBlockRangeRequest = async ({
   scanWindow?: number;
   maxBlocks?: number;
 }): Promise<PlannedRangeRequest | null> => {
-  const { upperBound } = await getReconciliationUpperBound();
+  const upperBound = await getReconciliationUpperBound();
   if (!Number.isSafeInteger(upperBound) || upperBound < 1) {
     logger.info(`Skipping ${reason} L2 block reconciliation: no upper bound`);
     return null;
@@ -581,40 +581,55 @@ export const buildMissingBlockRangeRequest = async ({
   };
 };
 
-const parseTipBoundaryHeight = (degradedReason: string | undefined) => {
-  if (!degradedReason) {
-    return null;
-  }
-  const match = /boundary block (\d+) (?:is missing|hash mismatch)/u.exec(degradedReason);
-  if (!match?.[1]) {
-    return null;
-  }
-  const height = Number(match[1]);
-  return Number.isSafeInteger(height) && height > 0 ? height : null;
-};
-
+/**
+ * Asks for the window around an open tip-boundary mismatch: the most recently
+ * seen one whose window is not backing off. A window is re-sent whole while
+ * its mismatch stays open (its heights may be present but wrong), with the
+ * same backoff as other gaps, whatever the window row's status: blocks
+ * landing in the window fulfil it without resolving a mismatch.
+ */
 export const buildTipBoundaryRepairRequest =
   async (): Promise<PlannedRangeRequest | null> => {
-    const tips = await getTips();
-    const height = parseTipBoundaryHeight(tips?.degradedReason);
-    if (!height) {
-      return null;
-    }
     const repairWindow = L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW;
-    const from = Math.max(1, height - repairWindow);
-    const to = height + repairWindow;
-    const id = gapId({ from, to, reason: TIP_BOUNDARY_REASON });
-    // The window is re-sent whole while the tips stay degraded (its heights
-    // may be present but wrong), with the same backoff as other gaps,
-    // whatever the row's status: blocks landing in the window fulfil it
-    // without fixing a mismatch.
-    const [existing] = await db()
-      .select({ due: sql<boolean>`${gapDueSql(Date.now())}` })
-      .from(l2OpenGapTable)
-      .where(eq(l2OpenGapTable.id, id));
-    if (existing && !existing.due) {
+    const windows = (
+      await getUnresolvedBoundaryHeights(
+        await getCurrentRollupVersionNumber(),
+        CANDIDATE_GAP_LIMIT,
+      )
+    ).map((height) => {
+      const from = Math.max(1, height - repairWindow);
+      const to = height + repairWindow;
+      return {
+        height,
+        from,
+        to,
+        id: gapId({ from, to, reason: TIP_BOUNDARY_REASON }),
+      };
+    });
+    if (windows.length === 0) {
       return null;
     }
+    const backingOff = new Set(
+      (
+        await db()
+          .select({ id: l2OpenGapTable.id })
+          .from(l2OpenGapTable)
+          .where(
+            and(
+              inArray(
+                l2OpenGapTable.id,
+                windows.map(({ id }) => id),
+              ),
+              not(gapDueSql(Date.now())),
+            ),
+          )
+      ).map(({ id }) => id),
+    );
+    const window = windows.find(({ id }) => !backingOff.has(id));
+    if (!window) {
+      return null;
+    }
+    const { height, from, to, id } = window;
     const range = { from, to, statusHint: "proposed" as const };
     // Reopening must not reset the backoff here: the row is "fulfilled" as
     // soon as its heights are present, mismatch or not.
@@ -624,7 +639,7 @@ export const buildTipBoundaryRepairRequest =
       resetOnReopen: false,
     });
     logger.warn(
-      `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}; reason=${tips?.degradedReason}`,
+      `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}`,
     );
     return {
       request: {
