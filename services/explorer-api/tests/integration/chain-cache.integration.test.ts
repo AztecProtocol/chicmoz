@@ -14,6 +14,7 @@ import {
 } from "./support/explorer-api.js";
 
 type Holder = { blockHash: HexString; isOrphaned: boolean };
+type Effect = Holder & { txHash: HexString };
 
 describe("cached chain reads on a real database and Redis", () => {
   let api: ExplorerApiForTest;
@@ -26,6 +27,7 @@ describe("cached chain reads on a real database and Redis", () => {
     return res.body as T;
   };
   const holder = ({ blockHash, isOrphaned }: Holder) => [blockHash, isOrphaned];
+  const held = ({ txHash, ...rest }: Effect) => [txHash, ...holder(rest)];
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
@@ -42,13 +44,17 @@ describe("cached chain reads on a real database and Redis", () => {
 
   // The prune leaves the tip's height, and so the latest height in the
   // latest-block keys, as it was.
-  it("serves the block that replaced the tip, and the tx and instance it took, from a warm cache", async () => {
+  it("serves the block that replaced the tip, the tx and instance it took, and none of the replaced block's own txs, from a warm cache", async () => {
     const parent = await buildBlock(1n, [freshTxHash()], {
       effect: "publishesClass",
     });
     const deployTx = freshTxHash();
+    // Both blocks include the deploy tx, which moves; each has a tx of its own.
     const atTip = () =>
-      buildBlock(2n, [deployTx], { parent, effect: "deploysInstance" });
+      buildBlock(2n, [deployTx, freshTxHash()], {
+        parent,
+        effect: "deploysInstance",
+      });
     const replaced = await atTip();
     const replacing = await atTip();
     await store(parent);
@@ -60,10 +66,10 @@ describe("cached chain reads on a real database and Redis", () => {
       replacedOnChain: !(
         await body<{ orphan?: unknown }>(`/l2/blocks/${replaced.hash}`)
       ).orphan,
-      txEffectsAtHeight: (await body<Holder[]>("/l2/blocks/2/tx-effects")).map(
-        holder,
+      txEffectsAtHeight: (await body<Effect[]>("/l2/blocks/2/tx-effects")).map(
+        held,
       ),
-      txEffectAtIndex: holder(await body<Holder>("/l2/blocks/2/tx-effects/0")),
+      txEffectAtIndex: held(await body<Effect>("/l2/blocks/2/tx-effects/1")),
       txEffect: holder(await body<Holder>(`/l2/tx-effects/${deployTx}`)),
       instance: holder(await body<Holder>(`/l2/contract-instances/${address}`)),
       instancesOfReplaced: (
@@ -72,20 +78,27 @@ describe("cached chain reads on a real database and Redis", () => {
         )
       ).map((i) => i.address),
     });
-    const servedWith = (tip: BuiltBlock) => ({
-      latest: tip.hash,
-      atHeight: tip.hash,
-      replacedOnChain: tip === replaced,
-      txEffectsAtHeight: [[tip.hash, false]],
-      txEffectAtIndex: [tip.hash, false],
-      txEffect: [tip.hash, false],
-      instance: [tip.hash, false],
-      instancesOfReplaced: tip === replaced ? [address] : [],
-    });
+    const servedWith = (tip: BuiltBlock) => {
+      const [shared, own] = tip.txHashes;
+      return {
+        latest: tip.hash,
+        atHeight: tip.hash,
+        replacedOnChain: tip === replaced,
+        txEffectsAtHeight: [
+          [own, tip.hash, false],
+          [shared, tip.hash, false],
+        ],
+        txEffectAtIndex: [own, tip.hash, false],
+        txEffect: [tip.hash, false],
+        instance: [tip.hash, false],
+        instancesOfReplaced: tip === replaced ? [address] : [],
+      };
+    };
     expect(await served()).toEqual(servedWith(replaced));
 
     await store(replacing);
 
+    // The bump retired every warm entry: these reads come from the database.
     expect(await served()).toEqual(servedWith(replacing));
   });
 });

@@ -147,6 +147,10 @@ const _getTxEffects = async (
   const rollupVersion = await getCurrentRollupVersionNumber();
   const versionFilter =
     rollupVersion !== null ? eq(l2Block.version, rollupVersion) : undefined;
+  // A block off the chain keeps the effects no canonical block took: they
+  // are its history, not what its height holds. The latest list keeps them,
+  // flagged `isOrphaned`.
+  const heightFilter = and(isNull(l2Block.orphan_timestamp), versionFilter);
 
   let whereQuery;
 
@@ -154,7 +158,7 @@ const _getTxEffects = async (
     case GetTypes.BlockHeightRange:
       if (args.from ?? args.to) {
         whereQuery = joinQuery
-          .where(and(generateWhereQuery(args.from, args.to), versionFilter))
+          .where(and(generateWhereQuery(args.from, args.to), heightFilter))
           .orderBy(desc(l2Block.height), desc(txEffect.index))
           .limit(DB_MAX_TX_EFFECTS);
       } else {
@@ -170,7 +174,7 @@ const _getTxEffects = async (
           and(
             eq(l2Block.height, args.blockHeight),
             eq(txEffect.index, args.txEffectIndex),
-            versionFilter,
+            heightFilter,
           ),
         )
         .limit(1);
