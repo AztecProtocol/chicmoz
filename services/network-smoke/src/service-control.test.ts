@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { serviceControl, startServiceControl } from "./service-control.js";
 
 /** Records each action it is asked for. */
@@ -29,6 +29,57 @@ describe("the runner's service control", () => {
       await services.kill("aztec-listener");
       await services.start("aztec-listener");
       await expect(services.start("aztec-listener")).rejects.toThrow("409");
+      expect(calls).toEqual(["kill aztec-listener", "start aztec-listener"]);
+    } finally {
+      await control.close();
+    }
+  });
+
+  it("refuses a kill while another of the same service is under way, so one kill allows one start", async () => {
+    const calls: string[] = [];
+    const exits: (() => void)[] = [];
+    const control = await startServiceControl({
+      port: 0,
+      names: ["aztec-listener"],
+      actions: {
+        kill: (name) => {
+          calls.push(`kill ${name}`);
+          return new Promise<void>((exited) => exits.push(exited));
+        },
+        start: (name) => {
+          calls.push(`start ${name}`);
+          return Promise.resolve();
+        },
+      },
+      signal: new AbortController().signal,
+    });
+    const services = serviceControl(control.url);
+    try {
+      const first = services.kill("aztec-listener");
+      await vi.waitFor(() => expect(exits).toHaveLength(1));
+      let answered = false;
+      const second = services
+        .kill("aztec-listener")
+        .then(
+          () => "killed",
+          (e: Error) => e.message,
+        )
+        .finally(() => {
+          answered = true;
+        });
+      // Refused at once, or waiting on an exit of its own.
+      await vi.waitFor(() => expect(answered || exits.length === 2).toBe(true));
+      exits[0]();
+      await first;
+      await services.start("aztec-listener");
+      exits[1]?.();
+      expect(await second, "the overlapping kill").toBe(
+        "kill aztec-listener: 409 aztec-listener is being killed already",
+      );
+      await expect(
+        services.start("aztec-listener"),
+        "a second start",
+      ).rejects.toThrow("409");
       expect(calls).toEqual(["kill aztec-listener", "start aztec-listener"]);
     } finally {
       await control.close();

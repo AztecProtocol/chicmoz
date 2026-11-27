@@ -31,10 +31,21 @@ export const startServiceControl = async ({
   signal: AbortSignal;
 }): Promise<ServiceControl> => {
   const killed = new Set<string>();
+  const killing = new Set<string>();
   const act = async (name: string, action: "kill" | "start") => {
     if (action === "kill") {
-      await actions.kill(name);
-      killed.add(name);
+      // Two kills awaiting one exit would each allow a start, the second
+      // after the first start had used its own.
+      if (killing.has(name)) {
+        throw new Error(`${name} is being killed already`);
+      }
+      killing.add(name);
+      try {
+        await actions.kill(name);
+        killed.add(name);
+      } finally {
+        killing.delete(name);
+      }
       return;
     }
     if (!killed.delete(name)) {
