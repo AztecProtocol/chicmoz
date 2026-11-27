@@ -468,8 +468,8 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
 });
 
 describe("the block topic, after both prunes", () => {
-  // Spaced steps reach the API in order from any partition; only a single
-  // partition holds the records in the order they were sent.
+  // Spaced steps reach the API in order from any partition, so the scenarios
+  // cannot show where the block records went; the broker can.
   it("holds every block record in one of its partitions", async () => {
     const partitions = await broker.recordsPerPartition(
       endpoints.broker.blockTopic,

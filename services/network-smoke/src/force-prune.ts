@@ -230,9 +230,8 @@ export const forceEpochPrune = async ({
     `doomed ${doomed.join(",")}; warped from epoch ${epoch} to ${targetEpoch}`,
   );
 
-  // Each read is compared with `before`, not with the previous read: a
-  // height read absent and later holding a new block differs from neither
-  // neighbouring read.
+  // Against `before` only: a doomed height is pruned once a read lacks its
+  // old hash, and replaced once a read shows another block there.
   const doomedTip = Math.max(...doomed);
   let pruneAt: number | undefined;
   let replacedAt: number | undefined;
