@@ -24,7 +24,8 @@ export type ProvenSideWorkDeps = {
 };
 
 // The node can serve another block at a height once the pass has settled.
-// Below the finalized tip the store keeps no hash, and a block cannot change.
+// Below the finalized tip, where a block cannot change, the store keeps no
+// hash, so the side work trusts the pinned node's block there.
 const onStoredChain = async (
   block: L2Block,
   { rollupVersion, finalizedTip, storedHash }: ProvenSideWorkDeps,
