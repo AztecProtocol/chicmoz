@@ -19,13 +19,13 @@ export const useGetTxEffectByHash = (
     queryKey: queryKeyGenerator.txEffectByHash(hash),
     queryFn: () => TxEffectsAPI.getTxEffectByHash(hash),
     enabled: !!hash,
-    // Detail queries poll, since catch-up blocks move effects and fill
-    // blocks' txs with no websocket frame.
+    // Detail queries poll, since catch-up blocks index and move effects and
+    // fill blocks' txs with no websocket frame.
     refetchInterval: ({ state }) =>
       !state.data
         ? refetchUntilFound
           ? LIVE_REFETCH_INTERVAL
-          : false
+          : SLOW_REFETCH_INTERVAL
         : state.data.isOrphaned
           ? REFETCH_INTERVAL
           : SLOW_REFETCH_INTERVAL,

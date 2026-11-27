@@ -40,12 +40,12 @@ const intervalAfterFetching = (data?: { isOrphaned: boolean }) => {
 };
 
 describe("useGetTxEffectByHash", () => {
-  it("refetches an orphaned effect every 10 s and a canonical one every minute, but not a missing one", () => {
+  it("refetches an orphaned effect every 10 s, and a canonical or missing one every minute", () => {
     expect(intervalAfterFetching({ isOrphaned: true })).toBe(REFETCH_INTERVAL);
     expect(intervalAfterFetching({ isOrphaned: false })).toBe(
       SLOW_REFETCH_INTERVAL,
     );
-    expect(intervalAfterFetching()).toBe(false);
+    expect(intervalAfterFetching()).toBe(SLOW_REFETCH_INTERVAL);
   });
 });
 
