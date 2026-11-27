@@ -7,13 +7,14 @@ import { deleteL2ToL1Msgs } from "./delete.js";
 export const storeL2ToL1Msgs = async (
   txHash: HexString,
   msgs: ChicmozL2PendingL2ToL1Msg[],
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
   if (msgs.length === 0) {
     return;
   }
 
   // Delete-then-insert for idempotency (same pattern as public call requests)
-  await deleteL2ToL1Msgs(txHash);
+  await deleteL2ToL1Msgs(txHash, executor);
 
   const values = msgs.map((msg) => ({
     txHash,
@@ -23,7 +24,7 @@ export const storeL2ToL1Msgs = async (
     content: msg.content,
   }));
 
-  await db().insert(l2TxL2ToL1Msg).values(values);
+  await executor.insert(l2TxL2ToL1Msg).values(values);
 
   logger.info(`📨 Stored ${msgs.length} L2-to-L1 messages for tx: ${txHash}`);
 };

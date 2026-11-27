@@ -555,6 +555,14 @@ exports[`committed frames replayed into the explorer-api consumers > recorded lo
   {
     "args": [
       "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
+      "chain-locked transaction",
+    ],
+    "seam": "txEffectExists",
+  },
+  {
+    "args": [
+      "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
+      "chain-locked transaction",
     ],
     "seam": "removeDroppedTxByHash",
   },
@@ -581,6 +589,7 @@ exports[`committed frames replayed into the explorer-api consumers > recorded lo
         "teardownGasLimitL2": 0,
         "txHash": "0x12bac4f40aa7b6d3b7f9a960ec18d12646d9e0ff390352033e2f69b80b47b38a",
       },
+      "chain-locked transaction",
     ],
     "seam": "storeOrUpdateL2Tx",
   },

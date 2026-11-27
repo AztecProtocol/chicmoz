@@ -7,7 +7,8 @@ import {
 } from "./environment.js";
 import { subscribeHandlers } from "./events/received/index.js";
 import { logger } from "./logger.js";
-import { removeDroppedThatHaveTxEffects } from "./svcs/database/controllers/dropped-tx/remove.js";
+import { bumpChainRevision } from "./svcs/cache/chain-revision.js";
+import { removeMinedDroppedTxs } from "./svcs/database/controllers/dropped-tx/remove.js";
 import { updateContractInstanceAztecScanNotes } from "./svcs/database/controllers/l2/aztec-scan-notes.js";
 import { initializeRollupVersionCache } from "./svcs/database/controllers/l2/chain-info/rollup-version-cache.js";
 import { deleteAllTxs } from "./svcs/database/controllers/l2Tx/delete-all-txs.js";
@@ -23,7 +24,7 @@ import {
 
 export const start = async () => {
   await deleteAllTxs(); // TODO: perhaps a more specific deleteAllTxs should be created, also some logs could be good.
-  await removeDroppedThatHaveTxEffects();
+  await removeMinedDroppedTxs();
   await initializeRollupVersionCache();
   await initializeProtocolContracts();
   const aztecScanNotes = AZTEC_SCAN_NOTES[L2_NETWORK_ID];
@@ -39,6 +40,9 @@ ORIGIN: ${notes.origin}`);
       });
     }
   }
+  // In archive mode too: a crash between a block's commit and its bump left
+  // that bump undone, and the writes above change cached reads as well.
+  await bumpChainRevision();
 
   if (ARCHIVE_MODE) {
     logger.info(

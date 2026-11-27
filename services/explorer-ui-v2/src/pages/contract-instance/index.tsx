@@ -325,6 +325,9 @@ export const ContractInstancePage: FC = () => {
               <HashCell value={instance.blockHash} />
             </Link>
           </DetailField>
+          <DetailField label="Status" width="extra-wide">
+            {instance.isOrphaned ? "orphaned" : "active"}
+          </DetailField>
           <DetailField label="Artifact hash" width="extra-wide">
             {instance.artifactHash}
           </DetailField>

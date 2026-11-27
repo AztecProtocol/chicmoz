@@ -1,6 +1,29 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKeyGenerator } from "~/hooks/api";
 
+const prefixOf = (queryKey: readonly unknown[]) => queryKey.slice(0, 1);
+
+// Refreshed on a block or tips frame. Either can follow a prune, which changes
+// the reorg lists and any block, tx or contract instance already shown: the
+// detail and page queries go by prefix, whatever they name.
+const CHAIN_QUERIES = [
+  queryKeyGenerator.latestBlock,
+  queryKeyGenerator.latestTableBlocks,
+  queryKeyGenerator.blocksByNativeStatus,
+  queryKeyGenerator.l2TipsHealth,
+  queryKeyGenerator.reorgs,
+  queryKeyGenerator.orphanedBlocks,
+  prefixOf(queryKeyGenerator.paginatedTableBlocks(0, 0, undefined)),
+  prefixOf(queryKeyGenerator.blockByHeight("")),
+  prefixOf(queryKeyGenerator.txEffectsByBlockHeight(undefined)),
+  prefixOf(queryKeyGenerator.txEffectByHash("")),
+  prefixOf(queryKeyGenerator.pendingTxsByHash("")),
+  prefixOf(queryKeyGenerator.droppedTxByHash("")),
+  prefixOf(queryKeyGenerator.contractInstance("")),
+  prefixOf(queryKeyGenerator.deployedContractInstances("")),
+  queryKeyGenerator.latestContractInstances,
+];
+
 /**
  * The websocket publisher sends compact payloads such as `{ block }` and
  * `{ txs }`. Older/alternate publishers may send a `{ topic }` envelope, so we
@@ -37,18 +60,9 @@ export const handleWebSocketMessage = async (
   const hasStatsUpdate = topic?.includes("stats") ?? false;
 
   if (hasBlockUpdate || hasTipsUpdate) {
-    await queryClient.invalidateQueries({
-      queryKey: queryKeyGenerator.latestBlock,
-    });
-    await queryClient.invalidateQueries({
-      queryKey: queryKeyGenerator.latestTableBlocks,
-    });
-    await queryClient.invalidateQueries({
-      queryKey: queryKeyGenerator.blocksByNativeStatus,
-    });
-    await queryClient.invalidateQueries({
-      queryKey: queryKeyGenerator.l2TipsHealth,
-    });
+    for (const queryKey of CHAIN_QUERIES) {
+      await queryClient.invalidateQueries({ queryKey });
+    }
   }
 
   if (hasTxUpdate) {

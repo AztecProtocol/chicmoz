@@ -156,11 +156,13 @@ export const GET_L2_CONTRACT_INSTANCE = asyncHandler(async (req, res) => {
     });
     return;
   }
-  const instanceData = await dbWrapper.get(contractInstanceKeys(address), () =>
-    db.l2Contract.getL2DeployedContractInstanceByAddress(
-      address,
-      includeArtifactJson,
-    ),
+  const instanceData = await dbWrapper.getOnChain(
+    contractInstanceKeys(address),
+    () =>
+      db.l2Contract.getL2DeployedContractInstanceByAddress(
+        address,
+        includeArtifactJson,
+      ),
   );
   res.status(200).json(JSON.parse(instanceData));
 });
@@ -276,7 +278,7 @@ export const GET_L2_CONTRACT_INSTANCES_BY_BLOCK_HASH = asyncHandler(
       getContractInstancesByBlockHashSchema.parse(req).params;
     const { includeArtifactJson } =
       getContractInstancesByBlockHashSchema.parse(req).query;
-    const instances = await dbWrapper.get(
+    const instances = await dbWrapper.getOnChain(
       ["l2", "contract-instances", "block", blockHash],
       () =>
         db.l2Contract.getL2DeployedContractInstancesByBlockHash(
@@ -348,7 +350,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         },
       },
     } = postVerifiedContractInstanceSchema.parse(req);
-    const instanceData = await dbWrapper.get(
+    const instanceData = await dbWrapper.getOnChain(
       ["l2", "contract-instances", address],
       () => db.l2Contract.getL2DeployedContractInstanceByAddress(address),
     );
@@ -508,11 +510,14 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       constructorArgs,
     });
 
+    const instanceKeys = await dbWrapper.onChainKeys(
+      contractInstanceKeys(address),
+    );
     if (!deployerMetadata) {
       const freshInstance =
         await l2Contract.getL2DeployedContractInstanceByAddress(address, true);
       await setEntry(
-        contractInstanceKeys(address),
+        instanceKeys,
         JSON.stringify(freshInstance),
         CACHE_TTL_SECONDS,
       ).catch((err) => {
@@ -547,7 +552,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       await l2Contract.getL2DeployedContractInstanceByAddress(address, true);
 
     await setEntry(
-      contractInstanceKeys(address),
+      instanceKeys,
       JSON.stringify(newContractInstance),
       CACHE_TTL_SECONDS,
     ).catch((err) => {

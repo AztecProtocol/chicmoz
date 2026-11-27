@@ -55,6 +55,12 @@ describe("recorded blocks through the block handler", () => {
     },
   );
 
+  it("serves no tx effects at height 0", async () => {
+    const res = await api.request.get("/l2/blocks/0/tx-effects");
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.text)).toEqual([]);
+  });
+
   it("links each published class and deployed instance to the block that carries it", async () => {
     const classes = recorded.flatMap(({ expected }) =>
       expected.contractClassIds.map((id) => ({ id, blockHash: expected.hash })),

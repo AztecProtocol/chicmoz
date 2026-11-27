@@ -29,7 +29,7 @@ import {
   uiTxEffectTableSchema,
 } from "@chicmoz-pkg/types";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
-import { deriveNativeStatus, getTips } from "../l2/tips.js";
+import { deriveNativeStatus, getTips, statusTipHeights } from "../l2/tips.js";
 
 type GetBlocksByRange = {
   from: bigint | undefined;
@@ -41,14 +41,15 @@ const statusFilterWhere = (
   status: Exclude<UiBlockStatusFilter, "orphaned">,
   l2Tips: Awaited<ReturnType<typeof getTips>>,
 ) => {
-  if (!l2Tips || l2Tips.degradedReason) {
+  const tips = statusTipHeights(l2Tips);
+  if (!tips) {
     return status === "unknown" ? isNull(l2Block.orphan_timestamp) : sql`false`;
   }
 
-  const finalizedHeight = BigInt(l2Tips.finalized.block.number);
-  const provenHeight = BigInt(l2Tips.proven.block.number);
-  const checkpointedHeight = BigInt(l2Tips.checkpointed.block.number);
-  const proposedHeight = BigInt(l2Tips.proposed.number);
+  const finalizedHeight = BigInt(tips.finalized);
+  const provenHeight = BigInt(tips.proven);
+  const checkpointedHeight = BigInt(tips.checkpointed);
+  const proposedHeight = BigInt(tips.proposed);
 
   switch (status) {
     case "proposed":

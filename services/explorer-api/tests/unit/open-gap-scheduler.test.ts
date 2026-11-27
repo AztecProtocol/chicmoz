@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const INTERVAL_MS = 120_000;
 const TIP = 104_595;
-const PROVEN_TIP = 104_539;
 const dialect = new PgDialect();
 const render = (condition: unknown) => dialect.sqlToQuery(condition as SQL);
 
@@ -37,7 +36,8 @@ const mocks = vi.hoisted(() => {
     deleted: [] as unknown[],
     updates: [] as Array<Record<string, unknown>>,
     updateTargets: [] as unknown[][],
-    tips: {} as { degradedReason?: string; provenTip?: number },
+    candidateHeights: [] as number[],
+    tipRepairWindow: 5,
     publishFails: false,
     order: [] as string[],
   };
@@ -82,6 +82,20 @@ const mocks = vi.hoisted(() => {
     select: (fields?: Record<string, unknown>) => ({
       from: (table: object) => ({
         where: (condition: unknown) => {
+          // The tip repair's candidate query filters and orders in SQL, which
+          // the integration tests run; here it yields the heights given.
+          if (tableName(table) === "l2_tip_boundary_mismatch") {
+            return {
+              orderBy: () => ({
+                limit: (limit: number) =>
+                  Promise.resolve(
+                    state.candidateHeights
+                      .slice(0, limit)
+                      .map((height) => ({ height })),
+                  ),
+              }),
+            };
+          }
           if (tableName(table) !== "l2_open_gap") {
             return Object.assign(Promise.resolve(heightRows()), {
               orderBy: () => Promise.resolve(heightRows()),
@@ -149,7 +163,9 @@ vi.mock("../../src/environment.js", () => ({
   L2_BLOCK_RECONCILIATION_MAX_BLOCKS: 200,
   L2_BLOCK_RECONCILIATION_MAX_RANGES: 10,
   L2_BLOCK_RECONCILIATION_SCAN_WINDOW: 10_000,
-  L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW: 5,
+  get L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW() {
+    return mocks.state.tipRepairWindow;
+  },
 }));
 vi.mock("../../src/logger.js", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -158,14 +174,6 @@ vi.mock(
   "../../src/svcs/database/controllers/l2/chain-info/rollup-version-cache.js",
   () => ({ getCurrentRollupVersionNumber: () => Promise.resolve(1) }),
 );
-vi.mock("../../src/svcs/database/controllers/l2/tips.js", () => ({
-  getTips: () =>
-    Promise.resolve({
-      proposed: { number: TIP },
-      proven: { block: { number: mocks.state.tips.provenTip ?? PROVEN_TIP } },
-      degradedReason: mocks.state.tips.degradedReason,
-    }),
-}));
 vi.mock("../../src/svcs/database/controllers/l2block/get-latest.js", () => ({
   getLatestHeight: () => Promise.resolve(BigInt(TIP)),
   getLatestBlockRollupVersion: () => Promise.resolve(1),
@@ -239,7 +247,8 @@ beforeEach(() => {
     deleted: [],
     updates: [],
     updateTargets: [],
-    tips: {},
+    candidateHeights: [],
+    tipRepairWindow: 5,
     publishFails: false,
     order: [],
   });
@@ -613,44 +622,51 @@ describe("selection", () => {
 });
 
 describe("buildTipBoundaryRepairRequest", () => {
-  it("sends the window for a hash mismatch above the proven tip too", async () => {
-    mocks.state.tips = {
-      degradedReason: `proposed boundary block ${TIP - 2} hash mismatch: db=0x1 tip=0x2`,
-    };
+  // The mismatch, then the heights below it, then those above it.
+  const windowAround = (height: number, radius: number) => [
+    range(height, height),
+    range(height - radius, height - 1),
+    range(height + 1, height + radius),
+  ];
+  // What a listener with a lower limit than the API's sends for a request: the
+  // ranges in order, each from its lowest height and at most `limit` wide,
+  // until `limit` heights in all.
+  const listenerSends = (
+    request:
+      | { ranges: Array<{ from: number; to: number }>; maxBlocks?: number }
+      | undefined,
+    limit: number,
+  ) =>
+    (request?.ranges ?? [])
+      .flatMap(({ from, to }) => {
+        const first = Math.max(1, from);
+        return heights(first, Math.min(to, first + limit - 1));
+      })
+      .slice(0, Math.min(request?.maxBlocks ?? limit, limit));
+
+  it("sends the window around the picked mismatch, keeping its row's backoff", async () => {
+    mocks.state.candidateHeights = [TIP - 2];
 
     const planned = await buildTipBoundaryRepairRequest();
 
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
-  });
-
-  it("sends the window for a missing block", async () => {
-    mocks.state.tips = {
-      degradedReason: `proposed boundary block ${TIP - 2} is missing`,
-    };
-
-    const planned = await buildTipBoundaryRepairRequest();
-
-    expect(planned?.request.ranges).toEqual([range(TIP - 7, TIP + 3)]);
+    expect(planned?.request.ranges).toEqual(windowAround(TIP - 2, 5));
     // Reopening a tip row keeps its backoff: it is fulfilled as soon as its
     // heights are present, mismatch or not.
     expect(mocks.state.upserts[0].set).not.toHaveProperty("requestCount");
   });
 
-  it("backs off while its row is not due", async () => {
-    mocks.state.tips = {
-      degradedReason: "finalized boundary block 98106 is missing",
-    };
-    mocks.state.gaps = [
-      gap({
-        id: "MAINNET:tip_boundary_mismatch:98101:98111",
-        fromHeight: 98101,
-        toHeight: 98111,
-        reason: "tip_boundary_mismatch",
-        due: false,
-      }),
-    ];
+  it("asks for the mismatch before its neighbors, so a listener sending fewer heights than the window still sends it", async () => {
+    mocks.state.tipRepairWindow = 300;
+    mocks.state.candidateHeights = [TIP - 2];
 
-    await expect(buildTipBoundaryRepairRequest()).resolves.toBeNull();
+    const planned = await buildTipBoundaryRepairRequest();
+
+    expect(listenerSends(planned?.request, 50)).toContain(TIP - 2);
+    // The window still fits the API's own block budget.
+    expect(planned?.request).toMatchObject({
+      ranges: windowAround(TIP - 2, 99),
+      maxBlocks: 199,
+    });
   });
 });
 

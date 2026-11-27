@@ -1,10 +1,10 @@
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import { HexString } from "@chicmoz-pkg/types";
-import { eq } from "drizzle-orm";
+import { and, eq, exists, isNull, sql } from "drizzle-orm";
 import { logger } from "../../../../logger.js";
 import { droppedTx } from "../../../database/schema/dropped-tx/index.js";
-import { txEffect } from "../../schema/index.js";
-import { getDroppedTxs } from "./get-tx.js";
+import { body, l2Block, txEffect } from "../../schema/index.js";
+import { withChainLock } from "../chain-lock.js";
 
 /**
  * Removes a dropped transaction by its hash
@@ -14,8 +14,9 @@ import { getDroppedTxs } from "./get-tx.js";
  */
 export const removeDroppedTxByHash = async (
   txHash: HexString,
+  executor: ReturnType<typeof db> = db(),
 ): Promise<number> => {
-  const deletedEntries = await db()
+  const deletedEntries = await executor
     .delete(droppedTx)
     .where(eq(droppedTx.txHash, txHash))
     .returning();
@@ -27,20 +28,25 @@ export const removeDroppedTxByHash = async (
   return deletedEntries.length;
 };
 
-export const removeDroppedThatHaveTxEffects = async (): Promise<number> => {
-  const allDroppedTxs = await getDroppedTxs();
-  let count = 0;
-  for (const tx of allDroppedTxs) {
-    const txEffectRes = await db()
-      .select()
-      .from(txEffect)
-      .where(eq(txEffect.txHash, tx.txHash))
-      .limit(1);
-    if (txEffectRes.length > 0) {
-      await removeDroppedTxByHash(tx.txHash);
-      count++;
-    }
-  }
-  logger.info(`🗑️🗑️🔥🔥 removed ${count} dropped txs that already had a txEffect`);
-  return count;
+/** Removes the dropped rows of txs a canonical block holds: those are mined. */
+export const removeMinedDroppedTxs = async (): Promise<number> => {
+  const { rowCount } = await withChainLock((dbTx) =>
+    dbTx.delete(droppedTx).where(
+      exists(
+        dbTx
+          .select({ one: sql`1` })
+          .from(txEffect)
+          .innerJoin(body, eq(txEffect.bodyId, body.id))
+          .innerJoin(l2Block, eq(body.blockHash, l2Block.hash))
+          .where(
+            and(
+              eq(txEffect.txHash, droppedTx.txHash),
+              isNull(l2Block.orphan_timestamp),
+            ),
+          ),
+      ),
+    ),
+  );
+  logger.info(`🗑️🗑️🔥🔥 removed ${rowCount ?? 0} dropped txs that are mined`);
+  return rowCount ?? 0;
 };

@@ -89,8 +89,9 @@ export const openapi_GET_BLOCK: OpenAPIObject["paths"] = {
 
 export const GET_BLOCK = asyncHandler(async (req, res) => {
   const { heightOrHash } = getBlockByHeightOrHashSchema.parse(req).params;
-  const blockData = await dbWrapper.get(["l2", "blocks", heightOrHash], () =>
-    db.l2Block.getBlock(heightOrHash),
+  const blockData = await dbWrapper.getOnChain(
+    ["l2", "blocks", heightOrHash],
+    () => db.l2Block.getBlock(heightOrHash),
   );
   res.status(200).json(await parseWithFreshNativeStatuses(blockData));
 });

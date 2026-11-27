@@ -19,27 +19,60 @@ const PUBLISHED_BLOCK_FRAME = new URL(
   import.meta.url,
 );
 
+const TX = `0x${"cd".repeat(32)}`;
+const ADDRESS = `0x${"ef".repeat(32)}`;
+// Views a prune can change: the reorg lists, the block pages, block and tx
+// details by height and by hash, and the contract instances and their lists.
+const CHAIN_VIEWS = [
+  queryKeyGenerator.reorgs,
+  queryKeyGenerator.orphanedBlocks,
+  queryKeyGenerator.paginatedTableBlocks(2, 20, undefined),
+  queryKeyGenerator.blockByHeight("7"),
+  queryKeyGenerator.blockByHeight(`0x${"ab".repeat(32)}`),
+  queryKeyGenerator.txEffectsByBlockHeight(7),
+  queryKeyGenerator.txEffectByHash(TX),
+  queryKeyGenerator.pendingTxsByHash(TX),
+  queryKeyGenerator.droppedTxByHash(TX),
+  queryKeyGenerator.contractInstance(ADDRESS),
+  queryKeyGenerator.deployedContractInstances(`0x${"12".repeat(32)}`),
+  queryKeyGenerator.paginatedContractInstances(20, 20, "all"),
+];
+// A block frame says nothing about it.
+const UNRELATED = queryKeyGenerator.averageFees;
+
+const staleAfter = async (frame: string, views: unknown[][]) => {
+  const queryClient = new QueryClient();
+  for (const key of [...views, UNRELATED]) {
+    queryClient.setQueryData(key, []);
+  }
+  await handleWebSocketMessage(queryClient, frame);
+  return {
+    views: views.map((key) => queryClient.getQueryState(key)?.isInvalidated),
+    unrelated: queryClient.getQueryState(UNRELATED)?.isInvalidated,
+  };
+};
+
 // The handler drops a frame it cannot parse or whose keys it does not know,
 // without a word, so a change to the publisher's frame would silently stop
 // live updates. A hand-written frame here would not follow the publisher.
 describe("websocket frames from the publisher", () => {
-  it("a published block frame marks the latest-block and block-table queries stale", async () => {
-    const queryClient = new QueryClient();
+  it("a published block frame marks the latest-block, block-table and chain detail queries stale", async () => {
     const views = [
       queryKeyGenerator.latestBlock,
       queryKeyGenerator.latestTableBlocks,
+      ...CHAIN_VIEWS,
     ];
-    for (const key of views) {
-      queryClient.setQueryData(key, []);
-    }
-
-    await handleWebSocketMessage(
-      queryClient,
-      readFileSync(PUBLISHED_BLOCK_FRAME, "utf8"),
-    );
 
     expect(
-      views.map((key) => queryClient.getQueryState(key)?.isInvalidated),
-    ).toEqual([true, true]);
+      await staleAfter(readFileSync(PUBLISHED_BLOCK_FRAME, "utf8"), views),
+    ).toEqual({ views: views.map(() => true), unrelated: false });
+  });
+
+  // No publisher test records a tips frame. The publisher sends `{ l2Tips }`
+  // (`sendL2TipsToClients`), and the handler reads only that key.
+  it("a tips frame marks the reorg lists and the chain detail queries stale", async () => {
+    expect(
+      await staleAfter(JSON.stringify({ l2Tips: {} }), CHAIN_VIEWS),
+    ).toEqual({ views: CHAIN_VIEWS.map(() => true), unrelated: false });
   });
 });

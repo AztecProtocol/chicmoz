@@ -1,3 +1,4 @@
+import { type ChicmozL2TxEffectDeluxe } from "@chicmoz-pkg/types";
 import { Link, useParams } from "@tanstack/react-router";
 import { type FC, useState } from "react";
 import {
@@ -31,6 +32,16 @@ import {
 
 type Tab = "notes" | "nulls" | "public" | "l1" | "logs" | "calls";
 
+// By hash: a height names whichever block is canonical there when the link
+// is followed, which can be another block by then.
+const EffectBlockLink: FC<{ effect: ChicmozL2TxEffectDeluxe }> = ({
+  effect,
+}) => (
+  <Link to="/blocks/$blockNumber" params={{ blockNumber: effect.blockHash }}>
+    #{fmtNum(Number(effect.blockHeight))}
+  </Link>
+);
+
 export const TxDetailPage: FC = () => {
   const { hash = "" } = useParams({ strict: false });
   const [tab, setTab] = useState<Tab>("notes");
@@ -46,14 +57,19 @@ export const TxDetailPage: FC = () => {
   const feeJuiceSymbol = getFeeJuiceSymbol(chainInfo?.feeJuiceSymbol);
   const feeJuiceAddress = chainInfo?.l1ContractAddresses?.feeJuiceAddress;
 
-  const mined = !!effect;
+  // Only a block on the chain mines a tx: an orphaned block's effect is history.
+  const historical = effect?.isOrphaned === true;
+  const mined = !!effect && !historical;
+  // No status while no lookup has found the tx.
   const status = mined
     ? "mined"
     : dropped
       ? "dropped"
       : pending
         ? "pending"
-        : "pending";
+        : historical
+          ? "orphaned"
+          : undefined;
 
   const ts = effect?.timestamp
     ? effect.timestamp
@@ -88,19 +104,13 @@ export const TxDetailPage: FC = () => {
         <div className="kicker">Tx effect · {ts ? ageStr(ts) : "—"}</div>
         <h1 className="hash-sized">{hash}</h1>
         <div className="meta-row">
-          <StatusPill status={status} />
-          {mined && effect?.blockHeight !== undefined && (
+          {status && <StatusPill status={status} />}
+          {effect?.blockHeight !== undefined && (
             <span className="meta-line">
-              in{" "}
-              <Link
-                to="/blocks/$blockNumber"
-                params={{ blockNumber: String(effect.blockHeight) }}
-              >
-                #{fmtNum(Number(effect.blockHeight))}
-              </Link>
+              {historical ? "was in" : "in"} <EffectBlockLink effect={effect} />
             </span>
           )}
-          {dropped && (
+          {status === "dropped" && dropped && (
             <span className="meta-line" style={{ color: "var(--red)" }}>
               dropped at {toIsoUtc(dropped.droppedAt)}
             </span>
@@ -108,7 +118,7 @@ export const TxDetailPage: FC = () => {
         </div>
       </div>
 
-      {mined && effect && (
+      {effect && (
         <>
           <div className="stats-strip">
             <div className="sc">
@@ -132,12 +142,7 @@ export const TxDetailPage: FC = () => {
             <div className="sc">
               <div className="lbl">Block</div>
               <div className="val">
-                <Link
-                  to="/blocks/$blockNumber"
-                  params={{ blockNumber: String(effect.blockHeight) }}
-                >
-                  #{fmtNum(Number(effect.blockHeight))}
-                </Link>
+                <EffectBlockLink effect={effect} />
               </div>
             </div>
             <div className="sc">
@@ -153,7 +158,10 @@ export const TxDetailPage: FC = () => {
           <div className="panel">
             <div className="panel-head">
               <h3>
-                Transaction<span className="tag">mined transaction</span>
+                Transaction
+                <span className="tag">
+                  {historical ? "in an orphaned block" : "mined transaction"}
+                </span>
               </h3>
             </div>
             <div className="kv-grid">
@@ -161,15 +169,14 @@ export const TxDetailPage: FC = () => {
                 {effect.txHash}
               </DetailField>
               <DetailField label="Status" width="extra-wide">
-                <span style={{ color: "var(--green)" }}>mined</span>
+                {historical ? (
+                  <span style={{ color: "var(--red)" }}>orphaned</span>
+                ) : (
+                  <span style={{ color: "var(--green)" }}>mined</span>
+                )}
               </DetailField>
               <DetailField label="Block" width="extra-wide">
-                <Link
-                  to="/blocks/$blockNumber"
-                  params={{ blockNumber: String(effect.blockHeight) }}
-                >
-                  #{fmtNum(Number(effect.blockHeight))}
-                </Link>
+                <EffectBlockLink effect={effect} />
               </DetailField>
               <DetailField label="Block hash" width="extra-wide">
                 {effect.blockHash}
@@ -305,7 +312,7 @@ export const TxDetailPage: FC = () => {
         </>
       )}
 
-      {!mined && pending && (
+      {status === "pending" && pending && (
         <>
           <div className="panel">
             <div className="panel-head">
@@ -369,7 +376,7 @@ export const TxDetailPage: FC = () => {
         </>
       )}
 
-      {!mined && !pending && dropped && (
+      {status === "dropped" && dropped && (
         <div className="panel">
           <div className="panel-head">
             <h3>
@@ -398,7 +405,7 @@ export const TxDetailPage: FC = () => {
         </div>
       )}
 
-      {!mined && !pending && !dropped && (
+      {!effect && !pending && !dropped && (
         <div className="panel">
           <div className="empty-state">tx not found</div>
         </div>

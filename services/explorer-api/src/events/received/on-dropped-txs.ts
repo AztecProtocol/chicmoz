@@ -1,4 +1,4 @@
-import { EventHandler } from "@chicmoz-pkg/message-bus";
+import { type EventHandler, type Heartbeat } from "@chicmoz-pkg/message-bus";
 import {
   DroppedTxsEvent,
   generateL2TopicName,
@@ -7,36 +7,29 @@ import {
 import { SERVICE_NAME } from "../../constants.js";
 import { L2_NETWORK_ID } from "../../environment.js";
 import { logger } from "../../logger.js";
+import { withChainLock } from "../../svcs/database/controllers/chain-lock.js";
 import { storeDroppedTx } from "../../svcs/database/controllers/dropped-tx/store.js";
 import { deleteTx } from "../../svcs/database/controllers/l2Tx/index.js";
 import { txEffectExists } from "../../svcs/database/controllers/l2TxEffect/get-tx-effect.js";
 import { deletePublicCall } from "../../svcs/database/controllers/l2Public-call/delete.js";
 import { deleteL2ToL1Msgs } from "../../svcs/database/controllers/l2PendingL2ToL1Msg/delete.js";
 
-const onDroppedTxs = async ({ txs }: DroppedTxsEvent) => {
+const onDroppedTxs = async ({ txs }: DroppedTxsEvent, heartbeat: Heartbeat) => {
   logger.info(`🗑️ Received ${txs.length} dropped txs to handle`);
 
   for (const droppedTx of txs) {
-    const isAlreadyStored = await txEffectExists(droppedTx.txHash);
-    if (isAlreadyStored) {
-      logger.info(`🗑️ Dropped tx ${droppedTx.txHash} already exists, skipping`);
-      continue;
-    }
-    try {
-      // Store as dropped transaction
-      await storeDroppedTx(droppedTx);
-
-      // Delete public call data
-      await deletePublicCall(droppedTx.txHash);
-
-      // Delete L2-to-L1 messages
-      await deleteL2ToL1Msgs(droppedTx.txHash);
-
-      // Delete from pending transactions
-      await deleteTx(droppedTx.txHash);
-    } catch (error) {
-      logger.error(`Error processing dropped tx ${droppedTx.txHash}:`, error);
-    }
+    // Each tx waits for the chain lock on its own.
+    await heartbeat();
+    await withChainLock(async (dbTx) => {
+      if (await txEffectExists(droppedTx.txHash, dbTx)) {
+        logger.info(`🗑️ Dropped tx ${droppedTx.txHash} is mined, skipping`);
+        return;
+      }
+      await storeDroppedTx(droppedTx, dbTx);
+      await deletePublicCall(droppedTx.txHash, dbTx);
+      await deleteL2ToL1Msgs(droppedTx.txHash, dbTx);
+      await deleteTx(droppedTx.txHash, dbTx);
+    });
   }
 };
 
@@ -47,5 +40,5 @@ export const droppedTxHandler: EventHandler = {
     handlerName: "droppedTxHandler",
   }),
   topic: generateL2TopicName(L2_NETWORK_ID, "DROPPED_TXS_EVENT"),
-  cb: onDroppedTxs as (arg0: unknown) => Promise<void>,
+  cb: onDroppedTxs as (arg0: unknown, heartbeat: Heartbeat) => Promise<void>,
 };

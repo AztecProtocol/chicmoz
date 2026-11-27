@@ -5,10 +5,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   type BuiltBlock,
   buildBlock,
+  buildChain,
   catchupEvent,
   freshTxHash,
   orderedEvent,
 } from "./support/blocks.js";
+import { loadChainReads } from "./support/chain.js";
 import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
@@ -37,9 +39,13 @@ describe("a replaced block that stays stored on a real database", () => {
     },
   ) => Promise<void>;
   let repairRequestCovers: (height: number) => Promise<boolean>;
+  let lastSeenAgo: (height: number, ms: number) => Promise<void>;
+  let mismatchOpenAt: (height: number) => Promise<boolean>;
+  let reads: Awaited<ReturnType<typeof loadChainReads>>;
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
+    reads = await loadChainReads();
     const { blockHandler, catchupHandler } = await import(
       "../../src/events/received/on-block/index.js"
     );
@@ -94,6 +100,24 @@ describe("a replaced block that stays stored on a real database", () => {
         ) ?? false
       );
     };
+    const { getDb } = await import("@chicmoz-pkg/postgres-helper");
+    const { and, eq, isNull } = await import("drizzle-orm");
+    const { l2TipBoundaryMismatchTable: mismatch } = await import(
+      "../../src/svcs/database/schema/l2/tips.js"
+    );
+    lastSeenAgo = async (height, ms) => {
+      await getDb()
+        .update(mismatch)
+        .set({ lastSeenAt: new Date(Date.now() - ms) })
+        .where(eq(mismatch.height, height));
+    };
+    mismatchOpenAt = async (height) =>
+      (
+        await getDb()
+          .select({ id: mismatch.id })
+          .from(mismatch)
+          .where(and(eq(mismatch.height, height), isNull(mismatch.resolvedAt)))
+      ).length > 0;
   });
 
   afterAll(async () => {
@@ -135,41 +159,74 @@ describe("a replaced block that stays stored on a real database", () => {
     expect(await isDropped(t)).toBe(false);
   });
 
-  it.fails(
-    "still requests a replaced height after the next tips validate at other heights",
-    async () => {
-      const chain: BuiltBlock[] = [];
-      for (let height = 400n; height <= 403n; height++) {
-        chain.push(
-          await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
-        );
-      }
-      const [finalized, proven, checkpointed, replaced] = chain;
-      for (const block of chain) {
-        await store(block);
-      }
-      const replacing = await buildBlock(403n, [freshTxHash()], {
-        parent: checkpointed,
+  it("requests a replaced height while the tips validate at other heights, until the block they named arrives", async () => {
+    const chain: BuiltBlock[] = [];
+    for (let height = 400n; height <= 403n; height++) {
+      chain.push(
+        await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
+      );
+    }
+    const [finalized, proven, checkpointed] = chain;
+    for (const block of chain) {
+      await store(block);
+    }
+    const replacing = await buildBlock(403n, [freshTxHash()], {
+      parent: checkpointed,
+    });
+    const next = await buildBlock(404n, [freshTxHash()], {
+      parent: replacing,
+    });
+    const tipsAt = (proposed: BuiltBlock) =>
+      storeTips({
+        proposed: { number: Number(proposed.height), hash: proposed.hash },
+        finalized,
+        proven,
+        checkpointed,
       });
-      const next = await buildBlock(404n, [freshTxHash()], {
-        parent: replacing,
+
+    await tipsAt(replacing);
+    expect(await repairRequestCovers(403)).toBe(true);
+
+    await store(next);
+    await tipsAt(next);
+
+    // The next ordered block names a parent that is not stored, so the
+    // stored block at 403 leaves the chain and its height is asked for.
+    expect(await canonicalHash(403n)).toBeUndefined();
+    expect(await reads.repairOpen(403)).toBe(true);
+    expect(await repairRequestCovers(403)).toBe(true);
+
+    // The stored tips stay valid, and the block they named fills the height.
+    await storeLate(replacing);
+
+    expect(await canonicalHash(403n)).toBe(replacing.hash);
+    expect(await mismatchOpenAt(403)).toBe(false);
+    expect(await repairRequestCovers(403)).toBe(false);
+  });
+
+  it("resolves a tip mismatch nothing fixed only a day after it was last seen", async () => {
+    const chain = await buildChain(500n, 4);
+    const [finalized, proven, checkpointed, stored] = chain;
+    for (const block of chain) {
+      await store(block);
+    }
+    const named = await buildBlock(503n, [freshTxHash()], {
+      parent: checkpointed,
+    });
+    const tipsAt = (proposed: BuiltBlock) =>
+      storeTips({
+        proposed: { number: Number(proposed.height), hash: proposed.hash },
+        finalized,
+        proven,
+        checkpointed,
       });
-      const tipsAt = (proposed: BuiltBlock) =>
-        storeTips({
-          proposed: { number: Number(proposed.height), hash: proposed.hash },
-          finalized,
-          proven,
-          checkpointed,
-        });
+    await tipsAt(named);
+    await tipsAt(stored);
+    expect(await mismatchOpenAt(503)).toBe(true);
 
-      await tipsAt(replacing);
-      expect(await repairRequestCovers(403)).toBe(true);
+    await lastSeenAgo(503, 25 * 60 * 60 * 1000);
+    await tipsAt(stored);
 
-      await store(next);
-      await tipsAt(next);
-
-      expect(await canonicalHash(403n)).toBe(replaced.hash);
-      expect(await repairRequestCovers(403)).toBe(true);
-    },
-  );
+    expect(await mismatchOpenAt(503)).toBe(false);
+  });
 });

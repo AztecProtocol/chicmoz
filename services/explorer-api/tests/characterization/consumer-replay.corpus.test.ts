@@ -87,6 +87,20 @@ vi.mock("../../src/svcs/database/controllers/l2Tx/index.js", () => ({
 vi.mock("../../src/svcs/database/controllers/dropped-tx/index.js", () => ({
   removeDroppedTxByHash: seam.record("removeDroppedTxByHash", 0),
 }));
+vi.mock(
+  "../../src/svcs/database/controllers/l2TxEffect/get-tx-effect.js",
+  () => ({ txEffectExists: seam.record("txEffectExists", false) }),
+);
+// Its transaction shows in the snapshot as the writes' last argument.
+vi.mock("../../src/svcs/database/controllers/chain-lock.js", () => ({
+  withChainLock: (fn: (dbTx: unknown) => Promise<unknown>) =>
+    fn("chain-locked transaction"),
+}));
+// The block consumers bump it; its real module reads the Redis environment on
+// import.
+vi.mock("../../src/svcs/cache/chain-revision.js", () => ({
+  bumpChainRevision: seam.record("bumpChainRevision"),
+}));
 // Only the compile-result consumer uses it; its real module reads the Redis
 // environment on import.
 vi.mock(

@@ -20,8 +20,9 @@ import { deletePublicCall } from "./delete.js";
 const resolveArtifactNames = async (
   contractAddress: string,
   functionSelector: string | undefined,
+  executor: ReturnType<typeof db>,
 ): Promise<{ contractName: string | null; functionName: string | null }> => {
-  const rows = await db()
+  const rows = await executor
     .select({
       artifactContractName: l2ContractClassRegistered.artifactContractName,
       selectorMap: l2ContractClassRegistered.selectorMap,
@@ -62,18 +63,20 @@ const resolveArtifactNames = async (
 export const storePublicCallRequests = async (
   txHash: HexString,
   publicCallRequests: PublicCallRequest[],
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
   if (publicCallRequests.length === 0) {
     return;
   }
 
-  await deletePublicCall(txHash);
+  await deletePublicCall(txHash, executor);
 
   const values = await Promise.all(
     publicCallRequests.map(async (request) => {
       const { contractName, functionName } = await resolveArtifactNames(
         request.contractAddress,
         request.functionSelector,
+        executor,
       );
       return {
         txHash,
@@ -89,7 +92,12 @@ export const storePublicCallRequests = async (
     }),
   );
 
-  await db().insert(l2TxPublicCallRequest).values(values);
+  // Two calls with one calldata share the key, and a conflict would abort the
+  // caller's transaction with it.
+  await executor
+    .insert(l2TxPublicCallRequest)
+    .values(values)
+    .onConflictDoNothing();
 
   logger.info(
     `📋 Stored ${publicCallRequests.length} public call requests for tx: ${txHash}`,

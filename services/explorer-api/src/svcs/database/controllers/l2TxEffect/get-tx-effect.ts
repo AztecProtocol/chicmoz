@@ -14,6 +14,7 @@ import {
   getTableColumns,
   gte,
   isNotNull,
+  isNull,
   lt,
   sql,
 } from "drizzle-orm";
@@ -105,14 +106,15 @@ export const getLatestTxEffects = async (): Promise<
   });
 };
 
+// Height 0 is a bound like any other, so presence is checked, not truthiness.
 const generateWhereQuery = (from?: bigint, to?: bigint) => {
-  if (from && !to) {
+  if (from !== undefined && to === undefined) {
     return gte(l2Block.height, from);
-  } else if (!from && to) {
+  } else if (from === undefined && to !== undefined) {
     return lt(l2Block.height, to);
   }
   assert(
-    from && to,
+    from !== undefined && to !== undefined,
     "FATAL: cannot have both from and to undefined when generating where query",
   );
   return and(gte(l2Block.height, from), lt(l2Block.height, to));
@@ -146,14 +148,18 @@ const _getTxEffects = async (
   const rollupVersion = await getCurrentRollupVersionNumber();
   const versionFilter =
     rollupVersion !== null ? eq(l2Block.version, rollupVersion) : undefined;
+  // A block off the chain keeps the effects no canonical block took: they
+  // are its history, not what its height holds. The latest list keeps them,
+  // flagged `isOrphaned`.
+  const heightFilter = and(isNull(l2Block.orphan_timestamp), versionFilter);
 
   let whereQuery;
 
   switch (args.getType) {
     case GetTypes.BlockHeightRange:
-      if (args.from ?? args.to) {
+      if (args.from !== undefined || args.to !== undefined) {
         whereQuery = joinQuery
-          .where(and(generateWhereQuery(args.from, args.to), versionFilter))
+          .where(and(generateWhereQuery(args.from, args.to), heightFilter))
           .orderBy(desc(l2Block.height), desc(txEffect.index))
           .limit(DB_MAX_TX_EFFECTS);
       } else {
@@ -169,7 +175,7 @@ const _getTxEffects = async (
           and(
             eq(l2Block.height, args.blockHeight),
             eq(txEffect.index, args.txEffectIndex),
-            versionFilter,
+            heightFilter,
           ),
         )
         .limit(1);
@@ -304,13 +310,19 @@ export const getTxEffectDynamicWhere = async (
   return chicmozL2TxEffectDeluxeSchema.parse(toParse);
 };
 
-export const txEffectExists = async (hash: HexString): Promise<boolean> => {
-  const res = await db()
+/** Whether a canonical block holds the tx: an effect a dead block keeps is not mined. */
+export const txEffectExists = async (
+  hash: HexString,
+  executor: ReturnType<typeof db> = db(),
+): Promise<boolean> => {
+  const res = await executor
     .select({
       txHash: txEffect.txHash,
     })
     .from(txEffect)
-    .where(eq(txEffect.txHash, hash))
+    .innerJoin(body, eq(txEffect.bodyId, body.id))
+    .innerJoin(l2Block, eq(body.blockHash, l2Block.hash))
+    .where(and(eq(txEffect.txHash, hash), isNull(l2Block.orphan_timestamp)))
     .limit(1)
     .execute();
 

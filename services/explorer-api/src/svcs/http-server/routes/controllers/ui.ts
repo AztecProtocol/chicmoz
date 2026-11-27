@@ -122,7 +122,7 @@ export const openapi_GET_TX_EFFECTS_BY_BLOCK_HEIGHT_UI_TABLE: OpenAPIObject["pat
 export const GET_TX_EFFECTS_BY_BLOCK_HEIGHT_UI_TABLE = asyncHandler(
   async (req, res) => {
     const { blockHeight } = getTxEffectsByBlockHeightSchema.parse(req).params;
-    const txEffectsData = await dbWrapper.get(
+    const txEffectsData = await dbWrapper.getOnChain(
       ["l2", "blocks", blockHeight, "txEffects"],
       () => db.ui.getTxEffectForUiTable({ blockHeight, getType: 1 }),
     );

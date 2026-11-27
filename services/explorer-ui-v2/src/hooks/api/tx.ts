@@ -24,8 +24,8 @@ export const usePendingTxs = (): UseQueryResult<
 
 export const usePendingTxsByHash = (
   hash: string,
-): UseQueryResult<ChicmozL2PendingTx, Error> => {
-  return useQuery<ChicmozL2PendingTx, Error>({
+): UseQueryResult<ChicmozL2PendingTx | null, Error> => {
+  return useQuery<ChicmozL2PendingTx | null, Error>({
     queryKey: queryKeyGenerator.pendingTxsByHash(hash),
     queryFn: () => TxAPI.getPendingTxsByHash(hash),
     enabled: !!hash,

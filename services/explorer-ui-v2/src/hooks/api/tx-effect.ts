@@ -7,6 +7,7 @@ import { TxEffectsAPI } from "~/api";
 import {
   LIVE_REFETCH_INTERVAL,
   REFETCH_INTERVAL,
+  SLOW_REFETCH_INTERVAL,
   queryKeyGenerator,
 } from "./utils";
 
@@ -18,9 +19,16 @@ export const useGetTxEffectByHash = (
     queryKey: queryKeyGenerator.txEffectByHash(hash),
     queryFn: () => TxEffectsAPI.getTxEffectByHash(hash),
     enabled: !!hash,
+    // Detail queries poll, since catch-up blocks index and move effects and
+    // fill blocks' txs with no websocket frame.
     refetchInterval: ({ state }) =>
-      refetchUntilFound && !state.data ? LIVE_REFETCH_INTERVAL : false,
-    // Mined tx effects are immutable — cache for 5min.
+      !state.data
+        ? refetchUntilFound
+          ? LIVE_REFETCH_INTERVAL
+          : SLOW_REFETCH_INTERVAL
+        : state.data.isOrphaned
+          ? REFETCH_INTERVAL
+          : SLOW_REFETCH_INTERVAL,
     staleTime: 5 * 60_000,
   });
 };
@@ -49,6 +57,7 @@ export const useGetTableTxEffectsByBlockHeight = (
         ? Promise.resolve([])
         : TxEffectsAPI.getTableTxEffectsByBlockHeight(BigInt(height)),
     enabled: height !== undefined,
+    refetchInterval: SLOW_REFETCH_INTERVAL,
     staleTime: 5 * 60_000,
   });
 };

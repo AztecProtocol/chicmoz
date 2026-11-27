@@ -13,6 +13,7 @@ import {
   lte,
   ne,
   not,
+  notExists,
   or,
   sql,
 } from "drizzle-orm";
@@ -27,9 +28,9 @@ import {
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
 import { l2OpenGapTable } from "../../schema/l2/open-gap.js";
+import { l2TipBoundaryMismatchTable } from "../../schema/l2/tips.js";
 import { l2Block } from "../../schema/l2block/index.js";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
-import { getTips } from "../l2/tips.js";
 import { getLatestBlockRollupVersion, getLatestHeight } from "./get-latest.js";
 
 type GapRange = { from: number; to: number; statusHint: "proposed" };
@@ -517,11 +518,11 @@ const findPresentHeights = async (ranges: Array<{ from: number; to: number }>) =
   return new Set(rows.map((row) => Number(row.height)));
 };
 
+// Heights above the latest canonical block are still on their way in the
+// ordered stream: asking for them would race it.
 const getReconciliationUpperBound = async () => {
-  const tips = await getTips();
   const latestHeight = await getLatestHeight();
-  const upperBound = tips?.proposed.number ?? (latestHeight ? Number(latestHeight) : 0);
-  return { tips, upperBound };
+  return latestHeight === null ? 0 : Number(latestHeight);
 };
 
 export const buildMissingBlockRangeRequest = async ({
@@ -533,7 +534,7 @@ export const buildMissingBlockRangeRequest = async ({
   scanWindow?: number;
   maxBlocks?: number;
 }): Promise<PlannedRangeRequest | null> => {
-  const { upperBound } = await getReconciliationUpperBound();
+  const upperBound = await getReconciliationUpperBound();
   if (!Number.isSafeInteger(upperBound) || upperBound < 1) {
     logger.info(`Skipping ${reason} L2 block reconciliation: no upper bound`);
     return null;
@@ -581,40 +582,75 @@ export const buildMissingBlockRangeRequest = async ({
   };
 };
 
-const parseTipBoundaryHeight = (degradedReason: string | undefined) => {
-  if (!degradedReason) {
-    return null;
-  }
-  const match = /boundary block (\d+) (?:is missing|hash mismatch)/u.exec(degradedReason);
-  if (!match?.[1]) {
-    return null;
-  }
-  const height = Number(match[1]);
-  return Number.isSafeInteger(height) && height > 0 ? height : null;
-};
-
+/**
+ * Asks for the window around an open tip-boundary mismatch: the least
+ * recently seen one whose window is not backing off. While the block
+ * consumer lags, a newer mismatch can appear on every tick; oldest first, it
+ * cannot keep an older one waiting. The request names the mismatch height
+ * first, then the rest of its window, and is sent again while the mismatch
+ * stays open (its heights may be present but wrong), with the same backoff
+ * as other gaps, whatever the window row's status: blocks landing in the
+ * window fulfil the row without resolving the mismatch.
+ */
 export const buildTipBoundaryRepairRequest =
   async (): Promise<PlannedRangeRequest | null> => {
-    const tips = await getTips();
-    const height = parseTipBoundaryHeight(tips?.degradedReason);
-    if (!height) {
+    // A window fits one request's block budget: wider, it would name heights
+    // no request could carry.
+    const repairWindow = Math.min(
+      L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW,
+      Math.floor((L2_BLOCK_RECONCILIATION_MAX_BLOCKS - 1) / 2),
+    );
+    const rollupVersion = await getCurrentRollupVersionNumber();
+    const mismatch = l2TipBoundaryMismatchTable;
+    // Every filter, the backoff included, applies before the limit: rows a
+    // tick would pass over must not hide one it would send.
+    const [candidate] = await db()
+      .select({ height: mismatch.height })
+      .from(mismatch)
+      .where(
+        and(
+          eq(mismatch.l2NetworkId, L2_NETWORK_ID),
+          isNull(mismatch.resolvedAt),
+          // This version's, and those recorded before mismatches carried one.
+          rollupVersion === null
+            ? undefined
+            : or(
+                isNull(mismatch.rollupVersion),
+                eq(mismatch.rollupVersion, rollupVersion),
+              ),
+          // The listener fetches no height below 1.
+          gte(mismatch.height, 1),
+          notExists(
+            db()
+              .select({ one: sql`1` })
+              .from(l2OpenGapTable)
+              .where(
+                and(
+                  eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
+                  eq(l2OpenGapTable.reason, TIP_BOUNDARY_REASON),
+                  eq(
+                    l2OpenGapTable.fromHeight,
+                    sql`greatest(1, ${mismatch.height} - ${repairWindow})`,
+                  ),
+                  eq(
+                    l2OpenGapTable.toHeight,
+                    sql`${mismatch.height} + ${repairWindow}`,
+                  ),
+                  not(gapDueSql(Date.now())),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(asc(mismatch.lastSeenAt))
+      .limit(1);
+    if (!candidate) {
       return null;
     }
-    const repairWindow = L2_BLOCK_RECONCILIATION_TIP_REPAIR_WINDOW;
+    const { height } = candidate;
     const from = Math.max(1, height - repairWindow);
     const to = height + repairWindow;
     const id = gapId({ from, to, reason: TIP_BOUNDARY_REASON });
-    // The window is re-sent whole while the tips stay degraded (its heights
-    // may be present but wrong), with the same backoff as other gaps,
-    // whatever the row's status: blocks landing in the window fulfil it
-    // without fixing a mismatch.
-    const [existing] = await db()
-      .select({ due: sql<boolean>`${gapDueSql(Date.now())}` })
-      .from(l2OpenGapTable)
-      .where(eq(l2OpenGapTable.id, id));
-    if (existing && !existing.due) {
-      return null;
-    }
     const range = { from, to, statusHint: "proposed" as const };
     // Reopening must not reset the backoff here: the row is "fulfilled" as
     // soon as its heights are present, mismatch or not.
@@ -624,14 +660,24 @@ export const buildTipBoundaryRepairRequest =
       resetOnReopen: false,
     });
     logger.warn(
-      `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}; reason=${tips?.degradedReason}`,
+      `Requesting L2 tip-boundary repair around block ${height}: ${from}-${to}`,
     );
+    // The listener sends ranges in order, each from its lowest height, and
+    // its own width and block limits can be lower than the API's: the
+    // mismatch goes first, so a truncated request still carries it.
+    const ranges = [
+      { from: height, to: height },
+      { from, to: height - 1 },
+      { from: height + 1, to },
+    ]
+      .filter((part) => part.from <= part.to)
+      .map((part) => ({ ...part, statusHint: "proposed" as const }));
     return {
       request: {
         requestId: randomUUID(),
         requestedAt: Date.now(),
         reason: TIP_BOUNDARY_REASON,
-        ranges: [range],
+        ranges,
         maxBlocks: Math.min(L2_BLOCK_RECONCILIATION_MAX_BLOCKS, to - from + 1),
       },
       markRequested: () => markGapsRequested([id]),
