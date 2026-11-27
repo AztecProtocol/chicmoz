@@ -1,4 +1,7 @@
-import { BlockNumber } from "@aztec-labs/foundation/branded-types";
+import {
+  BlockNumber,
+  CheckpointNumber,
+} from "@aztec-labs/foundation/branded-types";
 import {
   type BlockHash,
   type L2Block,
@@ -13,6 +16,7 @@ import {
   ROLLUP_VERSION,
   blocksFrom,
   chainOf,
+  checkpointHash,
   emptyBlock,
   genesisChain,
   grow,
@@ -329,18 +333,34 @@ describe("ChainPublisher checks", () => {
     },
   );
 
-  it("stores no proposed tip that the pass did not send", async () => {
-    const x = new FakeNode("x", prefix(main, 4));
-    x.tiers = { checkpointed: 4, proven: 4, finalized: 4 };
-    const { sent, pass, head } = setup({ nodes: [x] });
+  it.each([
+    { held: "no hash", hold: () => Promise.resolve() },
+    {
+      held: "a tier's hash",
+      // As a prune to block 0 leaves it when its first send fails.
+      hold: (store: ReturnType<typeof setup>["store"]) =>
+        store.handleBlockStreamEvent({
+          type: "chain-checkpointed",
+          block: { number: BlockNumber(4), hash: main.hashes[4] },
+          checkpoint: { number: CheckpointNumber(4), hash: checkpointHash(4) },
+        }),
+    },
+  ])(
+    "stores no proposed tip that the pass did not send, at a height where the store holds $held",
+    async ({ hold }) => {
+      const x = new FakeNode("x", prefix(main, 4));
+      x.tiers = { checkpointed: 4, proven: 4, finalized: 4 };
+      const { store, sent, pass, head } = setup({ nodes: [x] });
+      await hold(store);
 
-    // Past the node's tip: the stream downloads nothing and reports the tip.
-    expect(await pass(6)).toBe(x.rpc);
+      // Past the node's tip: the stream downloads nothing and reports the tip.
+      expect(await pass(6)).toBe(x.rpc);
 
-    expect(sent).toEqual([]);
-    expect((await head()).number).toBe(0);
-    expect(loggedTimes(logger.warn, "which this pass did not send")).toBe(1);
-  });
+      expect(sent).toEqual([]);
+      expect(await head()).toEqual({ number: 0, hash: genesis.toString() });
+      expect(loggedTimes(logger.warn, "which this pass did not send")).toBe(1);
+    },
+  );
 
   it("refuses a prune to block 0 through heights the store holds no hash for", async () => {
     const x = new FakeNode("x", await grow(base, 12));
@@ -360,114 +380,81 @@ describe("ChainPublisher checks", () => {
     expect(loggedTimes(logger.error, "asks to prune to block 0")).toBe(1);
   });
 
-  it.each([
-    {
-      fault: "a proven tip off the stored chain",
-      reason: "has another block at its proven height 6",
-      tips: () => {
-        const tips = tipsOf(prefix(main, 10), {
-          checkpointed: 10,
-          proven: 6,
-          finalized: 4,
-        });
-        return {
-          ...tips,
-          proven: {
-            ...tips.proven,
-            block: { number: BlockNumber(6), hash: main.hashes[5] },
-          },
-        };
-      },
-    },
-    {
-      fault: "tiers out of order",
-      reason: "sent tips out of order",
-      tips: () =>
-        tipsOf(prefix(main, 10), { checkpointed: 5, proven: 6, finalized: 4 }),
-    },
-  ])(
-    "stores no tier from a snapshot with $fault, sets the node aside, and follows an honest node",
-    async ({ reason, tips }) => {
-      const honest = new FakeNode("honest", prefix(main, 6));
-      honest.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
-      const faulty = new FakeNode("faulty", prefix(main, 10));
-      faulty.tiers = { checkpointed: 10, proven: 6, finalized: 4 };
-      faulty.chainTipsOverride = tips;
-      const { store, world, pass } = setup({
-        nodes: [honest, faulty],
-        online: [honest],
-      });
-      await pass();
-
-      world.online = [faulty];
-      expect(await pass()).toBe(faulty.rpc);
-      expect((await store.getL2Tips()).proven.block.number).toBe(4);
-      expect(loggedTimes(logger.warn, reason)).toBe(1);
-
-      honest.chain = prefix(main, 10);
-      honest.tiers = { checkpointed: 10, proven: 6, finalized: 4 };
-      world.online = [faulty, honest];
-      expect(await pass()).toBe(honest.rpc);
-      expect((await store.getL2Tips()).proven.block).toEqual({
-        number: 6,
-        hash: main.hashes[6],
-      });
-    },
-  );
-
-  // The node forks from block 5, below the stored proven tip 6 and above the
-  // stored finalized tip 4.
-  it.each([
-    {
-      fault: "another block 4 as its proven tip",
-      reason: "has another block at its proven height 4",
-      tiers: { checkpointed: 9, proven: 4, finalized: 4 },
-      provenHash: () => main.hashes[3],
-    },
-    {
-      fault: "tiers out of order",
-      reason: "sent tips out of order",
-      tiers: { checkpointed: 6, proven: 7, finalized: 4 },
-      provenHash: undefined,
-    },
-  ])(
-    "stores nothing from a prune with $fault, sets the node aside, and follows an honest node",
-    async ({ reason, tiers, provenHash }) => {
-      const x = new FakeNode("x", prefix(main, 8));
-      x.tiers = { checkpointed: 8, proven: 6, finalized: 4 };
-      const y = new FakeNode("y", prefix(main, 8));
-      y.tiers = x.tiers;
-      const { store, world, sent, lowered, pass } = setup({
-        nodes: [x, y],
-        online: [x],
-      });
-      await pass();
-      sent.length = 0;
-      const fork = await grow(prefix(main, 5), 9);
-      x.chain = fork;
-      x.chainTipsOverride = () => {
-        const tips = tipsOf(fork, tiers);
-        return provenHash === undefined
-          ? tips
-          : {
-              ...tips,
-              proven: {
-                ...tips.proven,
-                block: { ...tips.proven.block, hash: provenHash() },
-              },
-            };
+  it("stores no tier from a snapshot with a proven tip off the stored chain, sets the node aside, and follows an honest node", async () => {
+    const honest = new FakeNode("honest", prefix(main, 6));
+    honest.tiers = { checkpointed: 6, proven: 4, finalized: 4 };
+    const faulty = new FakeNode("faulty", prefix(main, 10));
+    faulty.tiers = { checkpointed: 10, proven: 6, finalized: 4 };
+    faulty.chainTipsOverride = () => {
+      const tips = faulty.tips();
+      return {
+        ...tips,
+        proven: {
+          ...tips.proven,
+          block: { number: BlockNumber(6), hash: main.hashes[5] },
+        },
       };
-      const before = await store.getL2Tips();
+    };
+    const { store, world, pass } = setup({
+      nodes: [honest, faulty],
+      online: [honest],
+    });
+    await pass();
 
-      expect(await pass()).toBe(x.rpc);
-      expect(sent).toEqual([]);
-      expect(lowered).toEqual([]);
-      expect(await store.getL2Tips()).toEqual(before);
-      expect(loggedTimes(logger.warn, reason)).toBe(1);
-      world.online = [x, y];
-      expect(await pass()).toBe(y.rpc);
-    },
-  );
+    world.online = [faulty];
+    expect(await pass()).toBe(faulty.rpc);
+    expect((await store.getL2Tips()).proven.block.number).toBe(4);
+    expect(
+      loggedTimes(logger.warn, "has another block at its proven height 6"),
+    ).toBe(1);
+
+    honest.chain = prefix(main, 10);
+    honest.tiers = { checkpointed: 10, proven: 6, finalized: 4 };
+    world.online = [faulty, honest];
+    expect(await pass()).toBe(honest.rpc);
+    expect((await store.getL2Tips()).proven.block).toEqual({
+      number: 6,
+      hash: main.hashes[6],
+    });
+  });
+
+  it("stores nothing from a prune with another block as its lowered proven tip, sets the node aside, and follows an honest node", async () => {
+    const x = new FakeNode("x", prefix(main, 8));
+    x.tiers = { checkpointed: 8, proven: 6, finalized: 4 };
+    const y = new FakeNode("y", prefix(main, 8));
+    y.tiers = x.tiers;
+    const { store, world, sent, lowered, pass } = setup({
+      nodes: [x, y],
+      online: [x],
+    });
+    await pass();
+    sent.length = 0;
+    // A fork from block 5, below the stored proven tip 6 and above the stored
+    // finalized tip 4, with another block 4 as its proven tip.
+    const fork = await grow(prefix(main, 5), 9);
+    x.chain = fork;
+    x.chainTipsOverride = () => {
+      const tips = tipsOf(fork, { checkpointed: 9, proven: 4, finalized: 4 });
+      return {
+        ...tips,
+        proven: {
+          ...tips.proven,
+          block: { ...tips.proven.block, hash: main.hashes[3] },
+        },
+      };
+    };
+    const before = await store.getL2Tips();
+
+    expect(await pass()).toBe(x.rpc);
+    expect(sent).toEqual([]);
+    expect(lowered).toEqual([]);
+    expect(await store.getL2Tips()).toEqual(before);
+    expect(
+      loggedTimes(logger.warn, "has another block at its proven height 4"),
+    ).toBe(1);
+    world.online = [x, y];
+    expect(await pass()).toBe(y.rpc);
+  });
 
   it.each([
     {

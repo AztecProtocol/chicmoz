@@ -75,7 +75,7 @@ type Bench = { until: number } | { tip: L2BlockId };
 type Probe = { node: RpcNode; tips?: L2Tips; eligible: boolean };
 type Candidate = Probe & { tips: L2Tips };
 type Fault = {
-  kind: "behind" | "fork" | "missing" | "floor" | "unreachable";
+  kind: "order" | "behind" | "fork" | "missing" | "floor" | "unreachable";
   reason: string;
 };
 
@@ -95,12 +95,24 @@ const forkAt = (height: number): Fault => ({
   reason: `has another block at the block stream's finalized height ${height}`,
 });
 
-// The checks a snapshot needs no read for. The stream reports a lower
-// finalized tip too, which would point the store below hashes it deleted.
+const tiersOrdered = ({ proposed, checkpointed, proven, finalized }: L2Tips) =>
+  finalized.block.number <= proven.block.number &&
+  proven.block.number <= checkpointed.block.number &&
+  checkpointed.block.number <= proposed.number;
+
+// The checks a snapshot needs no read for. The store takes the tiers as the
+// stream reports them: out of order, or with a lower finalized tip, which
+// would point the store below hashes it deleted.
 const tipsFault = (
   tips: L2Tips,
   { finalized, floor }: PassBounds,
 ): Fault | undefined => {
+  if (!tiersOrdered(tips)) {
+    return {
+      kind: "order",
+      reason: `has tips out of order: proposed ${tips.proposed.number}, checkpointed ${tips.checkpointed.block.number}, proven ${tips.proven.block.number}, finalized ${tips.finalized.block.number}`,
+    };
+  }
   const theirs = tips.finalized.block;
   if (theirs.number < finalized.number) {
     return {

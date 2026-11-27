@@ -540,6 +540,34 @@ describe("StickySource passes", () => {
     expect(await store.getL2Tips()).toEqual(synced);
   });
 
+  it("never elects a node with tips out of order, and skips a pass whose snapshot has them before any block read", async () => {
+    const x = finalizedAtFour();
+    const { store, source, pass } = setup({ nodes: [x] });
+    await pass();
+    const synced = await store.getL2Tips();
+    x.chain = prefix(main, 9);
+    const disordered = () =>
+      tipsOf(x.chain, { checkpointed: 9, proven: 5, finalized: 6 });
+
+    x.probeTipsOverride = disordered;
+    expect(await source.elect()).toBeUndefined();
+
+    x.probeTipsOverride = undefined;
+    x.tiers = { checkpointed: 9, proven: 6, finalized: 6 };
+    x.chainTipsOverride = disordered;
+    x.calls.length = 0;
+    expect(await pass()).toBe(x.rpc);
+
+    expect(x.calls).toEqual(["getChainTips"]);
+    expect(await store.getL2Tips()).toEqual(synced);
+    expect(
+      logged(
+        logger.warn,
+        "has tips out of order: proposed 9, checkpointed 9, proven 5, finalized 6",
+      ),
+    ).toBe(2);
+  });
+
   it("follows the node with the replacing block within three passes while two tied nodes have only a shorter copy, and lets a tied node back once its tip changes", async () => {
     const a = new FakeNode("a", prefix(main, 6));
     const b = new FakeNode("b", prefix(main, 6));

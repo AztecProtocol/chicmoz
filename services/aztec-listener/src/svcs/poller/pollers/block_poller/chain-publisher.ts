@@ -52,11 +52,6 @@ export type ChainPublisherConfig = {
   prefixAlertMs: number;
 };
 
-const tiersOrdered = ({ proposed, checkpointed, proven, finalized }: L2Tips) =>
-  finalized.block.number <= proven.block.number &&
-  proven.block.number <= checkpointed.block.number &&
-  checkpointed.block.number <= proposed.number;
-
 /** The block stream's handler: it stores a block only once the block is sent. */
 export class ChainPublisher implements L2BlockStreamEventHandler {
   private prefixWait: { since: number; alertedAt?: number } | undefined;
@@ -220,7 +215,6 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
         alert: true,
       });
     }
-    this.checkOrder(snapshot);
     // The store writes each tier it lowers over the hash at that height, which
     // can be the finalized witness; at or below the target, no block of this
     // pass writes it back.
@@ -251,23 +245,23 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
   }
 
   // The stream reports the snapshot's tip even when it downloaded nothing up
-  // to it, as from a `startingBlock` past that tip; the store would then hold
-  // a tip whose block was never sent.
+  // to it, as from a `startingBlock` past that tip. A valid pass has stored
+  // that tip by now; a hash at its height alone can be a tier's, which a
+  // prune writes before any block is sent.
   private async confirmProposed(event: ProposedEvent) {
+    const { proposed } = await this.deps.store.getL2Tips();
     if (
-      (await this.deps.store.getL2BlockHash(event.block.number)) !==
-      event.block.hash
+      proposed.number !== event.block.number ||
+      proposed.hash !== event.block.hash
     ) {
       logger.warn(
         `Node ${this.pinnedName()} has proposed tip ${event.block.number}, which this pass did not send; the pass ends`,
       );
       throw new AbortError();
     }
-    await this.deps.store.handleBlockStreamEvent(event);
   }
 
   private async moveTier(event: TierEvent) {
-    this.checkOrder(this.snapshot());
     // The store writes a tier's hash over the one at its height, and the
     // finalized tier deletes the hashes below it.
     await this.checkStored(event.type.slice("chain-".length), event.block);
@@ -282,14 +276,6 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       }
     }
     await this.deps.store.handleBlockStreamEvent(event);
-  }
-
-  private checkOrder(snapshot: L2Tips) {
-    if (!tiersOrdered(snapshot)) {
-      this.reject({
-        reason: `sent tips out of order: proposed ${snapshot.proposed.number}, checkpointed ${snapshot.checkpointed.block.number}, proven ${snapshot.proven.block.number}, finalized ${snapshot.finalized.block.number}`,
-      });
-    }
   }
 
   private async checkStored(tier: string, block: L2BlockId) {
