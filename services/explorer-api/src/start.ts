@@ -40,6 +40,9 @@ ORIGIN: ${notes.origin}`);
       });
     }
   }
+  // In archive mode too: a crash between a block's commit and its bump left
+  // that bump undone, and the writes above change cached reads as well.
+  await bumpChainRevision();
 
   if (ARCHIVE_MODE) {
     logger.info(
@@ -48,8 +51,6 @@ ORIGIN: ${notes.origin}`);
     return;
   }
 
-  // A crash between a block's commit and its bump left that bump undone.
-  await bumpChainRevision();
   await subscribeHandlers();
   // Through the reconciliation ticks, so a shutdown during startup waits for
   // these requests and no interval is armed after it.
