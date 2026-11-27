@@ -308,8 +308,8 @@ export const upsertTips = async (event: L2TipsEvent) => {
 /**
  * Validates the stored tips again inside a chain change, healthy or
  * degraded: the change may have stored a block they name, or demoted one.
- * An unchanged result writes nothing, so a mismatch's occurrence count
- * counts tips events.
+ * An unchanged result records no mismatch, so a mismatch's occurrence count
+ * counts tips events, but the change may still have resolved an open one.
  */
 export const revalidateTips = async (dbTx: DbTx) => {
   const [row] = await dbTx
@@ -328,6 +328,7 @@ export const revalidateTips = async (dbTx: DbTx) => {
   );
   const degradedReason = mismatch?.reason ?? null;
   if (degradedReason === row.degradedReason) {
+    await resolveBoundaryMismatches(dbTx);
     return;
   }
   await dbTx

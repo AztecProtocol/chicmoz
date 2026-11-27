@@ -159,7 +159,7 @@ describe("a replaced block that stays stored on a real database", () => {
     expect(await isDropped(t)).toBe(false);
   });
 
-  it("still requests a replaced height after the next tips validate at other heights", async () => {
+  it("requests a replaced height while the tips validate at other heights, until the block they named arrives", async () => {
     const chain: BuiltBlock[] = [];
     for (let height = 400n; height <= 403n; height++) {
       chain.push(
@@ -195,6 +195,13 @@ describe("a replaced block that stays stored on a real database", () => {
     expect(await canonicalHash(403n)).toBeUndefined();
     expect(await reads.repairOpen(403)).toBe(true);
     expect(await repairRequestCovers(403)).toBe(true);
+
+    // The stored tips stay valid, and the block they named fills the height.
+    await storeLate(replacing);
+
+    expect(await canonicalHash(403n)).toBe(replacing.hash);
+    expect(await mismatchOpenAt(403)).toBe(false);
+    expect(await repairRequestCovers(403)).toBe(false);
   });
 
   it("resolves a tip mismatch nothing fixed only a day after it was last seen", async () => {
