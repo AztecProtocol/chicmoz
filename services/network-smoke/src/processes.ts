@@ -241,5 +241,20 @@ export const createProcessGroups = (runId: string, runDir: string) => {
     }
   };
 
-  return { start, stopAll, killAllSync, deaths };
+  /**
+   * SIGKILL, with no grace, for the latest group started as `name`, as a
+   * crash would end it; not a death. Resolves false if a marked member
+   * outlives it.
+   */
+  const kill = async (name: string) => {
+    const entry = started.findLast((s) => s.name === name);
+    if (entry === undefined) {
+      throw new Error(`no process ${name} was started`);
+    }
+    entry.stopping = true;
+    signalGroup(entry.pgid, runId, "SIGKILL");
+    return goneWithin(entry.pgid, runId, 2_000);
+  };
+
+  return { start, stopAll, killAllSync, kill, deaths };
 };

@@ -11,25 +11,105 @@ import { createRequire } from "node:module";
 import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type L2_MESSAGES,
+  withKafkaNamespace,
+} from "@chicmoz-pkg/message-registry";
 import { COMPOSE_FILE, REPO_ROOT, type Stack, up } from "@chicmoz/test-harness";
 import { readConfig } from "./config.js";
-import { ENDPOINTS_ENV, type Endpoints } from "./endpoints.js";
-import { L1_CHAIN_ID, startAnvil, startAztecNode } from "./network.js";
-import { freePorts } from "./ports.js";
-import { createProcessGroups, startTimeOf } from "./processes.js";
 import {
+  ENDPOINTS_ENV,
+  type Endpoints,
+  type PruneEndpoints,
+  type ScriptedEndpoints,
+} from "./endpoints.js";
+import { createTopic } from "./kafka.js";
+import {
+  L1_CHAIN_ID,
+  UNSEEN_BLOCK_WAIT_MS,
+  startAnvil,
+  startAztecNode,
+  startLocalNetwork,
+} from "./network.js";
+import { releasePorts } from "./port-registry.js";
+import { claimRunPorts } from "./ports.js";
+import { createProcessGroups, startTimeOf } from "./processes.js";
+import { type RpcTap, startRpcTap } from "./rpc-tap.js";
+import { type ServiceControl, startServiceControl } from "./service-control.js";
+import {
+  LISTENER_POLL_MS,
   SERVICES,
+  SMOKE_NETWORK,
+  type ServiceName,
   missingBuilds,
   prepareDatabases,
   startServices,
 } from "./services.js";
 import { createTmpDir, removeTmpDir, tmpDirs } from "./tmp.js";
-import { prepareToolchain } from "./toolchain.js";
+import { type Toolchain, prepareToolchain } from "./toolchain.js";
 import { httpOk, rpc, waitUntil } from "./wait.js";
 
 const PACKAGE_DIR = fileURLToPath(new URL("../", import.meta.url));
+const CLI = fileURLToPath(new URL("./cli.js", import.meta.url));
 // Per-test timeouts bound each test; this bounds Vitest itself.
 const SUITE_TIMEOUT_MS = 15 * 60_000;
+
+export type Mode = "network" | "scripted" | "prune";
+
+const ALL_SERVICES = [
+  "explorer-api",
+  "ethereum-listener",
+  "aztec-listener",
+  "websocket-event-publisher",
+] as const satisfies readonly ServiceName[];
+
+// A scenario judges what the blocks alone do to the explorer, so the API's
+// repair loop, whose first pass comes 2 min after it starts, stays out.
+const NO_REPAIR = {
+  "explorer-api": { L2_BLOCK_RECONCILIATION_INTERVAL_MS: String(3_600_000) },
+};
+
+// Kafka keeps order only within a partition, so a run on several shows
+// whether blocks still reach the API in order.
+const BLOCK_PARTITIONS = 3;
+const BLOCK_TOPIC: keyof L2_MESSAGES = "NEW_BLOCK_EVENT";
+const TIPS_TOPIC: keyof L2_MESSAGES = "L2_TIPS_EVENT";
+
+const MODES: Record<
+  Mode,
+  {
+    /** `stock`: `aztec start --local-network`; `launcher`: the same network with epoch auto-settle off. */
+    node: "stock" | "launcher" | "scripted";
+    services: readonly ServiceName[];
+    vitestConfig: string;
+    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
+    blockPartitions?: number;
+    /** The listener reads the node through `rpc-tap.ts`, which records its tip reads. */
+    tapListener?: boolean;
+  }
+> = {
+  network: {
+    node: "stock",
+    services: ALL_SERVICES,
+    vitestConfig: "vitest.smoke.config.ts",
+  },
+  // The scripted node has no L1, and the scenario reads only the REST API.
+  scripted: {
+    node: "scripted",
+    services: ["explorer-api", "aztec-listener"],
+    vitestConfig: "vitest.scripted.config.ts",
+    extraEnv: NO_REPAIR,
+    blockPartitions: BLOCK_PARTITIONS,
+  },
+  prune: {
+    node: "launcher",
+    services: ALL_SERVICES,
+    vitestConfig: "vitest.prune.config.ts",
+    extraEnv: NO_REPAIR,
+    blockPartitions: BLOCK_PARTITIONS,
+    tapListener: true,
+  },
+};
 
 export const RUN_ID_PATTERN = /^ns[0-9a-f]{10}$/;
 
@@ -55,18 +135,33 @@ const tail = (file: string, lines = 20) => {
 
 /**
  * The run owner. Vitest only asserts: its CLI exits on SIGINT before its own
- * async hooks could tear anything down.
+ * async hooks could tear anything down. `network` runs a real local network;
+ * `prune` runs it with epoch auto-settle off, so a scenario can have it
+ * prune; `scripted` runs the scripted node in its place (`scripted-node.ts`).
  */
-export const run = async (): Promise<number> => {
+export const run = async (mode: Mode): Promise<number> => {
   if (platform() !== "linux") {
     throw new Error("the network smoke run needs Linux (/proc)");
   }
-  const missing = missingBuilds();
+  const {
+    node,
+    services,
+    vitestConfig,
+    extraEnv,
+    blockPartitions,
+    tapListener,
+  } = MODES[mode];
+  const missing = missingBuilds(services);
   if (missing.length > 0) {
     throw new Error(`run \`yarn build\` first; missing ${missing.join(", ")}`);
   }
   const config = readConfig();
   const runId = `ns${randomBytes(5).toString("hex")}`;
+  // generateL2TopicName's name, under this run's namespace.
+  const blockTopic = withKafkaNamespace(
+    `${SMOKE_NETWORK}__${BLOCK_TOPIC}`,
+    runId,
+  );
   const runDir = join(config.dir, runId);
   const logDir = join(runDir, "logs");
   mkdirSync(logDir, { recursive: true });
@@ -100,6 +195,8 @@ export const run = async (): Promise<number> => {
   };
   let stack: Stack | undefined;
   let stackRemoved = false;
+  let tap: RpcTap | undefined;
+  let serviceControl: ServiceControl | undefined;
 
   process.on("exit", () => {
     groups.killAllSync();
@@ -139,6 +236,8 @@ export const run = async (): Promise<number> => {
   let teardown: Promise<boolean> | undefined;
   const tearDown = (failed: boolean) =>
     (teardown ??= (async () => {
+      // First: from here the service control refuses every action and closes,
+      // so no service starts again behind the stops.
       abort.abort();
       await groups.stopAll();
       // Compose up and migrations cannot be cancelled: every started setup
@@ -150,9 +249,10 @@ export const run = async (): Promise<number> => {
       const stuck = await groups.stopAll();
       if (stuck.length > 0) {
         process.stderr.write(
-          `network-smoke: still running after SIGKILL: ${stuck.join(", ")}\n`,
+          `network-smoke: still running after SIGKILL: ${stuck.join(", ")}; the run's ports stay claimed until this runner exits, and \`down ${runId}\` stops what is left\n`,
         );
       }
+      let released = false;
       try {
         if (stack) {
           if (failed) {
@@ -164,9 +264,15 @@ export const run = async (): Promise<number> => {
       } finally {
         removeTmpDir(tmp.node);
         removeTmpDir(tmp.wallet);
+        await tap?.close();
+        await serviceControl?.close();
+        // Only once every group stopped: a survivor may still bind a port.
+        if (stuck.length === 0) {
+          released = await releasePorts(runId);
+        }
       }
       mark("torn down");
-      return stuck.length === 0;
+      return stuck.length === 0 && released;
     })());
 
   let signalled = false;
@@ -195,21 +301,34 @@ export const run = async (): Promise<number> => {
   try {
     const nodeTmp = createTmpDir(tmp.node);
     const walletTmp = createTmpDir(tmp.wallet);
-    const toolchain = await track(
-      prepareToolchain({
-        toolchainDir: config.toolchainDir,
-        foundryBinDir: config.foundryBinDir,
+    let toolchain: Toolchain | undefined;
+    if (node !== "scripted") {
+      toolchain = await track(
+        prepareToolchain({
+          toolchainDir: config.toolchainDir,
+          foundryBinDir: config.foundryBinDir,
+          runId,
+          log: join(logDir, "npm-ci.log"),
+          signal: abort.signal,
+        }),
+      );
+      mark("toolchain ready");
+      abort.signal.throwIfAborted();
+    }
+
+    const ports = await track(
+      claimRunPorts({
         runId,
-        log: join(logDir, "npm-ci.log"),
+        ownerPid: process.pid,
+        worktree: REPO_ROOT,
+        fixed: config.ports,
       }),
     );
-    mark("toolchain ready");
-    abort.signal.throwIfAborted();
-
-    const ports = config.ports ?? (await freePorts());
     const anvilUrl = `http://127.0.0.1:${ports.anvil}`;
     const aztecNodeUrl = `http://127.0.0.1:${ports.aztec}`;
     const explorerApiUrl = `http://127.0.0.1:${ports.explorerApi}`;
+    // The scripted node has no admin API; its control API takes that port.
+    const controlUrl = `http://127.0.0.1:${ports.aztecAdmin}`;
 
     // The first failure aborts the other branch and goes straight to
     // teardown, which still drains every tracked setup operation.
@@ -228,71 +347,178 @@ export const run = async (): Promise<number> => {
         saveRecord();
         mark(`infra up (${started.runId})`);
         abort.signal.throwIfAborted();
-        await prepareDatabases(started, abort.signal);
+        await prepareDatabases(started, services, abort.signal);
         mark("migrated");
+        if (blockPartitions !== undefined) {
+          abort.signal.throwIfAborted();
+          await createTopic(started, blockTopic, blockPartitions);
+          mark(`${blockTopic} has ${blockPartitions} partitions`);
+        }
         return started;
       })(),
     );
+    const localNetwork = async (tools: Toolchain) => {
+      startAnvil(groups, tools, ports, runDir);
+      await waitUntil(
+        "anvil",
+        async () => Number(await rpc(anvilUrl, "eth_chainId")) === L1_CHAIN_ID,
+        { timeoutMs: 30_000, dead: deathOf("anvil"), signal: abort.signal },
+      );
+      mark("anvil ready");
+      abort.signal.throwIfAborted();
+      (node === "launcher" ? startLocalNetwork : startAztecNode)(
+        groups,
+        tools,
+        ports,
+        runDir,
+        nodeTmp,
+      );
+      await waitUntil(
+        "aztec node",
+        async () => (await rpc(aztecNodeUrl, "node_getBlockNumber")) !== null,
+        {
+          timeoutMs: 240_000,
+          dead: deathOf("aztec-node"),
+          signal: abort.signal,
+        },
+      );
+      mark("aztec node ready");
+    };
+    const scriptedNode = async () => {
+      groups.start(
+        "scripted-node",
+        process.execPath,
+        [
+          "--enable-source-maps",
+          CLI,
+          "scripted-node",
+          String(ports.aztec),
+          String(ports.aztecAdmin),
+        ],
+        // The SDK's hashing backend puts a Unix socket under TMPDIR.
+        { cwd: runDir, tier: 1, env: { TMPDIR: nodeTmp } },
+      );
+      // Not a tip read: the scenario counts those as the listener's polls.
+      await waitUntil(
+        "scripted node",
+        async () => (await rpc(aztecNodeUrl, "node_getNodeInfo")) !== null,
+        {
+          timeoutMs: 60_000,
+          dead: deathOf("scripted-node"),
+          signal: abort.signal,
+        },
+      );
+      mark("scripted node ready");
+    };
     const chain = failFast(
-      (async () => {
-        startAnvil(groups, toolchain, ports, runDir);
-        await waitUntil(
-          "anvil",
-          async () =>
-            Number(await rpc(anvilUrl, "eth_chainId")) === L1_CHAIN_ID,
-          { timeoutMs: 30_000, dead: deathOf("anvil"), signal: abort.signal },
-        );
-        mark("anvil ready");
-        abort.signal.throwIfAborted();
-        startAztecNode(groups, toolchain, ports, runDir, nodeTmp);
-        await waitUntil(
-          "aztec node",
-          async () => (await rpc(aztecNodeUrl, "node_getBlockNumber")) !== null,
-          {
-            timeoutMs: 240_000,
-            dead: deathOf("aztec-node"),
-            signal: abort.signal,
-          },
-        );
-        mark("aztec node ready");
-      })(),
+      toolchain === undefined ? scriptedNode() : localNetwork(toolchain),
     );
     const [infraStack] = await Promise.all([infra, chain]);
     abort.signal.throwIfAborted();
 
-    startServices(groups, {
+    const rpcTapFile = join(logDir, "rpc-tap.jsonl");
+    if (tapListener) {
+      // The launcher serves no admin API; the tap takes that port.
+      tap = await startRpcTap({
+        port: ports.aztecAdmin,
+        upstream: aztecNodeUrl,
+        file: rpcTapFile,
+      });
+    }
+    const startService = startServices(groups, services, {
       stack: infraStack,
       ports,
       runId,
-      anvilUrl,
-      aztecNodeUrl,
+      anvilUrl: node === "scripted" ? undefined : anvilUrl,
+      extraEnv,
+      aztecNodeUrl: tap?.url ?? aztecNodeUrl,
     });
-    const alive = () =>
-      Object.keys(SERVICES)
-        .map((name) => deathOf(name)())
-        .find(Boolean);
+    if (node === "scripted") {
+      const isRunService = (name: string): name is ServiceName =>
+        services.some((s) => s === name);
+      // The scripted mode runs no anvil; its port takes the runner's control
+      // of the services, so the groups a scenario restarts stay the run's.
+      serviceControl = await startServiceControl({
+        port: ports.anvil,
+        names: services,
+        signal: abort.signal,
+        actions: {
+          kill: async (name) => {
+            if (!(await groups.kill(name))) {
+              throw new Error(`${name} outlived SIGKILL`);
+            }
+          },
+          start: (name) => {
+            if (!isRunService(name)) {
+              throw new Error(`${name} is not one of this run's services`);
+            }
+            startService(name);
+            return Promise.resolve();
+          },
+        },
+      });
+    }
+    const alive = () => services.map((name) => deathOf(name)()).find(Boolean);
     await waitUntil("explorer-api", () => httpOk(`${explorerApiUrl}/health`), {
       timeoutMs: 60_000,
       dead: alive,
       signal: abort.signal,
     });
-    await waitUntil(
-      "websocket-event-publisher",
-      () => httpOk(`http://127.0.0.1:${ports.wsHealth}/health`),
-      { timeoutMs: 60_000, dead: alive, signal: abort.signal },
-    );
+    if (services.includes("websocket-event-publisher")) {
+      await waitUntil(
+        "websocket-event-publisher",
+        () => httpOk(`http://127.0.0.1:${ports.wsHealth}/health`),
+        { timeoutMs: 60_000, dead: alive, signal: abort.signal },
+      );
+    }
     mark("services ready");
     abort.signal.throwIfAborted();
 
-    const endpoints: Endpoints = {
+    const common = {
       runId,
       logDir,
-      anvilUrl,
       aztecNodeUrl,
       explorerApiUrl,
-      wsUrl: `ws://127.0.0.1:${ports.ws}`,
-      consumerLogs: Object.keys(SERVICES),
+      consumerLogs: [...services],
+      listenerPollMs: LISTENER_POLL_MS,
+      broker: {
+        brokers: infraStack.env.KAFKA_CONNECTION,
+        username: infraStack.env.KAFKA_SASL_USERNAME,
+        password: infraStack.env.KAFKA_SASL_PASSWORD,
+        blockTopic,
+        tipsTopic: withKafkaNamespace(`${SMOKE_NETWORK}__${TIPS_TOPIC}`, runId),
+        // getConsumerGroupId's ids: `<service>_<network>_<handler>`.
+        apiGroupPrefix: withKafkaNamespace(
+          `explorer-api_${SMOKE_NETWORK}_`,
+          runId,
+        ),
+      },
     };
+    const endpoints: Endpoints | PruneEndpoints | ScriptedEndpoints =
+      node === "scripted" && serviceControl
+        ? {
+            ...common,
+            controlUrl,
+            servicesUrl: serviceControl.url,
+            postgres: {
+              host: infraStack.env.POSTGRES_IP,
+              port: Number(infraStack.env.POSTGRES_PORT),
+              user: infraStack.env.POSTGRES_ADMIN,
+              password: infraStack.env.POSTGRES_PASSWORD,
+              databases: {
+                listener: SERVICES["aztec-listener"].database,
+                api: SERVICES["explorer-api"].database,
+              },
+            },
+          }
+        : {
+            ...common,
+            anvilUrl,
+            wsUrl: `ws://127.0.0.1:${ports.ws}`,
+            ...(tap
+              ? { rpcTapFile, unseenBlockWaitMs: UNSEEN_BLOCK_WAIT_MS }
+              : {}),
+          };
     const vitestBin = join(
       dirname(createRequire(import.meta.url).resolve("vitest/package.json")),
       "vitest.mjs",
@@ -300,7 +526,7 @@ export const run = async (): Promise<number> => {
     const vitest = groups.start(
       "vitest",
       process.execPath,
-      [vitestBin, "run", "--config", "vitest.smoke.config.ts"],
+      [vitestBin, "run", "--config", vitestConfig],
       {
         cwd: PACKAGE_DIR,
         tier: 3,

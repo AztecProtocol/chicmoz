@@ -19,6 +19,9 @@ type Service = {
 
 const STRICT = ["--unhandled-rejections=strict", "--enable-source-maps"];
 
+/** The listener's block poll: each pass waits this long after the last ends. */
+export const LISTENER_POLL_MS = 1_000;
+
 // Entry points and Node flags as in each service's `start` script.
 export const SERVICES = {
   "explorer-api": {
@@ -41,62 +44,79 @@ export const SERVICES = {
 
 export type ServiceName = keyof typeof SERVICES;
 
+/** Every run's `L2_NETWORK_ID`; topic names start with it. */
+export const SMOKE_NETWORK = "SANDBOX";
+
 const serviceDir = (name: string) => join(REPO_ROOT, "services", name);
 
 /** The runner starts what `yarn build` produced; it never builds. */
-export const missingBuilds = (): string[] =>
-  Object.entries(SERVICES)
-    .flatMap(([name, svc]) => [
-      join(serviceDir(name), svc.entry),
-      ...("database" in svc
-        ? [join(serviceDir(name), "build", "scripts", "migrate.js")]
-        : []),
-    ])
+export const missingBuilds = (names: readonly ServiceName[]): string[] =>
+  names
+    .flatMap((name) => {
+      const svc: Service = SERVICES[name];
+      return [
+        join(serviceDir(name), svc.entry),
+        ...(svc.database
+          ? [join(serviceDir(name), "build", "scripts", "migrate.js")]
+          : []),
+      ];
+    })
     .filter((path) => !existsSync(path));
 
-export const prepareDatabases = (stack: Stack, signal: AbortSignal) =>
+export const prepareDatabases = (
+  stack: Stack,
+  names: readonly ServiceName[],
+  signal: AbortSignal,
+) =>
   settleAll(
-    Object.entries(SERVICES).flatMap(([name, svc]) =>
-      "database" in svc
+    names.flatMap((name) => {
+      const { database }: Service = SERVICES[name];
+      return database
         ? [
             (async () => {
-              await createDatabase(stack, svc.database);
+              await createDatabase(stack, database);
               signal.throwIfAborted();
               await runMigrateEntrypoint(
                 stack,
                 name as MigratingService,
-                svc.database,
+                database,
               );
             })(),
           ]
-        : [],
-    ),
+        : [];
+    }),
   );
 
+/** Starts each service; the result starts one again, with the same command and environment. */
 export const startServices = (
   groups: ProcessGroups,
+  names: readonly ServiceName[],
   {
     stack,
     ports,
     runId,
     anvilUrl,
     aztecNodeUrl,
+    extraEnv = {},
   }: {
     stack: Stack;
     ports: Ports;
     runId: string;
-    anvilUrl: string;
+    /** Only the ethereum-listener reads it. */
+    anvilUrl?: string;
     aztecNodeUrl: string;
+    /** Per service, on top of the env below. */
+    extraEnv?: Partial<Record<ServiceName, Record<string, string>>>;
   },
 ) => {
   const common = {
     ...stack.env,
     NODE_ENV: "production",
-    L2_NETWORK_ID: "SANDBOX",
+    L2_NETWORK_ID: SMOKE_NETWORK,
     KAFKA_NAMESPACE: runId,
   };
-  const env: Record<ServiceName, Record<string, string>> = {
-    "explorer-api": {
+  const env: Record<ServiceName, () => Record<string, string>> = {
+    "explorer-api": () => ({
       PORT: String(ports.explorerApi),
       INSTANCE_NAME: "smoke-explorer-api",
       // Production has no default for it: the OpenAPI page's key field.
@@ -108,36 +128,50 @@ export const startServices = (
       // The block stream starts an empty listener store at the finalized
       // block, so the blocks below it reach the API through reconciliation.
       L2_BLOCK_RECONCILIATION_INTERVAL_MS: "5000",
+    }),
+    "ethereum-listener": () => {
+      if (anvilUrl === undefined) {
+        throw new Error("the ethereum-listener needs an L1 node");
+      }
+      return {
+        INSTANCE_NAME: "smoke-ethereum-listener",
+        LISTEN_FOR_BLOCKS: "true",
+        ETHEREUM_HTTP_RPC_URL: anvilUrl,
+        ETHEREUM_WS_RPC_URL: anvilUrl.replace(/^http/, "ws"),
+      };
     },
-    "ethereum-listener": {
-      INSTANCE_NAME: "smoke-ethereum-listener",
-      LISTEN_FOR_BLOCKS: "true",
-      ETHEREUM_HTTP_RPC_URL: anvilUrl,
-      ETHEREUM_WS_RPC_URL: anvilUrl.replace(/^http/, "ws"),
-    },
-    "aztec-listener": {
+    "aztec-listener": () => ({
       INSTANCE_NAME: "smoke-aztec-listener",
       AZTEC_RPC_URLS: `sandbox::${aztecNodeUrl}`,
-      BLOCK_POLL_INTERVAL_MS: "1000",
+      BLOCK_POLL_INTERVAL_MS: String(LISTENER_POLL_MS),
       // Tips that arrive before their blocks are degraded until the next
       // tips event; the 60 s default heartbeat would hold that for a minute.
       L2_TIPS_HEARTBEAT_INTERVAL_MS: "5000",
-    },
-    "websocket-event-publisher": {
+    }),
+    "websocket-event-publisher": () => ({
       PORT: String(ports.ws),
       // This service reads the broker address under its own name.
       KAFKA_CONNECTION_URL: stack.env.KAFKA_CONNECTION,
-    },
+    }),
   };
-  return Object.entries(SERVICES).map(([name, svc]) =>
-    groups.start(name, process.execPath, [...svc.nodeArgs, svc.entry], {
+  const startOne = (name: ServiceName) => {
+    const svc: Service = SERVICES[name];
+    return groups.start(name, process.execPath, [...svc.nodeArgs, svc.entry], {
       cwd: serviceDir(name),
       tier: 2,
       env: {
         ...common,
-        ...env[name as ServiceName],
-        ...("database" in svc ? { POSTGRES_DB_NAME: svc.database } : {}),
+        ...env[name](),
+        ...extraEnv[name],
+        ...(svc.database ? { POSTGRES_DB_NAME: svc.database } : {}),
+        // `pg` names each session it opens after it (`application_name`), so
+        // a crash scenario can end every session of the service it kills.
+        PGAPPNAME: name,
       },
-    }),
-  );
+    });
+  };
+  for (const name of names) {
+    startOne(name);
+  }
+  return startOne;
 };

@@ -1,20 +1,61 @@
 import { z } from "zod";
+import { brokerAccessSchema } from "./broker.js";
 
 /** The run owner hands this to the Vitest process as one JSON env var. */
 export const ENDPOINTS_ENV = "NETWORK_SMOKE_ENDPOINTS";
 
-export const endpointsSchema = z.object({
+const commonSchema = z.object({
   runId: z.string(),
   logDir: z.string(),
-  anvilUrl: z.string().url(),
   aztecNodeUrl: z.string().url(),
   explorerApiUrl: z.string().url(),
-  wsUrl: z.string().startsWith("ws://"),
   /** Log files (without `.log`) of the services that consume Kafka. */
   consumerLogs: z.array(z.string()),
+  /** The listener's block poll interval, as the run set it. */
+  listenerPollMs: z.number().int().positive(),
+  /** The run's broker, with the harness's local credentials. */
+  broker: brokerAccessSchema,
+});
+
+export const endpointsSchema = commonSchema.extend({
+  anvilUrl: z.string().url(),
+  wsUrl: z.string().startsWith("ws://"),
+});
+
+export const pruneEndpointsSchema = endpointsSchema.extend({
+  /** The listener's tip reads, as `rpc-tap.ts` records them. */
+  rpcTapFile: z.string(),
+  /** How long the node holds a read of the block one past its tip. */
+  unseenBlockWaitMs: z.number().int().nonnegative(),
+});
+
+export const scriptedEndpointsSchema = commonSchema.extend({
+  /** The scripted node's control port (`script-control.ts`). */
+  controlUrl: z.string().url(),
+  /** The runner's control of its own services (`service-control.ts`). */
+  servicesUrl: z.string().url(),
+  /** The run's Postgres, with the harness's local credentials. */
+  postgres: z.object({
+    host: z.string(),
+    port: z.number().int().positive(),
+    user: z.string(),
+    password: z.string(),
+    /** Each service's own database. */
+    databases: z.object({ listener: z.string(), api: z.string() }),
+  }),
 });
 
 export type Endpoints = z.infer<typeof endpointsSchema>;
+export type PruneEndpoints = z.infer<typeof pruneEndpointsSchema>;
+export type ScriptedEndpoints = z.infer<typeof scriptedEndpointsSchema>;
 
-export const readEndpoints = (): Endpoints =>
-  endpointsSchema.parse(JSON.parse(process.env[ENDPOINTS_ENV] ?? "null"));
+const fromEnv = () =>
+  JSON.parse(process.env[ENDPOINTS_ENV] ?? "null") as unknown;
+
+export const readEndpoints = (): Endpoints => endpointsSchema.parse(fromEnv());
+
+export const readPruneEndpoints = (): PruneEndpoints =>
+  pruneEndpointsSchema.parse(fromEnv());
+
+export const readScriptedEndpoints = (): ScriptedEndpoints =>
+  scriptedEndpointsSchema.parse(fromEnv());

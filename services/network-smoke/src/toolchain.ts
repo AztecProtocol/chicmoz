@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -28,7 +29,13 @@ const ENTRY = join(
 );
 const REGISTRY = "https://registry.npmjs.org/";
 
-export type Toolchain = { aztecEntry: string; anvil: string; forge: string };
+export type Toolchain = {
+  aztecEntry: string;
+  /** The installed tree's `node_modules`, shared by every run: read only. */
+  nodeModules: string;
+  anvil: string;
+  forge: string;
+};
 
 type LockEntry = { integrity?: string; resolved?: string; link?: boolean };
 
@@ -59,10 +66,37 @@ export const checkLock = (lock: string) => {
   }
 };
 
+// The install directory is `aztec-<12 hex of the lock's hash>`.
+const HASH_HEX = 12;
+
+const stagingOf = (dir: string, runId: string) => `${dir}.tmp-${runId}`;
+
+/** The staging directories run `runId`'s installs left in `toolchainDir`, as a kill during one leaves them. */
+export const stagingDirs = (toolchainDir: string, runId: string) => {
+  if (!/^[0-9a-z]+$/.test(runId)) {
+    throw new Error(`"${runId}" is not a run id`);
+  }
+  const staging = new RegExp(`^aztec-[0-9a-f]{${HASH_HEX}}\\.tmp-${runId}$`);
+  let names: string[];
+  try {
+    names = readdirSync(toolchainDir);
+  } catch (e) {
+    // No toolchain directory, so no install ran there to be killed.
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw e;
+  }
+  return names
+    .filter((name) => staging.test(name))
+    .map((name) => join(toolchainDir, name));
+};
+
 const installAztec = async (
   toolchainDir: string,
   runId: string,
   log: string,
+  signal?: AbortSignal,
 ) => {
   const manifest = readFileSync(join(TOOLCHAIN_SRC, "package.json"), "utf8");
   const lock = readFileSync(join(TOOLCHAIN_SRC, "package-lock.json"), "utf8");
@@ -71,22 +105,29 @@ const installAztec = async (
     .update(manifest)
     .update(lock)
     .digest("hex")
-    .slice(0, 12);
+    .slice(0, HASH_HEX);
   const dir = join(toolchainDir, `aztec-${hash}`);
   if (existsSync(join(dir, ENTRY))) {
-    return join(dir, ENTRY);
+    return dir;
   }
-  const tmp = `${dir}.tmp-${runId}`;
+  const tmp = stagingOf(dir, runId);
   mkdirSync(tmp, { recursive: true });
   try {
     // The bytes checked and hashed above, not a second read of the checkout.
     writeFileSync(join(tmp, "package.json"), manifest);
     writeFileSync(join(tmp, "package-lock.json"), lock);
-    // No install scripts run; see NODE_BACKEND where the node starts.
+    // No install scripts run; see NODE_BACKEND where the node starts. An
+    // aborted run kills npm before the staging directory is removed.
     const { stdout, stderr } = await execFileAsync(
       "npm",
       ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
-      { cwd: tmp, maxBuffer: 64 * 1024 * 1024, timeout: 600_000 },
+      {
+        cwd: tmp,
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: 600_000,
+        signal,
+        killSignal: "SIGKILL",
+      },
     );
     writeFileSync(log, stdout + stderr);
     // A tree without the entry point under this lock's name would block
@@ -105,7 +146,7 @@ const installAztec = async (
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
-  return join(dir, ENTRY);
+  return dir;
 };
 
 const findBinary = (name: string, binDir?: string) => {
@@ -153,14 +194,21 @@ export const prepareToolchain = async ({
   foundryBinDir,
   runId,
   log,
+  signal,
 }: {
   toolchainDir: string;
   foundryBinDir?: string;
   runId: string;
   log: string;
+  signal?: AbortSignal;
 }): Promise<Toolchain> => {
-  const aztecEntry = installAztec(toolchainDir, runId, log);
+  const aztec = installAztec(toolchainDir, runId, log, signal);
   const foundry = pinnedFoundry(foundryBinDir);
-  await settleAll([aztecEntry, foundry]);
-  return { aztecEntry: await aztecEntry, ...(await foundry) };
+  await settleAll([aztec, foundry]);
+  const dir = await aztec;
+  return {
+    aztecEntry: join(dir, ENTRY),
+    nodeModules: join(dir, "node_modules"),
+    ...(await foundry),
+  };
 };

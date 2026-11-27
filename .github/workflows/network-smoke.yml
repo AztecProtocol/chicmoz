@@ -56,6 +56,7 @@ jobs:
               - '.nvmrc'
               - '.github/workflows/network-smoke.yml'
               - '.github/actions/setup-yarn/**'
+              - '.github/actions/install-foundry/**'
               - '.github/scripts/check-job-results.sh'
 
   smoke:
@@ -68,19 +69,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install foundry
-        env:
-          # foundry_v<version>_linux_amd64.tar.gz; change with toolchain/foundry-version.
-          FOUNDRY_SHA256: 6c66ffcc55fa4249197721baa3098bc208014ea1d8aa04b2ed50ac6bccffb226
-        run: |
-          version=$(cat services/network-smoke/toolchain/foundry-version)
-          dir="$RUNNER_TEMP/foundry"
-          mkdir -p "$dir"
-          curl -fsSL --retry 3 -o "$dir/foundry.tar.gz" \
-            "https://github.com/foundry-rs/foundry/releases/download/v${version}/foundry_v${version}_linux_amd64.tar.gz"
-          echo "$FOUNDRY_SHA256  $dir/foundry.tar.gz" | sha256sum -c -
-          tar -xzf "$dir/foundry.tar.gz" -C "$dir"
-          echo "FOUNDRY_BIN_DIR=$dir" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/install-foundry
       - uses: ./.github/actions/setup-yarn
       - name: Build the services, the harness and the runner
         run: >-
@@ -114,10 +103,91 @@ jobs:
           # Both output directories start with a dot.
           include-hidden-files: true
 
+  smoke-scripted:
+    name: Explorer pipeline against a scripted pruning node
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No foundry and no Aztec toolchain: the scripted mode starts neither.
+      - uses: ./.github/actions/setup-yarn
+      - name: Build the services, the harness and the runner
+        run: >-
+          yarn workspaces foreach --all --topological-dev
+          --include '@chicmoz-pkg/*' --include '@chicmoz/test-harness'
+          --include '@chicmoz/aztec-listener' --include '@chicmoz/explorer-api'
+          --include '@chicmoz/network-smoke'
+          run build
+      - name: Pull the stack images
+        run: docker compose -f packages/test-harness/compose/compose.yaml --profile infra pull --quiet
+      - name: Run the scripted smoke
+        run: yarn smoke:scripted
+      - name: Keep the run logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: network-smoke-scripted
+          path: |
+            .network-smoke/*/logs/
+            .network-smoke/*/marks.txt
+            .harness/
+          retention-days: 7
+          if-no-files-found: ignore
+          # Both output directories start with a dot.
+          include-hidden-files: true
+
+  smoke-prune:
+    name: Explorer pipeline through forced epoch prunes on an Aztec local network
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-foundry
+      - uses: ./.github/actions/setup-yarn
+      - name: Build the services, the harness and the runner
+        run: >-
+          yarn workspaces foreach --all --topological-dev
+          --include '@chicmoz-pkg/*' --include '@chicmoz/test-harness'
+          --include '@chicmoz/aztec-listener' --include '@chicmoz/ethereum-listener'
+          --include '@chicmoz/explorer-api' --include '@chicmoz/websocket-event-publisher'
+          --include '@chicmoz/network-smoke'
+          run build
+      # npm's content cache only; `npm ci` re-checks each tarball against the lock's integrity.
+      - name: Cache the Aztec toolchain downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm/_cacache
+          key: network-smoke-npm-${{ hashFiles('services/network-smoke/toolchain/package-lock.json') }}
+      - name: Pull the stack images
+        run: docker compose -f packages/test-harness/compose/compose.yaml --profile infra pull --quiet
+      - name: Run the prune smoke
+        run: yarn smoke:prune
+      - name: Keep the run logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: network-smoke-prune
+          path: |
+            .network-smoke/*/logs/
+            .network-smoke/*/marks.txt
+            .harness/
+          retention-days: 7
+          if-no-files-found: ignore
+          # Both output directories start with a dot.
+          include-hidden-files: true
+
   status:
     name: network-smoke-status
     if: always()
-    needs: [changes, smoke]
+    needs: [changes, smoke, smoke-scripted, smoke-prune]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -130,4 +200,6 @@ jobs:
             changes|${{ needs.changes.result }}|success
             smoke filter|${{ needs.changes.outputs.run }}|bool
             smoke|${{ needs.smoke.result }}|${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+            smoke-scripted|${{ needs.smoke-scripted.result }}|${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
+            smoke-prune|${{ needs.smoke-prune.result }}|${{ needs.changes.outputs.run == 'true' && 'success' || 'skipped' }}
         run: bash .github/scripts/check-job-results.sh

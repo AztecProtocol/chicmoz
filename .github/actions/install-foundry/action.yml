@@ -1,0 +1,19 @@
+name: Install foundry
+description: The foundry release named in services/network-smoke/toolchain/foundry-version, checked against its SHA-256, with FOUNDRY_BIN_DIR set for later steps.
+runs:
+  using: composite
+  steps:
+    - name: Install foundry
+      shell: bash
+      env:
+        # foundry_v<version>_linux_amd64.tar.gz; change with toolchain/foundry-version.
+        FOUNDRY_SHA256: 6c66ffcc55fa4249197721baa3098bc208014ea1d8aa04b2ed50ac6bccffb226
+      run: |
+        version=$(cat services/network-smoke/toolchain/foundry-version)
+        dir="$RUNNER_TEMP/foundry"
+        mkdir -p "$dir"
+        curl -fsSL --retry 3 -o "$dir/foundry.tar.gz" \
+          "https://github.com/foundry-rs/foundry/releases/download/v${version}/foundry_v${version}_linux_amd64.tar.gz"
+        echo "$FOUNDRY_SHA256  $dir/foundry.tar.gz" | sha256sum -c -
+        tar -xzf "$dir/foundry.tar.gz" -C "$dir"
+        echo "FOUNDRY_BIN_DIR=$dir" >> "$GITHUB_ENV"

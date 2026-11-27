@@ -11,5 +11,12 @@
     "strict": true,
     "target": "ESNext"
   },
-  "include": ["src", "vitest.smoke.config.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "vitest.config.ts",
+    "vitest.smoke.config.ts",
+    "vitest.scripted.config.ts",
+    "vitest.prune.config.ts"
+  ]
 }
