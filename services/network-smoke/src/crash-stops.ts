@@ -91,22 +91,38 @@ const missedStop = async (lock: RowLock, writer: string, more = {}) =>
   `no write of the ${writer} waited on the lock within ${STOP_WAIT_MS / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
 
 /**
- * Kills `name`, ends its sessions that wait on `lock`, which would never see
- * their client go and would run their statements once it is released, then
- * releases it and starts `name` again. Resolves with when it started.
+ * Kills `name` and ends every session of `database` that `lock` holds up:
+ * a session waiting on a lock never sees its client go, and an autocommit
+ * write queued there would commit once the lock is released.
  */
-const crash = async (
+const killWaiting = async (
   lock: RowLock,
   database: string,
   services: Services,
   name: string,
 ) => {
   await services.kill(name);
-  for (const w of await lock.waiters()) {
-    if (w.database === database) {
-      await lock.terminate(w.pid);
-    }
+  const ofService = async () =>
+    (await lock.waiters()).filter((w) => w.database === database);
+  for (const w of await ofService()) {
+    await lock.terminate(w.pid);
   }
+  const left = await ofService();
+  if (left.length > 0) {
+    throw new Error(
+      `${name}'s sessions still wait on the lock after the kill: ${JSON.stringify(left)}`,
+    );
+  }
+};
+
+/** `killWaiting`, then releases `lock` and starts `name` again. Resolves with when it started. */
+const crash = async (
+  lock: RowLock,
+  database: string,
+  services: Services,
+  name: string,
+) => {
+  await killWaiting(lock, database, services, name);
   await lock.release();
   const restartedAt = Date.now();
   await services.start(name);
@@ -375,9 +391,10 @@ export const apiStop = ({
       try {
         // The API's chain-info and node-info handlers upsert the row too, each
         // holding a record its group cannot commit while the row is locked,
-        // and a group handles one record at a time: more waiting upserts than
-        // other groups behind means one is the block handler's. Waiters are
-        // read before the groups, so none of them is missed.
+        // and a group handles one record at a time: more upserts held up,
+        // on the lock or queued behind one another, than other groups behind
+        // means one is the block handler's. Waiters are read before the
+        // groups, so none of them is missed.
         let othersBehind: string[] = [];
         const waiting = await poll(async () => {
           const writes = await writesWaiting(lock, database, API_WRITE);

@@ -7,12 +7,36 @@ export type PgAccess = {
   password: string;
 };
 
-/** A session's statement that waits on a lock another session holds. */
+/** A session's statement that waits on a lock: one another session holds, or one queued behind such a waiter. */
 export type Waiter = {
   pid: number;
   database: string;
   waitEventType: string | null;
   query: string;
+};
+
+/**
+ * The sessions `root` holds up, directly or behind another session it holds
+ * up, from each waiting session's `pg_blocking_pids`. That names direct
+ * blockers only: a write queued for a row lock that another waiter took
+ * first names that waiter, not `root`.
+ */
+export const blockedBy = (
+  root: number,
+  waiting: { pid: number; blockers: number[] }[],
+) => {
+  const chain = new Set([root]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const { pid, blockers } of waiting) {
+      if (!chain.has(pid) && blockers.some((b) => chain.has(b))) {
+        chain.add(pid);
+        grew = true;
+      }
+    }
+  }
+  chain.delete(root);
+  return chain;
 };
 
 /** Rows of one query in its own session, which ends with it. */
@@ -65,24 +89,27 @@ export const lockRows = async (
     throw e;
   }
 
-  /** The sessions waiting on this one's locks, whatever their database. */
-  const waiters = async (): Promise<Waiter[]> =>
-    (
-      await watcher.query<{
-        pid: number;
-        datname: string;
-        wait_event_type: string | null;
-        query: string;
-      }>(
-        "SELECT pid, datname, wait_event_type, query FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))",
-        [pid],
-      )
-    ).rows.map((r) => ({
-      pid: r.pid,
-      database: r.datname,
-      waitEventType: r.wait_event_type,
-      query: r.query,
-    }));
+  /** The sessions this one's locks hold up (`blockedBy`), whatever their database. */
+  const waiters = async (): Promise<Waiter[]> => {
+    const { rows } = await watcher.query<{
+      pid: number;
+      datname: string;
+      wait_event_type: string | null;
+      query: string;
+      blockers: number[];
+    }>(
+      "SELECT pid, datname, wait_event_type, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE wait_event_type = 'Lock'",
+    );
+    const chain = blockedBy(pid, rows);
+    return rows
+      .filter((r) => chain.has(r.pid))
+      .map((r) => ({
+        pid: r.pid,
+        database: r.datname,
+        waitEventType: r.wait_event_type,
+        query: r.query,
+      }));
+  };
 
   let released = false;
   return {
