@@ -8,8 +8,20 @@ import {
   type ChicmozL2ContractInstanceVerifiedDeploymentArgumnetsSchema,
   type ChicmozL2PrivateFunctionBroadcastedEvent,
   type ChicmozL2UtilityFunctionBroadcastedEvent,
+  type HexString,
 } from "@chicmoz-pkg/types";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import { type PgColumn } from "drizzle-orm/pg-core";
 import {
   l2ContractClassRegistered,
   l2ContractInstanceDeployed,
@@ -19,6 +31,7 @@ import {
   l2UtilityFunction,
 } from "../../../database/schema/l2contract/index.js";
 import { l2TxPublicCallRequest } from "../../../database/schema/l2public-call/index.js";
+import { l2Block } from "../../schema/index.js";
 import {
   buildSelectorMap,
   selectorMapValueToFunctionName,
@@ -26,21 +39,82 @@ import {
 import { logger } from "../../../../logger.js";
 import { type DbTx } from "../utils.js";
 
+/**
+ * A contract row's rule on a key conflict: it moves to `incoming` from a
+ * block off the chain, and its own block writes it again; another canonical
+ * block keeps it.
+ */
+const movesTo = (
+  executor: ReturnType<typeof db>,
+  owner: PgColumn,
+  incoming: HexString,
+): SQL =>
+  sql`${eq(owner, incoming)} OR ${exists(
+    executor
+      .select({ one: sql`1` })
+      .from(l2Block)
+      .where(and(eq(l2Block.hash, owner), isNotNull(l2Block.orphan_timestamp))),
+  )}`;
+
+/**
+ * Stores a deployment, or moves it as `movesTo` allows. Only its block
+ * changes: the arguments verified for the address, and its deployer metadata,
+ * stay. False when another canonical block keeps it.
+ */
 export const storeContractInstanceDeployed = async (
   instance: ChicmozL2ContractInstanceDeployedEvent,
   executor: ReturnType<typeof db> = db(),
-): Promise<void> => {
+): Promise<boolean> => {
   const { publicKeys, ...rest } = instance;
-  await executor
+  const stored = await executor
     .insert(l2ContractInstanceDeployed)
-    .values({ ...publicKeys, ...rest });
+    .values({ ...publicKeys, ...rest })
+    .onConflictDoUpdate({
+      target: l2ContractInstanceDeployed.address,
+      set: { blockHash: rest.blockHash },
+      setWhere: movesTo(
+        executor,
+        l2ContractInstanceDeployed.blockHash,
+        rest.blockHash,
+      ),
+    })
+    .returning({ address: l2ContractInstanceDeployed.address });
+  return stored.length > 0;
 };
 
+/**
+ * Stores an update, or moves it with its new block's values as `movesTo`
+ * allows. False when another canonical block keeps it.
+ */
 export const storeContractInstanceUpdated = async (
   instance: ChicmozL2ContractInstanceUpdatedEvent,
   executor: ReturnType<typeof db> = db(),
-): Promise<void> => {
-  await executor.insert(l2ContractInstanceUpdate).values({ ...instance });
+): Promise<boolean> => {
+  const {
+    blockHash,
+    prevContractClassId,
+    newContractClassId,
+    timestampOfChange,
+  } = instance;
+  const stored = await executor
+    .insert(l2ContractInstanceUpdate)
+    .values({ ...instance })
+    .onConflictDoUpdate({
+      target: l2ContractInstanceUpdate.address,
+      set: {
+        blockHash,
+        prevContractClassId,
+        newContractClassId,
+        timestampOfChange,
+      },
+      setWhere: movesTo(
+        executor,
+        l2ContractInstanceUpdate.blockHash,
+        blockHash,
+      ),
+    })
+    .returning({ address: l2ContractInstanceUpdate.address });
+  return stored.length > 0;
 };
 
 export const storeContractInstanceVerifiedDeploymentArguments = async (
@@ -60,13 +134,32 @@ export const storeContractInstanceVerifiedDeploymentArguments = async (
     });
 };
 
+/**
+ * Stores a class, or moves it as `movesTo` allows. Only its block changes:
+ * the artifact and source verified for the class stay. False when another
+ * canonical block keeps it.
+ */
 export const storeContractClass = async (
   contractClass: ChicmozL2ContractClassRegisteredEvent,
   executor: ReturnType<typeof db> = db(),
-): Promise<void> => {
-  await executor.insert(l2ContractClassRegistered).values({
-    ...contractClass,
-  });
+): Promise<boolean> => {
+  const stored = await executor
+    .insert(l2ContractClassRegistered)
+    .values({ ...contractClass })
+    .onConflictDoUpdate({
+      target: [
+        l2ContractClassRegistered.contractClassId,
+        l2ContractClassRegistered.version,
+      ],
+      set: { blockHash: contractClass.blockHash },
+      setWhere: movesTo(
+        executor,
+        l2ContractClassRegistered.blockHash,
+        contractClass.blockHash,
+      ),
+    })
+    .returning({ contractClassId: l2ContractClassRegistered.contractClassId });
+  return stored.length > 0;
 };
 
 export type BlockContracts = {
@@ -76,10 +169,11 @@ export type BlockContracts = {
 };
 
 /**
- * Stores a block's contract rows inside its transaction, each in a savepoint:
- * a row that fails (a duplicate, or an instance whose class was never
- * stored) is logged and skipped without aborting the block; a failed
- * heartbeat, taken before each row, aborts it.
+ * Stores a canonical block's contract rows inside its transaction, each in a
+ * savepoint: a row another canonical block keeps is logged, and one that
+ * fails (an instance whose class was never stored) is logged and skipped
+ * without aborting the block; a failed heartbeat, taken before each row,
+ * aborts it.
  */
 export const storeBlockContracts = async (
   dbTx: DbTx,
@@ -89,20 +183,20 @@ export const storeBlockContracts = async (
   const each = async <T>(
     rows: T[],
     label: (row: T) => string,
-    write: (row: T, executor: DbTx) => Promise<void>,
+    write: (row: T, executor: DbTx) => Promise<boolean>,
   ) => {
     for (const row of rows) {
       await heartbeat();
       try {
-        await dbTx.transaction((savepoint) => write(row, savepoint));
-      } catch (e) {
-        if ((e as { code?: string }).code === "23505") {
-          logger.warn(`DB Duplicate: ${label(row)}`);
-        } else {
-          logger.error(
-            `Failed to store ${label(row)}: ${(e as Error).stack ?? String(e)}`,
+        if (!(await dbTx.transaction((savepoint) => write(row, savepoint)))) {
+          logger.warn(
+            `${label(row)} stays with the canonical block that holds it`,
           );
         }
+      } catch (e) {
+        logger.error(
+          `Failed to store ${label(row)}: ${(e as Error).stack ?? String(e)}`,
+        );
       }
     }
   };

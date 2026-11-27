@@ -39,9 +39,11 @@ export const loadChainReads = async () => {
   const { l2OpenGapTable } = await import(
     "../../../src/svcs/database/schema/l2/open-gap.js"
   );
-  const { l2ContractClassRegistered } = await import(
-    "../../../src/svcs/database/schema/l2contract/index.js"
-  );
+  const {
+    l2ContractClassRegistered,
+    l2ContractInstanceDeployed,
+    l2ContractInstanceUpdate,
+  } = await import("../../../src/svcs/database/schema/l2contract/index.js");
   const { getReorgs } = await import(
     "../../../src/svcs/database/controllers/l2block/get-block.js"
   );
@@ -91,6 +93,26 @@ export const loadChainReads = async () => {
         .from(l2ContractClassRegistered)
         .where(eq(l2ContractClassRegistered.blockHash, blockHash))
     ).map(({ id }) => id);
+
+  /** The addresses of the contract instances deployed with a block. */
+  const instancesOf = async (blockHash: HexString) =>
+    (
+      await db
+        .select({ address: l2ContractInstanceDeployed.address })
+        .from(l2ContractInstanceDeployed)
+        .where(eq(l2ContractInstanceDeployed.blockHash, blockHash))
+    ).map(({ address }) => address);
+
+  const updateOf = async (address: string) => {
+    const [row] = await db
+      .select({
+        blockHash: l2ContractInstanceUpdate.blockHash,
+        timestampOfChange: l2ContractInstanceUpdate.timestampOfChange,
+      })
+      .from(l2ContractInstanceUpdate)
+      .where(eq(l2ContractInstanceUpdate.address, address));
+    return row;
+  };
 
   const isDropped = async (txHash: HexString) =>
     (
@@ -169,6 +191,8 @@ export const loadChainReads = async () => {
     stateOf,
     ownerOf,
     classesOf,
+    instancesOf,
+    updateOf,
     isDropped,
     recordsOf,
     listed,

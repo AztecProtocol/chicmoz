@@ -41,25 +41,38 @@ const recorded = (
   return L2Block.fromBuffer(Buffer.from(fixture.data.hex, "hex"));
 };
 
-// A recorded effect with public logs and no contract-class logs, so storing a
-// clone adds no contract rows that would collide across blocks.
-let plain: L2Block | undefined;
-// A recorded effect that publishes a contract class. Its clones share the
-// class row, so only the first one stored in a database adds it.
-let publishing: L2Block | undefined;
-const baseBlock = (publishesClass: boolean): L2Block =>
-  publishesClass
-    ? (publishing ??= recorded(
-        "a contract class log",
-        (e) => e.counts.contractClassLogs > 0,
-      ))
-    : (plain ??= recorded(
-        "public logs and no contract logs",
-        (e) =>
-          e.counts.publicLogs > 0 &&
-          e.counts.contractClassLogs === 0 &&
-          e.contractInstanceAddresses.length === 0,
-      ));
+type Effect = "plain" | "publishesClass" | "deploysInstance";
+
+// Recorded effects to clone. A plain one has public logs and no contract
+// logs, so its clones add no contract rows. The others publish the recorded
+// contract class and deploy the recorded instance of it: their clones share
+// one row each.
+const EFFECTS: Record<
+  Effect,
+  [string, (expected: FixtureData["l2-block"]["expected"]) => boolean]
+> = {
+  plain: [
+    "public logs and no contract logs",
+    (e) =>
+      e.counts.publicLogs > 0 &&
+      e.counts.contractClassLogs === 0 &&
+      e.contractInstanceAddresses.length === 0,
+  ],
+  publishesClass: [
+    "a contract class log",
+    (e) => e.counts.contractClassLogs > 0,
+  ],
+  deploysInstance: [
+    "a contract instance deployment",
+    (e) => e.contractInstanceAddresses.length > 0,
+  ],
+};
+const bases = new Map<Effect, L2Block>();
+const baseBlock = (effect: Effect): L2Block => {
+  const base = bases.get(effect) ?? recorded(...EFFECTS[effect]);
+  bases.set(effect, base);
+  return base;
+};
 
 /**
  * The coinbase is salted to tell headers at one height apart. The handler
@@ -67,7 +80,7 @@ const baseBlock = (publishesClass: boolean): L2Block =>
  * `version` replaces the recorded rollup version. Each block gets an archive
  * of its own, unless `archive` names one; `parent` makes the block's last
  * archive the parent's archive, the link a chain's consecutive blocks have.
- * `publishesClass` clones an effect that publishes a contract class.
+ * `effect` names the recorded effect the txs clone.
  */
 export const buildBlock = async (
   height: bigint,
@@ -76,15 +89,15 @@ export const buildBlock = async (
     version,
     parent,
     archive: sharedArchive,
-    publishesClass,
+    effect: cloned = "plain",
   }: {
     version?: number;
     parent?: Pick<BuiltBlock, "archive">;
     archive?: AppendOnlyTreeSnapshot;
-    publishesClass?: true;
+    effect?: Effect;
   } = {},
 ): Promise<BuiltBlock> => {
-  const base = baseBlock(publishesClass === true);
+  const base = baseBlock(cloned);
   const [effect] = base.body.txEffects;
   if (!effect) {
     throw new Error("base block has no tx effect");

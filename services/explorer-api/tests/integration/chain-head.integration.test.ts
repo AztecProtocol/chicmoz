@@ -957,7 +957,7 @@ describe("the canonical chain on a real database", () => {
     const tx = freshTxHash();
     const block = await buildBlock(28_000n, [tx], {
       version: freshVersion(),
-      publishesClass: true,
+      effect: "publishesClass",
     });
     let beats = 0;
     // The beats before its effect and before its class row pass; the next,
