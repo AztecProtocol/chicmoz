@@ -236,6 +236,8 @@ export const run = async (mode: Mode): Promise<number> => {
   let teardown: Promise<boolean> | undefined;
   const tearDown = (failed: boolean) =>
     (teardown ??= (async () => {
+      // First: from here the service control refuses every action and closes,
+      // so no service starts again behind the stops.
       abort.abort();
       await groups.stopAll();
       // Compose up and migrations cannot be cancelled: every started setup
@@ -439,6 +441,7 @@ export const run = async (mode: Mode): Promise<number> => {
       serviceControl = await startServiceControl({
         port: ports.anvil,
         names: services,
+        signal: abort.signal,
         actions: {
           kill: async (name) => {
             if (!(await groups.kill(name))) {

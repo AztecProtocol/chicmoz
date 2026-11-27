@@ -15,16 +15,20 @@ const ROUTE = /^\/services\/([a-z-]+)\/(kill|start)$/;
 /**
  * Serves `POST /services/<name>/kill` and `POST /services/<name>/start` on
  * 127.0.0.1 for the run's own services, so the runner, not the scenario,
- * starts every process the run tears down.
+ * starts every process the run tears down. Once `signal` aborts, it refuses
+ * every action and closes, so no service starts again behind the teardown's
+ * stops; `close` can be called again.
  */
 export const startServiceControl = async ({
   port,
   names,
   actions,
+  signal,
 }: {
   port: number;
   names: readonly string[];
   actions: ServiceActions;
+  signal: AbortSignal;
 }): Promise<ServiceControl> => {
   const killed = new Set<string>();
   const act = async (name: string, action: "kill" | "start") => {
@@ -44,6 +48,10 @@ export const startServiceControl = async ({
       res.writeHead(404).end();
       return;
     }
+    if (signal.aborted) {
+      res.writeHead(409).end("the run is tearing down");
+      return;
+    }
     act(name, action as "kill" | "start").then(
       () => res.writeHead(204).end(),
       (e: Error) => res.writeHead(409).end(e.message),
@@ -57,14 +65,14 @@ export const startServiceControl = async ({
   if (address === null || typeof address === "string") {
     throw new Error("unexpected service control address");
   }
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-      }),
-  };
+  let closing: Promise<void> | undefined;
+  const close = () =>
+    (closing ??= new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    }));
+  signal.addEventListener("abort", () => void close(), { once: true });
+  return { url: `http://127.0.0.1:${address.port}`, close };
 };
 
 /** The scenario's side of `startServiceControl`. */
