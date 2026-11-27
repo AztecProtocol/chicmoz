@@ -207,6 +207,20 @@ describe("ChainPublisher after the node replaces published heights", () => {
     },
   );
 
+  it("elects another node within the pin's lead once the pinned node's tips name a block it does not serve", async () => {
+    const x = new FakeNode("x", prefix(main, 5));
+    const y = new FakeNode("y", prefix(main, 5));
+    const { pass } = setup({ nodes: [x, y] });
+    await pass();
+    // Its tips name block 10 of `main`; its block reads serve another block 10.
+    x.chain = prefix(main, 10);
+    x.servedChain = await grow(prefix(main, 9), 10);
+    y.chain = prefix(main, 11);
+
+    expect(await pass()).toBe(x.rpc);
+    expect(await pass()).toBe(y.rpc);
+  });
+
   it("sends a pass longer than one batch whole, each block with the pass's tip", async () => {
     const x = new FakeNode("x", prefix(main, 5));
     const { sent, pass, head } = setup({ nodes: [x] });

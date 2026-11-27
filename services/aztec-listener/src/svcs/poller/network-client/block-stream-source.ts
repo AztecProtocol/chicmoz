@@ -203,9 +203,10 @@ const blockDataFault = async (query: BlockQuery, header: BlockHeader) => {
  * every read of that pass goes to it. A failed response check or a walk-back
  * past the bound sets the node aside for five minutes. A failed read, a tips
  * or range read answered with nothing, or a rejected snapshot benches it for
- * five minutes; the prefix rule, an empty range or no block at a height its
- * snapshot covers bench it until its tip changes. Benched nodes are all back
- * once no eligible node is outside the bench.
+ * five minutes; the prefix rule, an empty range, no block at a height its
+ * snapshot covers, or a block at its tip's height other than its tip bench it
+ * until its tip changes. Benched nodes are all back once no eligible node is
+ * outside the bench.
  */
 export class StickySource implements L2BlockStreamSource {
   /** The store as the stream must read it: its hash lookups count against the walk bound. */
@@ -349,8 +350,8 @@ export class StickySource implements L2BlockStreamSource {
     return next.node;
   }
 
-  /** The pass ended on the prefix rule: unpins the node and benches it. */
-  endPassOnPrefix(): void {
+  /** Unpins the pinned node and benches it until its tip changes. */
+  benchPinnedUntilNewTip(): void {
     if (this.pin !== undefined) {
       this.bench(this.pin, "new tip");
     }

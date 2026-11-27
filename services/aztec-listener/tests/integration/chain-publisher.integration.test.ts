@@ -113,7 +113,7 @@ const arrange = async (failCursor: boolean) => {
       pinned: undefined,
       lastTips: snapshot,
       pinnedBlockData: vi.fn(),
-      endPassOnPrefix: vi.fn(),
+      benchPinnedUntilNewTip: vi.fn(),
       setAsidePinned: vi.fn(),
     },
     publishBlock: () => Promise.resolve(),

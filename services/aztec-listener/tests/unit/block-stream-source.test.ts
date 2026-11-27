@@ -581,7 +581,7 @@ describe("StickySource passes", () => {
           event.type === "chain-pruned" &&
           event.block.number === source.lastTips?.proposed.number
         ) {
-          source.endPassOnPrefix();
+          source.benchPinnedUntilNewTip();
           throw new AbortError();
         }
         await store.handleBlockStreamEvent(event);

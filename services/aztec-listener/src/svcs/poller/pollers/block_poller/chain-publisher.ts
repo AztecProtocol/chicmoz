@@ -36,7 +36,7 @@ export type ChainPublisherDeps = {
     | "pinned"
     | "lastTips"
     | "pinnedBlockData"
-    | "endPassOnPrefix"
+    | "benchPinnedUntilNewTip"
     | "setAsidePinned"
   >;
   /** Sends one block of the ordered stream; resolves once it is sent. */
@@ -191,7 +191,9 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
 
   // The stream checks its snapshot's tip only after emitting every batch, yet
   // the API takes each block's tip as where the listener's chain ends. A node
-  // that moved since its tips were read is not at fault.
+  // that moved since its tips were read is not at fault, so a mismatch benches
+  // it only until its tip changes: enough to move the sticky election off a
+  // node whose tips and blocks keep disagreeing.
   private async confirmTip(tip: L2BlockId, blocks: L2Block[]) {
     // Before the read, which unpins a node that has no block at the tip.
     const name = this.pinnedName();
@@ -206,6 +208,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       logger.warn(
         `Node ${name} no longer holds this pass's proposed tip ${tip.number}; the pass ends before sending blocks ${blocks[0].number}-${last.number}`,
       );
+      this.deps.source.benchPinnedUntilNewTip();
       throw new PassExit();
     }
   }
@@ -219,7 +222,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       // has a shorter copy of the stored chain.
       this.endedOnPrefix = true;
       this.notePrefixWait(target.number, local.proposed.number);
-      this.deps.source.endPassOnPrefix();
+      this.deps.source.benchPinnedUntilNewTip();
       throw new PassExit();
     }
     const [atTarget, above] = await Promise.all([
