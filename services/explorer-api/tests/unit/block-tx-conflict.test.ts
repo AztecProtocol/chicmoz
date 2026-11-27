@@ -55,6 +55,8 @@ const { blockHandler, catchupHandler } = await import(
   "../../src/events/received/on-block/index.js"
 );
 
+const noHeartbeat = () => Promise.resolve();
+
 // Block 103158 from the 2026-09-29 incident: its tx was held by the active,
 // stale-fork block 103172.
 const parsed = () => ({
@@ -98,8 +100,8 @@ beforeEach(() => {
 
 describe("a tx held by an active block", () => {
   it.each([
-    ["live", () => blockHandler.cb(event)],
-    ["catch-up", () => catchupHandler.cb(event)],
+    ["live", () => blockHandler.cb(event, noHeartbeat)],
+    ["catch-up", () => catchupHandler.cb(event, noHeartbeat)],
   ])(
     "skips the %s block: acked, nothing stored or deleted, logged",
     async (_name, run) => {
@@ -125,7 +127,7 @@ describe("a tx held by an active block", () => {
       owner({ txHash: "0x2ba2" }),
     ]);
 
-    await expect(blockHandler.cb(event)).resolves.toBeUndefined();
+    await expect(blockHandler.cb(event, noHeartbeat)).resolves.toBeUndefined();
 
     expect(mocks.deleteL2BlockByHash).not.toHaveBeenCalled();
     expect(mocks.store).not.toHaveBeenCalled();
@@ -138,7 +140,7 @@ describe("a holder that turns active between the check and the insert", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValue([owner({})]);
 
-    await expect(blockHandler.cb(event)).resolves.toBeUndefined();
+    await expect(blockHandler.cb(event, noHeartbeat)).resolves.toBeUndefined();
 
     expect(mocks.store).toHaveBeenCalledOnce();
     expect(mocks.deleteL2BlockByHash).not.toHaveBeenCalled();
@@ -167,7 +169,7 @@ describe("a reorg at the block's height", () => {
       return Promise.resolve();
     });
 
-    await blockHandler.cb(event);
+    await blockHandler.cb(event, noHeartbeat);
 
     expect(mocks.handleReorg).toHaveBeenCalled();
     expect(mocks.deleteL2BlockByHash).toHaveBeenCalledWith("0x2c3d");
@@ -183,7 +185,9 @@ describe("a reorg at the block's height", () => {
     async (_name, holder) => {
       mocks.getTxEffectOwners.mockResolvedValue([holder]);
 
-      await expect(blockHandler.cb(event)).resolves.toBeUndefined();
+      await expect(
+        blockHandler.cb(event, noHeartbeat),
+      ).resolves.toBeUndefined();
 
       expect(mocks.handleReorg).not.toHaveBeenCalled();
       expect(mocks.store).not.toHaveBeenCalled();
@@ -204,7 +208,7 @@ describe("the block itself already stored and active (redelivery)", () => {
       detail: "Key (hash)=(0x0394) already exists.",
     });
 
-    await blockHandler.cb(event);
+    await blockHandler.cb(event, noHeartbeat);
 
     expect(mocks.unOrphanBlock).toHaveBeenCalledWith("0x0394");
     for (const hook of hooks()) {
@@ -221,7 +225,7 @@ describe("a duplicate on a key the handler does not know", () => {
       detail: "Key (address)=(0x01) already exists.",
     });
 
-    await expect(blockHandler.cb(event)).resolves.toBeUndefined();
+    await expect(blockHandler.cb(event, noHeartbeat)).resolves.toBeUndefined();
 
     for (const hook of hooks()) {
       expect(hook).not.toHaveBeenCalled();
@@ -250,7 +254,7 @@ describe("txs held only by orphaned blocks (multi-block reorg)", () => {
       }),
     ]);
 
-    await blockHandler.cb(event);
+    await blockHandler.cb(event, noHeartbeat);
 
     expect(mocks.deleteL2BlockByHash.mock.calls).toEqual([
       ["0xold-103158"],
@@ -267,7 +271,9 @@ describe("store errors that are not duplicates", () => {
   it("are rethrown so the message bus redelivers the block", async () => {
     mocks.store.mockReset().mockRejectedValue(new Error("connection reset"));
 
-    await expect(blockHandler.cb(event)).rejects.toThrow("connection reset");
+    await expect(blockHandler.cb(event, noHeartbeat)).rejects.toThrow(
+      "connection reset",
+    );
 
     expect(mocks.store).toHaveBeenCalledOnce();
     for (const hook of hooks()) {

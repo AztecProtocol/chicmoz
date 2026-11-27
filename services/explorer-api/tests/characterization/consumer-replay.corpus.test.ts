@@ -180,6 +180,8 @@ for (const network of new Set(FRAMES.map((frame) => frame.network))) {
   SUBSCRIBED.set(network, await subscriptions(network));
 }
 
+const noHeartbeat = () => Promise.resolve();
+
 // The bus consumer's acceptance rule: a BSON value whose `data` is an object.
 const busDecode = (bytes: Uint8Array): ChicmozMessageBusPayload => {
   const decoded: Record<string, unknown> = BSON.deserialize(bytes);
@@ -214,7 +216,7 @@ describe("committed frames replayed into the explorer-api consumers", () => {
       seam.env.network = frame.network;
       for (const consumer of consumers) {
         await expect(
-          consumer.cb(busDecode(frame.bytes)),
+          consumer.cb(busDecode(frame.bytes), noHeartbeat),
         ).resolves.toBeUndefined();
       }
 

@@ -1440,6 +1440,8 @@ __metadata:
     exponential-backoff: "npm:3.1.1"
     kafkajs: "npm:2.2.4"
     typescript: "npm:5.8.3"
+    vite: "npm:8.3.8"
+    vitest: "npm:5.1.0"
   languageName: unknown
   linkType: soft
 

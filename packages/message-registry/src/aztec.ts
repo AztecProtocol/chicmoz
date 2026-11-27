@@ -13,10 +13,17 @@ import { type KafkaNamespaced, withKafkaNamespace } from "./namespace.js";
 
 export type L2BlockStatusHint = "proposed" | "proven";
 
-export type NewBlockEvent = {
+type BlockEvent = {
   blockNumber: number;
   statusHint: L2BlockStatusHint;
   block?: string;
+};
+
+export type NewBlockEvent = BlockEvent & {
+  // Only on blocks the hash-following listener sends in chain order.
+  // `proposedTip` is the proposed tip of the pass that sent the block: every
+  // canonical block of the same rollup version above it is dead.
+  ordered?: { proposedTip: number };
 };
 
 export type PendingTxsEvent = {
@@ -40,9 +47,14 @@ export type ContractInstanceBalanceEvent = {
   blockNumber?: string;
 };
 
-export type CatchupBlockEvent = NewBlockEvent & {
+// Catch-up blocks answer a height request, so they never carry the ordered
+// stream's authority: `never` keeps an ordered event from passing as one.
+export type CatchupBlockEvent = BlockEvent & {
+  ordered?: never;
   requestId?: string;
   catchupReason?: "startup" | "cadence" | "manual" | "eternal" | "reorg_repair";
+  // At or below the serving node's own finalized tip, read before the block.
+  finalized?: true;
 };
 
 export type L2TipsEvent = {

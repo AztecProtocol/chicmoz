@@ -4,6 +4,7 @@ import autoBind from "auto-bind";
 import { BSON } from "bson";
 import kafkaJS, {
   Consumer,
+  type EachMessagePayload,
   Kafka,
   KafkaConfig,
   Message,
@@ -20,9 +21,21 @@ export interface MBOptions {
   saslConfig: SASLOptions;
   ssl?: boolean;
 }
+
+// KafkaJS's heartbeat for the message being handled. A handler that can run
+// past the session timeout (30 s by default) awaits it while it works, never
+// after it returns, and lets a rejection propagate, so the message is
+// redelivered. Only a call that reaches the broker can learn of a rebalance:
+// within one heartbeat interval (3 s by default) after a successful heartbeat,
+// calls resolve locally, and concurrent calls share the request in flight. A
+// resolved call never proves that this member still owns the partition.
+export type Heartbeat = EachMessagePayload["heartbeat"];
+
+type TopicCallback = (event: object, heartbeat: Heartbeat) => Promise<void>;
+
 export type MBConsumer = {
   consumer: Consumer;
-  topicCallbacks: Record<string, (event: object) => Promise<void>>;
+  topicCallbacks: Record<string, TopicCallback>;
 };
 
 export class MessageBus {
@@ -117,34 +130,63 @@ export class MessageBus {
 
   private async ensureProducerConnected() {
     if (!this.#producerConnectingPromise) {
-      this.#producer = this.#client.producer();
-      this.#producerConnectingPromise = this.#producer.connect();
+      // Reused across retries, so `disconnect()` also closes what a failed
+      // connect left open.
+      this.#producer ??= this.#client.producer();
+      this.#producerConnectingPromise = this.#producer
+        .connect()
+        .catch((e: unknown) => {
+          // A failed connect must not stick: the next publish retries it.
+          this.#producerConnectingPromise = undefined;
+          throw e;
+        });
     }
     await this.#producerConnectingPromise;
   }
 
   private async connectConsumer(groupId: string) {
     this.#consumers[groupId] = {
-      consumer: this.#client.consumer({ groupId }),
+      // The crash handler in nonRetriableWrapper is the only restart path:
+      // KafkaJS's own restart would keep the crashed consumer running beside
+      // its replacement, two members of one group in one process.
+      consumer: this.#client.consumer({
+        groupId,
+        retry: { restartOnFailure: () => Promise.resolve(false) },
+      }),
       topicCallbacks: {},
     };
     await this.#consumers[groupId]!.consumer.connect();
   }
 
   async publish<T>(topic: string, ...messages: T[]) {
+    await this.produce(topic, messages);
+  }
+
+  // Messages with one key share a partition while the topic's partition count
+  // holds. They keep their first-append order only for one writer that awaits
+  // each call before the next (a retried send can overtake a concurrent one),
+  // and a lost acknowledgement resends the batch, so consumers must tolerate
+  // duplicates.
+  async publishKeyed<T>(topic: string, key: string, ...messages: T[]) {
+    await this.produce(topic, messages, key);
+  }
+
+  private throwIfShutdown() {
     if (this.#shutdown) {
       throw new Error("MessageBus is already shutdown");
     }
+  }
 
+  private async produce<T>(topic: string, messages: T[], key?: string) {
+    this.throwIfShutdown();
     await this.ensureProducerConnected();
+    // `disconnect()` may have started while the connect was in flight.
+    this.throwIfShutdown();
 
-    const kafkaMessages: Message[] = [];
-    for (const m of messages) {
-      // Serialize the data and create a Buffer
-      const serialized = BSON.serialize({ data: m });
-      // Ensure we're using a Buffer as required by the Message interface
-      kafkaMessages.push({ value: Buffer.from(serialized) });
-    } // double check
+    const kafkaMessages: Message[] = messages.map((m) => ({
+      key,
+      value: Buffer.from(BSON.serialize({ data: m })),
+    }));
 
     await this.#producer!.send({ topic, messages: kafkaMessages });
   }
@@ -152,7 +194,9 @@ export class MessageBus {
   async subscribe<T>(
     groupId: string,
     topic: string,
-    cb: ((event: T) => Promise<void>) | ((event: T) => void),
+    cb:
+      | ((event: T, heartbeat: Heartbeat) => Promise<void>)
+      | ((event: T, heartbeat: Heartbeat) => void),
   ) {
     this.logger.info(`Kafka (sub): connecting to consumer group ${groupId}`);
     if (!this.#consumers[groupId]) {
@@ -166,7 +210,7 @@ export class MessageBus {
     });
     this.#consumers[groupId]!.topicCallbacks = {
       ...this.#consumers[groupId]?.topicCallbacks,
-      [topic]: cb as unknown as (event: object) => Promise<void>,
+      [topic]: cb as unknown as TopicCallback,
     };
   }
 
@@ -254,15 +298,10 @@ export class MessageBus {
         }
         const cb = this.#consumers[groupId]?.topicCallbacks[topic];
         if (cb) {
-          // Send a heartbeat before invoking the handler so the broker knows
-          // the consumer is still alive during long-running DB operations.
-          // Without this, the broker may consider the consumer dead after the
-          // session timeout, trigger a group rebalance, and reset the offset —
-          // causing the same messages to be replayed indefinitely.
           await heartbeat();
           try {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            await cb(data);
+            await cb(data, heartbeat);
           } catch (e) {
             // Rethrow so kafkajs does NOT resolve this offset. Swallowing
             // here acknowledged messages whose handler (typically a database
