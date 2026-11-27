@@ -137,7 +137,7 @@ const readProvenCursor = async () =>
   (await getBlockHeights()).processedProvenBlockHeight;
 
 /**
- * One pass: the election and the stream, then the tips, the heights, the
+ * One pass: the election and the stream, then the heights, the tips, the
  * proven side work and the full sweep. The tips and the side work need the
  * store to hold the pass's snapshot: an aborted pass's tips would contradict
  * its blocks, and its proven tip need not be the node's.
@@ -173,14 +173,18 @@ export const runPass = async ({
     }
   }
   const after = await store.getL2Tips();
+  // Only the listener's previous version reads it, to resume from it after a
+  // rollback; a pass that failed after storing blocks can leave it behind.
+  if (
+    (await getBlockHeights()).processedProposedBlockHeight !==
+    after.proposed.number
+  ) {
+    await storeProcessedProposedBlockHeight(after.proposed.number);
+  }
   const snapshot = source.lastTips;
   const settled = snapshot !== undefined && localTipsMatch(after, snapshot);
   if (settled && AZTEC_LISTEN_FOR_L2_TIPS) {
     await publishTipsIfDue(snapshot);
-  }
-  const moved = after.proposed.number !== before.proposed.number;
-  if (moved) {
-    await storeProcessedProposedBlockHeight(after.proposed.number);
   }
   if (settled && !AZTEC_DISABLE_LISTEN_FOR_PROVEN_BLOCKS) {
     await runProvenSideWork({
@@ -193,7 +197,7 @@ export const runPass = async ({
       storeCursor: storeProcessedProvenBlockHeight,
     });
   }
-  if (!moved) {
+  if (after.proposed.number === before.proposed.number) {
     await sweepOnce(after.proposed.number, rollupVersion);
   }
 };

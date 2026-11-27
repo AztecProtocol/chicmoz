@@ -21,13 +21,20 @@ import {
   tipsOf,
 } from "./support/chain.js";
 
-const mocks = vi.hoisted(() => ({
-  publishTipsIfDue: vi.fn(),
-  storeProcessedProposedBlockHeight: vi.fn(),
-  readLatestRollupVersion: vi.fn(),
-  readGenesisBlockHash: vi.fn(),
-  stores: [] as { version: number; genesis: unknown }[],
-}));
+const mocks = vi.hoisted(() => {
+  const heights = { processedProposedBlockHeight: 0 };
+  return {
+    heights,
+    publishTipsIfDue: vi.fn(),
+    storeProcessedProposedBlockHeight: vi.fn((height: number) => {
+      heights.processedProposedBlockHeight = height;
+      return Promise.resolve();
+    }),
+    readLatestRollupVersion: vi.fn(),
+    readGenesisBlockHash: vi.fn(),
+    stores: [] as { version: number; genesis: unknown }[],
+  };
+});
 const logger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
@@ -50,6 +57,7 @@ vi.mock("../../src/svcs/poller/pollers/l2-tips-poller.js", () => ({
 vi.mock("../../src/svcs/database/heights.controller.js", () => ({
   getBlockHeights: () =>
     Promise.resolve({
+      processedProposedBlockHeight: mocks.heights.processedProposedBlockHeight,
       processedProvenBlockHeight: 0,
       chainProvenBlockHeight: 0,
     }),
@@ -93,6 +101,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.heights.processedProposedBlockHeight = 0;
 });
 
 const chainOver = (
@@ -190,6 +199,23 @@ describe("block poller pass", () => {
     expect(mocks.publishTipsIfDue).toHaveBeenCalledTimes(1);
     expect(runProvenSideWork).toHaveBeenCalledTimes(1);
     expect((await chain.store.getL2Tips()).proposed.number).toBe(7);
+  });
+
+  it("writes the legacy proposed height whenever it differs from the store's tip, moved or not", async () => {
+    const x = new FakeNode("x", prefix(main, 7));
+    const { chain } = chainOver([x]);
+    await runPass(chain);
+    await runPass(chain);
+    expect(mocks.storeProcessedProposedBlockHeight.mock.calls).toEqual([[7]]);
+
+    // As a pass that failed after storing blocks leaves it.
+    mocks.heights.processedProposedBlockHeight = 5;
+    await runPass(chain);
+
+    expect(mocks.storeProcessedProposedBlockHeight.mock.calls).toEqual([
+      [7],
+      [7],
+    ]);
   });
 
   it("starts a new store, from the reporting node's block 0, when node info reports a new rollup version", async () => {

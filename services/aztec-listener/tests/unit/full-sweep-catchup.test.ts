@@ -55,6 +55,8 @@ describe("block poller full sweep", () => {
       onOrderedBlock: vi.fn(),
     }));
     vi.doMock("../../src/svcs/database/heights.controller.js", () => ({
+      getBlockHeights: () =>
+        Promise.resolve({ processedProposedBlockHeight: 3 }),
       storeProcessedProposedBlockHeight,
     }));
     vi.doMock("../../src/svcs/poller/network-client/attested-reads.js", () => ({
