@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { start } from "../../src/start.js";
 
 const steps = vi.hoisted(() => {
   const order: string[] = [];
@@ -55,8 +56,6 @@ describe("explorer-api start-up", () => {
   // A crash between a block's commit and its bump leaves cached chain reads
   // from before that commit; the sweep's deletions change them too.
   it("bumps the chain revision after the dropped-tx sweep, before it consumes", async () => {
-    const { start } = await import("../../src/start.js");
-
     await start();
 
     expect(steps.order).toEqual(["sweep", "bump", "subscribe"]);
