@@ -266,16 +266,29 @@ describe("open gap scheduling on a real database", () => {
     expect(await tick()).toEqual([[170, 170], [180, 180]]);
   });
 
+  it("sends the least recently seen of two due tip repairs first", async () => {
+    await mismatches([
+      { height: 700, seenAgoMs: 10 * MINUTE },
+      { height: 600, seenAgoMs: 20 * MINUTE },
+    ]);
+
+    expect((await repairTick())?.[0]).toEqual([600, 600]);
+    expect((await repairTick())?.[0]).toEqual([700, 700]);
+  });
+
   it("sends a due tip repair past more backed-off windows than the scheduler's candidates", async () => {
-    // Each seen more recently than the due mismatch at 900, and more of them
-    // than the scheduler's 50 candidates. The first ticks request, and so
-    // back off, these windows; the one at 3 starts at height 1.
+    // Each seen before the due mismatch at 900, and more of them than the
+    // scheduler's 50 candidates. The first ticks request, and so back off,
+    // these windows; the one at 3 starts at height 1.
     const backedOff = [3, ...span(1_001, 1_050)];
     await mismatches([
       // Never fetched: the listener starts at height 1.
-      { height: 0, seenAgoMs: 0 },
-      ...backedOff.map((height, i) => ({ height, seenAgoMs: (i + 1) * 1_000 })),
-      { height: 950, seenAgoMs: 30 * MINUTE, version: OLD },
+      { height: 0, seenAgoMs: 180 * MINUTE },
+      ...backedOff.map((height, i) => ({
+        height,
+        seenAgoMs: 120 * MINUTE - i * 1_000,
+      })),
+      { height: 950, seenAgoMs: 90 * MINUTE, version: OLD },
       { height: 900, seenAgoMs: 60 * MINUTE },
     ]);
 

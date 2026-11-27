@@ -6,7 +6,6 @@ import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import {
   and,
   asc,
-  desc,
   eq,
   gte,
   inArray,
@@ -584,8 +583,10 @@ export const buildMissingBlockRangeRequest = async ({
 };
 
 /**
- * Asks for the window around an open tip-boundary mismatch: the most recently
- * seen one whose window is not backing off. A window is re-sent whole while
+ * Asks for the window around an open tip-boundary mismatch: the least
+ * recently seen one whose window is not backing off. While the block
+ * consumer lags, a newer mismatch can appear on every tick; oldest first, it
+ * cannot keep an older one waiting. A window is re-sent whole while
  * its mismatch stays open (its heights may be present but wrong), with the
  * same backoff as other gaps, whatever the window row's status: blocks
  * landing in the window fulfil it without resolving a mismatch.
@@ -640,7 +641,7 @@ export const buildTipBoundaryRepairRequest =
           ),
         ),
       )
-      .orderBy(desc(mismatch.lastSeenAt))
+      .orderBy(asc(mismatch.lastSeenAt))
       .limit(1);
     if (!candidate) {
       return null;
