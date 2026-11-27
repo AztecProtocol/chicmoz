@@ -44,9 +44,14 @@ export const lockRows = async (
   values: unknown[] = [],
 ) => {
   const client = new pg.Client({ ...access, database });
-  await client.connect();
+  // Inside a transaction, pg_stat_activity shows each session's query as it
+  // was at the transaction's first read of it, so the waiters are read from
+  // a session that holds none open.
+  const watcher = new pg.Client({ ...access, database });
   let pid: number;
   try {
+    await client.connect();
+    await watcher.connect();
     pid = (
       await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
     ).rows[0].pid;
@@ -56,14 +61,14 @@ export const lockRows = async (
       throw new Error(`no row to lock: ${lockQuery}`);
     }
   } catch (e) {
-    await client.end();
+    await Promise.allSettled([client.end(), watcher.end()]);
     throw e;
   }
 
   /** The sessions waiting on this one's locks, whatever their database. */
   const waiters = async (): Promise<Waiter[]> =>
     (
-      await client.query<{
+      await watcher.query<{
         pid: number;
         datname: string;
         wait_event_type: string | null;
@@ -87,7 +92,7 @@ export const lockRows = async (
      * waiting statement never runs; resolves once that session is gone.
      */
     terminate: async (other: number) => {
-      const { rows } = await client.query<{ ended: boolean }>(
+      const { rows } = await watcher.query<{ ended: boolean }>(
         "SELECT pg_terminate_backend($1, 5000) AS ended",
         [other],
       );
@@ -95,7 +100,7 @@ export const lockRows = async (
         throw new Error(`session ${other} did not end`);
       }
     },
-    /** Ends the lock's session; a second call does nothing. */
+    /** Ends the lock's sessions; a second call does nothing. */
     release: async () => {
       if (released) {
         return;
@@ -104,7 +109,7 @@ export const lockRows = async (
       try {
         await client.query("ROLLBACK");
       } finally {
-        await client.end();
+        await Promise.allSettled([client.end(), watcher.end()]);
       }
     },
   };
