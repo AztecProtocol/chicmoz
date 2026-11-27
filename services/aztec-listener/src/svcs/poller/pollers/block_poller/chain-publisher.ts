@@ -57,11 +57,7 @@ const tiersOrdered = ({ proposed, checkpointed, proven, finalized }: L2Tips) =>
   proven.block.number <= checkpointed.block.number &&
   checkpointed.block.number <= proposed.number;
 
-/**
- * The block stream's handler. It checks each event against the store and the
- * pass's snapshot, publishes blocks before it stores them, and stores what it
- * accepts. A rejected event sets the pinned node aside and ends the pass.
- */
+/** The block stream's handler: it stores a block only once the block is sent. */
 export class ChainPublisher implements L2BlockStreamEventHandler {
   private prefixWait: { since: number; alertedAt?: number } | undefined;
   private endedOnPrefix = false;
@@ -323,7 +319,6 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
     throw new AbortError(message);
   }
 
-  // Warns on entering the wait, not on each pass, and alerts on a timer.
   private notePrefixWait(target: number, stored: number) {
     const now = this.now();
     const entering = this.prefixWait === undefined;

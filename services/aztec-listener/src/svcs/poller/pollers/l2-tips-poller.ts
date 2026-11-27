@@ -63,7 +63,6 @@ const normalizeTips = (tips: RawL2Tips): ChicmozL2Tips =>
     finalized: normalizeCheckpointTip(tips.finalized),
   });
 
-/** Publishes `raw` unless it equals the last tips published and the heartbeat is not due. */
 export const publishTipsIfDue = async (raw: L2Tips) => {
   const tips = normalizeTips(raw as unknown as RawL2Tips);
   const serialized = jsonStringify(tips);
