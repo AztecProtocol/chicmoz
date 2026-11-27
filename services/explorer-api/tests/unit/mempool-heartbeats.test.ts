@@ -48,25 +48,36 @@ const { droppedTxHandler } = await import(
   "../../src/events/received/on-dropped-txs.js"
 );
 
-// Each tx takes the chain lock in its own transaction, and may wait for it:
-// a heartbeat between them keeps the consumer's partition through a long
-// frame.
+// Each tx's lock wait can be long, so each starts after a heartbeat.
 describe("the pending and dropped tx handlers", () => {
   it.each([
     ["pending", pendingTxHandler],
     ["dropped", droppedTxHandler],
   ])(
-    "heartbeat before taking the chain lock for each %s tx",
+    "wait for a heartbeat before each %s tx's chain lock, and stop when one fails",
     async (_kind, handler) => {
       order.length = 0;
+      const beats: Array<{ pass: () => void; fail: (e: Error) => void }> = [];
       const frame = { txs: [{ txHash: "0x01" }, { txHash: "0x02" }] };
 
-      await handler.cb(frame as never, () => {
-        order.push("beat");
-        return Promise.resolve();
-      });
+      const handled = handler.cb(
+        frame as never,
+        () =>
+          new Promise<void>((pass, fail) => {
+            order.push("beat");
+            beats.push({ pass, fail });
+          }),
+      );
+      // Let anything not waiting for the heartbeat run.
+      await new Promise((settle) => setTimeout(settle, 20));
+      expect(order).toEqual(["beat"]);
 
-      expect(order).toEqual(["beat", "lock", "beat", "lock"]);
+      beats[0].pass();
+      await vi.waitFor(() => expect(order).toEqual(["beat", "lock", "beat"]));
+
+      beats[1].fail(new Error("rebalancing"));
+      await expect(handled).rejects.toThrow("rebalancing");
+      expect(order).toEqual(["beat", "lock", "beat"]);
     },
   );
 });
