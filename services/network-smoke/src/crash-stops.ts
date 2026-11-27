@@ -125,20 +125,23 @@ const missedStop = async (
  * Kills service `name`, then ends every Postgres session it opened, by the
  * name the run gives them: a session never sees its client go, and a
  * statement it had sent, waiting on the lock or not yet, would run once the
- * lock is released, and an autocommit one would commit.
+ * lock is released, and an autocommit one would commit. Past the stop's
+ * `deadline` it kills nothing and resolves with why: a hook that timed out
+ * runs on, and its kill would land in a later scenario.
  */
-const killService = async (lock: RowLock, services: Services, name: string) => {
+export const killService = async (
+  lock: Pick<RowLock, "endSessions">,
+  services: Pick<Services, "kill">,
+  name: string,
+  deadline: number,
+): Promise<string | undefined> => {
+  const late = Date.now() - deadline;
+  if (late > 0) {
+    return `the stop was proven ${late} ms past its ${STOP_WAIT_MS / 1000} s deadline, so ${name} was not killed`;
+  }
   await services.kill(name);
   await lock.endSessions(name);
-};
-
-/** `killService`, then releases `lock` and starts `name` again. Resolves with when it started. */
-const crash = async (lock: RowLock, services: Services, name: string) => {
-  await killService(lock, services, name);
-  await lock.release();
-  const restartedAt = Date.now();
-  await services.start(name);
-  return restartedAt;
+  return undefined;
 };
 
 // The message bus's envelope: BSON of `{ data: <message> }`.
@@ -259,6 +262,7 @@ export const listenerStop = ({
         return;
       }
       const { lock, before, first } = armed;
+      const deadline = Date.now() + STOP_WAIT_MS;
       try {
         const waiting = await poll(async () => {
           const [write] = await writesWaiting(lock, LISTENER, LISTENER_WRITE);
@@ -292,7 +296,14 @@ export const listenerStop = ({
           result.missed = `the state at the stop is not ${JSON.stringify(expected)}`;
           return;
         }
-        const restartedAt = await crash(lock, services, LISTENER);
+        const refused = await killService(lock, services, LISTENER, deadline);
+        if (refused !== undefined) {
+          result.missed = refused;
+          return;
+        }
+        await lock.release();
+        const restartedAt = Date.now();
+        await services.start(LISTENER);
         await until(
           async () =>
             (await store(replacing.height)).hash ===
@@ -485,6 +496,7 @@ export const apiStop = ({
         return;
       }
       const { lock, before } = armed;
+      const deadline = Date.now() + STOP_WAIT_MS;
       try {
         const stopped = await blockHandlerHeldUp(lock, STOP_WAIT_MS);
         if (stopped.held === undefined) {
@@ -512,7 +524,11 @@ export const apiStop = ({
             "the state at the stop is not one record sent, committed in the database, and the block group alone before it";
           return;
         }
-        await killService(lock, services, API);
+        const refused = await killService(lock, services, API, deadline);
+        if (refused !== undefined) {
+          result.missed = refused;
+          return;
+        }
         const restartedAt = Date.now();
         await services.start(API);
         const replayed = await blockHandlerHeldUp(lock, RECOVERY_WAIT_MS);

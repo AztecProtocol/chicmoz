@@ -41,10 +41,15 @@ export const blockedBy = (
   return chain;
 };
 
-// A harness statement that stalls, a lock wait included, fails the step it
-// serves instead of holding it until the test's timeout.
+// A harness statement or connection that stalls, a lock wait included, fails
+// the step it serves instead of holding it until the test's timeout.
 const session = (access: PgAccess, database: string) =>
-  new pg.Client({ ...access, database, statement_timeout: 10_000 });
+  new pg.Client({
+    ...access,
+    database,
+    statement_timeout: 10_000,
+    connectionTimeoutMillis: 10_000,
+  });
 
 /** Rows of one query in its own session, which ends with it. */
 export const queryRows = async <T extends QueryResultRow>(

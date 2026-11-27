@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { lateGroups } from "./broker.js";
+import { bounded, lateGroups } from "./broker.js";
+
+describe("a broker read", () => {
+  it("gives up once its time runs out", async () => {
+    await expect(
+      bounded("a read", () => new Promise<never>(() => undefined), 20),
+    ).rejects.toThrow("a read: no answer from the broker within 0.02 s");
+  });
+});
 
 describe("judging consumer groups", () => {
   it("counts a group with a record it has not committed, whatever its state, and no group without one", () => {
