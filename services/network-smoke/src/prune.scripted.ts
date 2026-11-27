@@ -70,6 +70,10 @@ const snapshot = async (
 
 type Snapshot = Awaited<ReturnType<typeof snapshot>>;
 
+// Scenarios run one after another, each ending on its settled read, so the
+// time since the last one is the next one's runtime.
+let lastSettledAt = Date.now();
+
 /** The API once it has consumed what the broker held when `want` was met or its time ran out; a consumer that never catches up fails the scenario. */
 const settled = async (
   read: () => Promise<Snapshot>,
@@ -83,8 +87,10 @@ const settled = async (
     cacheMs: CACHE_MS,
     consumedThrough: broker.apiConsumedThrough,
   });
+  const took = (Date.now() - lastSettledAt) / 1000;
+  lastSettledAt = Date.now();
   process.stdout.write(
-    `${label}: ${met ? "expected state reached" : `expected state not reached in ${SETTLE_TIMEOUT_MS / 1000} s`}; once consumed, ${held ? "as expected" : "not as expected"}:\n${JSON.stringify(value, null, 2)}\n`,
+    `${label} (the scenario took ${took.toFixed(1)} s): ${met ? "expected state reached" : `expected state not reached in ${SETTLE_TIMEOUT_MS / 1000} s`}; once consumed, ${held ? "as expected" : "not as expected"}:\n${JSON.stringify(value, null, 2)}\n`,
   );
   return value;
 };
