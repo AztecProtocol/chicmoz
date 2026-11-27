@@ -295,6 +295,25 @@ describe("block poller pass", () => {
     ]);
   });
 
+  it.each([
+    { pass: "elects no node", nodes: () => [] },
+    {
+      pass: "follows a node at block 0",
+      nodes: () => [new FakeNode("x", prefix(main, 0))],
+    },
+  ])(
+    "keeps the legacy proposed height after a pass that $pass, which leaves the store empty",
+    async ({ nodes }) => {
+      const { chain } = chainOver(nodes());
+      mocks.heights.processedProposedBlockHeight = 5;
+
+      await runPass(chain);
+
+      expect((await chain.store.getL2Tips()).proposed.number).toBe(0);
+      expect(mocks.storeProcessedProposedBlockHeight).not.toHaveBeenCalled();
+    },
+  );
+
   it("starts a new store, from the reporting node's block 0, when node info reports a new rollup version", async () => {
     const [a, b] = [new FakeNode("a", main), new FakeNode("b", main)];
     mocks.readLatestRollupVersion

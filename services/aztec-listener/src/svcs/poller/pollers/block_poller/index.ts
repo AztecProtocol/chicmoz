@@ -176,10 +176,13 @@ export const runPass = async ({
   }
   const after = await store.getL2Tips();
   // Only the listener's previous version reads it, to resume from it after a
-  // rollback; a pass that failed after storing blocks can leave it behind.
+  // rollback; a pass that failed after storing blocks can leave it behind. It
+  // waits for the store's first block: that version lifts a 0 to the chain's
+  // proven height, and would send again the blocks it sent above that.
   if (
+    after.proposed.number > 0 &&
     (await getBlockHeights()).processedProposedBlockHeight !==
-    after.proposed.number
+      after.proposed.number
   ) {
     await storeProcessedProposedBlockHeight(after.proposed.number);
   }
