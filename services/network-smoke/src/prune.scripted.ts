@@ -517,7 +517,7 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
     );
   });
 
-  it("kills the listener while its store's write of 17''' waits on the lock, with 17''' sent and the store on the prune's tip", () => {
+  it("kills the listener while the lock holds up its store's write of 17''', with 17''' sent and the store on the prune's tip", () => {
     const { missed, waiting, atKill } = stop.result;
     expect.soft(missed, "why nothing was killed").toBeUndefined();
     expect.soft(waiting, "the write that waited").toEqual({
@@ -617,11 +617,11 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
     );
   });
 
-  it("kills the API while its block handler's upsert after 20'''' waits on the lock, with 20'''' committed and its offset not", () => {
-    const { missed, waiting, atKill } = stop.result;
+  it("kills the API while the lock holds up its block handler's upsert after 20'''', with 20'''' committed and its offset not", () => {
+    const { missed, held, atKill } = stop.result;
     const [sent] = atKill?.sent ?? [];
     expect.soft(missed, "why nothing was killed").toBeUndefined();
-    expect.soft(waiting, "the write that waited").toEqual({
+    expect.soft(held?.waiting, "the write held up").toEqual({
       database: databases.api,
       statement: 'insert into "l2_rollup_version_observation"',
     });
@@ -642,13 +642,24 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
       .toEqual({ blockHandler: [sent?.from] });
   });
 
-  it("consumes 20'''' again once restarted, and commits past it", () => {
-    const { atKill, afterRestart, recoveryMs } = stop.result;
+  it("consumes 20'''' again once restarted: its block handler reaches the same upsert with the record uncommitted, and commits past it once the lock goes", () => {
+    const { atKill, replayMissed, replay, afterRestart, recoveryMs } =
+      stop.result;
     const [sent] = atKill?.sent ?? [];
     process.stdout.write(
       `from the API's restart to its commit past 20'''': ${recoveryMs} ms\n`,
     );
-    expect(afterRestart?.committed).toEqual({ blockHandler: [sent?.to] });
+    expect.soft(replayMissed, "why no replay was seen").toBeUndefined();
+    expect.soft(replay?.waiting, "the restarted API's write held up").toEqual({
+      database: databases.api,
+      statement: 'insert into "l2_rollup_version_observation"',
+    });
+    expect
+      .soft(replay?.committed, "committed offsets while it was held up")
+      .toEqual({ blockHandler: [sent?.from] });
+    expect
+      .soft(afterRestart?.committed, "committed offsets once the lock went")
+      .toEqual({ blockHandler: [sent?.to] });
   });
 
   // The replayed batch is 20'''' alone, so the replay has no dead block to

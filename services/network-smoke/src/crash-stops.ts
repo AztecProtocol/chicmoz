@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import { L2Block } from "@aztec-labs/stdlib/block";
 import { BSON } from "bson";
 import { z } from "zod";
@@ -87,8 +88,13 @@ const caughtWrite = ({ database, query }: Waiter): CaughtWrite => ({
   statement: query.split("(")[0].trim(),
 });
 
-const missedStop = async (lock: RowLock, writer: string, more = {}) =>
-  `no write of the ${writer} waited on the lock within ${STOP_WAIT_MS / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
+const missedStop = async (
+  lock: RowLock,
+  writer: string,
+  withinMs: number,
+  more = {},
+) =>
+  `the lock held up no write of the ${writer} within ${withinMs / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
 
 /**
  * Kills `name` and ends every session of `database` that `lock` holds up:
@@ -160,7 +166,7 @@ export type ListenerStop = {
   /** Why nothing was crashed; absent once the listener was. */
   missed?: string;
   waiting?: CaughtWrite;
-  /** What the batch had put on the topic, and what the listener's store held, at the kill. */
+  /** What the batch had put on the topic, and what the listener's store held, at the stop; the kill needs both as expected. */
   atKill?: {
     sent: OffsetRange[];
     store: { proposed: number | null; hash: string | null };
@@ -193,7 +199,9 @@ export const listenerStop = ({
   services: Services;
 }) => {
   const result: ListenerStop = {};
-  let armed: { lock: RowLock; before: Map<number, number> } | undefined;
+  let armed:
+    | { lock: RowLock; before: Map<number, number>; first: BlockId }
+    | undefined;
   const store = async (height: number) => {
     const [row] = await queryRows<{
       proposed: number | null;
@@ -237,6 +245,7 @@ export const listenerStop = ({
           [first.height],
         ),
         before,
+        first,
       };
     },
     /** Once the node serves the prune, whose replacing batch starts with `replacing`. */
@@ -244,22 +253,40 @@ export const listenerStop = ({
       if (armed === undefined) {
         return;
       }
-      const { lock, before } = armed;
+      const { lock, before, first } = armed;
       try {
         const waiting = await poll(async () => {
           const [write] = await writesWaiting(lock, database, LISTENER_WRITE);
           return write;
         }, STOP_WAIT_MS);
         if (waiting === undefined) {
-          result.missed = await missedStop(lock, "listener's store");
+          result.missed = await missedStop(
+            lock,
+            "listener's store",
+            STOP_WAIT_MS,
+          );
           return;
         }
         result.waiting = caughtWrite(waiting);
         const atKill = await broker.endOffsets(blockTopic);
         result.atKill = {
           sent: grown(before, atKill),
-          store: await store(replacing.height),
+          store: await store(first.height),
         };
+        // The batch's one record is on the topic, and the store is still on
+        // the prune's target, with the dead block at the height it writes.
+        const expected = {
+          sent: [1],
+          store: { proposed: first.height - 1, hash: first.hash.toLowerCase() },
+        };
+        const seen = {
+          sent: result.atKill.sent.map((r) => r.to - r.from),
+          store: result.atKill.store,
+        };
+        if (!isDeepStrictEqual(seen, expected)) {
+          result.missed = `the state at the stop is not ${JSON.stringify(expected)}`;
+          return;
+        }
         const restartedAt = await crash(
           lock,
           database,
@@ -301,25 +328,38 @@ export const listenerStop = ({
   };
 };
 
+type Committed = Record<string, (number | undefined)[]>;
+
+/** The block handler's upsert, held up by the lock, as a stop proved it (see `apiStop`). */
+export type HeldUp = {
+  waiting: CaughtWrite;
+  /** The API's upserts the lock held up. */
+  writesWaiting: number;
+  /** The API's other groups that had not committed a record. */
+  othersBehind: string[];
+};
+
 export type ApiStop = {
   /** Why nothing was crashed; absent once the API was. */
   missed?: string;
-  waiting?: CaughtWrite;
-  /** How many of the API's writes waited, and its other groups that had not committed a record, when the stop was proven. */
-  writesWaiting?: number;
-  othersBehind?: string[];
+  held?: HeldUp;
   /**
-   * At the kill: whether the replacing block and the dead blocks are
+   * At the stop: whether the replacing block and the dead blocks are
    * canonical in the API's database, what the batch put on the topic, and
-   * the API groups' committed offsets on the partitions it went to.
+   * the API groups' committed offsets on the partitions it went to. The kill
+   * needs all three as expected.
    */
   atKill?: {
     canonical: { replacing?: boolean; dead: (boolean | undefined)[] };
     sent: OffsetRange[];
-    committed: Record<string, (number | undefined)[]>;
+    committed: Committed;
   };
-  /** The same offsets once the restarted API committed past the batch. */
-  afterRestart?: { committed: Record<string, (number | undefined)[]> };
+  /** Why the restarted API was not seen handling the record again; absent once it was. */
+  replayMissed?: string;
+  /** The restarted API's block handler held up at the same upsert, and the committed offsets then. */
+  replay?: HeldUp & { committed: Committed };
+  /** The same offsets once the lock was released and the restarted API committed past the batch. */
+  afterRestart?: { committed: Committed };
   /** From the restart to that commit. */
   recoveryMs?: number;
 };
@@ -329,8 +369,10 @@ export type ApiStop = {
  * does. `arm`, once every API group has committed through the topic's end,
  * locks the API's rollup-version observation rows, which the block handler
  * upserts after the commit; the run's database holds its network's alone.
- * `fire`, once the node has pruned, waits for that upsert to wait on the
- * lock, kills the API and starts it again, which consumes the record again.
+ * `fire`, once the node has pruned, waits for that upsert to be held up by
+ * the lock, kills the API and starts it again with the lock still held, so
+ * the restarted API's block handler stops at the same upsert while the
+ * record is still uncommitted; then it releases the lock.
  */
 export const apiStop = ({
   pg,
@@ -358,7 +400,7 @@ export const apiStop = ({
     );
     return row?.canonical;
   };
-  const committedOn = async (partitions: number[]) =>
+  const committedOn = async (partitions: number[]): Promise<Committed> =>
     Object.fromEntries(
       [...(await broker.apiCommitted(blockTopic)).entries()].map(
         ([group, offsets]) => [
@@ -367,6 +409,36 @@ export const apiStop = ({
         ],
       ),
     );
+  /**
+   * The API's chain-info and node-info handlers upsert the row too, each
+   * holding a record its group cannot commit while the row is locked, and a
+   * group handles one record at a time: more upserts held up, on the lock or
+   * queued behind one another, than other groups behind means one is the
+   * block handler's. Waiters are read before the groups, so none of them is
+   * missed.
+   */
+  const blockHandlerHeldUp = async (
+    lock: RowLock,
+    timeoutMs: number,
+  ): Promise<{ held?: HeldUp; othersBehind: string[] }> => {
+    let othersBehind: string[] = [];
+    const writes = await poll(async () => {
+      const held = await writesWaiting(lock, database, API_WRITE);
+      if (held.length === 0) {
+        return undefined;
+      }
+      othersBehind = await broker.apiGroupsBehind(blockTopic);
+      return held.length > othersBehind.length ? held : undefined;
+    }, timeoutMs);
+    return {
+      held: writes && {
+        waiting: caughtWrite(writes[0]),
+        writesWaiting: writes.length,
+        othersBehind,
+      },
+      othersBehind,
+    };
+  };
   return {
     result,
     /** Before the prune. */
@@ -389,32 +461,18 @@ export const apiStop = ({
       }
       const { lock, before } = armed;
       try {
-        // The API's chain-info and node-info handlers upsert the row too, each
-        // holding a record its group cannot commit while the row is locked,
-        // and a group handles one record at a time: more upserts held up,
-        // on the lock or queued behind one another, than other groups behind
-        // means one is the block handler's. Waiters are read before the
-        // groups, so none of them is missed.
-        let othersBehind: string[] = [];
-        const waiting = await poll(async () => {
-          const writes = await writesWaiting(lock, database, API_WRITE);
-          if (writes.length === 0) {
-            return undefined;
-          }
-          othersBehind = await broker.apiGroupsBehind(blockTopic);
-          return writes.length > othersBehind.length ? writes : undefined;
-        }, STOP_WAIT_MS);
-        if (waiting === undefined) {
-          result.missed = await missedStop(lock, "API's block handler", {
-            othersBehind,
-          });
+        const stopped = await blockHandlerHeldUp(lock, STOP_WAIT_MS);
+        if (stopped.held === undefined) {
+          result.missed = await missedStop(
+            lock,
+            "API's block handler",
+            STOP_WAIT_MS,
+            { othersBehind: stopped.othersBehind },
+          );
           return;
         }
-        result.waiting = caughtWrite(waiting[0]);
-        result.writesWaiting = waiting.length;
-        result.othersBehind = othersBehind;
-        const atKill = await broker.endOffsets(blockTopic);
-        const sent = grown(before, atKill);
+        result.held = stopped.held;
+        const sent = grown(before, await broker.endOffsets(blockTopic));
         const partitions = sent.map((r) => r.partition);
         result.atKill = {
           canonical: {
@@ -424,12 +482,42 @@ export const apiStop = ({
           sent,
           committed: await committedOn(partitions),
         };
-        const restartedAt = await crash(
-          lock,
-          database,
-          services,
-          "explorer-api",
-        );
+        // The batch's one record is on the topic, its chain change is
+        // committed, and every API group on that partition is still before it.
+        const [range] = sent;
+        const groups = Object.values(result.atKill.committed);
+        if (
+          sent.length !== 1 ||
+          range.to - range.from !== 1 ||
+          !isDeepStrictEqual(result.atKill.canonical, {
+            replacing: true,
+            dead: dead.map(() => false),
+          }) ||
+          groups.length === 0 ||
+          !groups.every((offsets) => isDeepStrictEqual(offsets, [range.from]))
+        ) {
+          result.missed =
+            "the state at the stop is not one record sent, committed in the database and not by any group";
+          return;
+        }
+        await killWaiting(lock, database, services, "explorer-api");
+        const restartedAt = Date.now();
+        await services.start("explorer-api");
+        const replayed = await blockHandlerHeldUp(lock, RECOVERY_WAIT_MS);
+        if (replayed.held === undefined) {
+          result.replayMissed = await missedStop(
+            lock,
+            "restarted API's block handler",
+            RECOVERY_WAIT_MS,
+            { othersBehind: replayed.othersBehind },
+          );
+          return;
+        }
+        result.replay = {
+          ...replayed.held,
+          committed: await committedOn(partitions),
+        };
+        await lock.release();
         result.afterRestart = {
           committed: await until(
             async () => {
