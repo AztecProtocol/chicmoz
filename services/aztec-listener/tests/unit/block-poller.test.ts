@@ -153,18 +153,17 @@ describe("block poller pass", () => {
     });
   });
 
-  it("logs a failed send through the listener's logger and publishes no tips", async () => {
+  it("fails the pass on a failed send, before any post-pass work", async () => {
     const x = new FakeNode("x", prefix(main, 3));
     const { chain } = chainOver([x], () =>
       Promise.reject(new Error("broker down")),
     );
 
-    await runPass(chain);
+    await expect(runPass(chain)).rejects.toThrow("broker down");
 
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringMatching(/^Error processing block stream .*broker down/s),
-    );
     expect(mocks.publishTipsIfDue).not.toHaveBeenCalled();
+    expect(runProvenSideWork).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it("publishes the snapshot's tips after a pass that reaches them, and no tips or side work after one that ends on the prefix rule", async () => {

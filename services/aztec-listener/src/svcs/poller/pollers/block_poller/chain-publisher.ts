@@ -65,6 +65,7 @@ const tiersOrdered = ({ proposed, checkpointed, proven, finalized }: L2Tips) =>
 export class ChainPublisher implements L2BlockStreamEventHandler {
   private prefixWait: { since: number; alertedAt?: number } | undefined;
   private endedOnPrefix = false;
+  private failure: Error | undefined;
   private readonly now: () => number;
 
   constructor(
@@ -80,16 +81,40 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
   /** Call before each pass's `sync()`. */
   startPass(): void {
     this.endedOnPrefix = false;
+    this.failure = undefined;
   }
 
-  /** Call after each pass's `sync()`; a pass that did not end on the prefix rule ends the wait. */
+  /**
+   * Call after each pass's `sync()`, which resolves even when a handler
+   * failed: this rethrows that failure. A pass that did not end on the prefix
+   * rule ends the wait.
+   */
   finishPass(): void {
     if (!this.endedOnPrefix) {
       this.prefixWait = undefined;
     }
+    const failure = this.failure;
+    this.failure = undefined;
+    if (failure !== undefined) {
+      throw failure;
+    }
   }
 
   async handleBlockStreamEvent(event: L2BlockStreamEvent): Promise<void> {
+    try {
+      await this.handle(event);
+    } catch (e) {
+      if ((e as Error).name === "AbortError") {
+        throw e;
+      }
+      // The stream would only log it and end the pass; finishPass() rethrows it.
+      const error = e instanceof Error ? e : new Error(String(e));
+      this.failure ??= error;
+      throw new AbortError(error.message, { cause: error });
+    }
+  }
+
+  private handle(event: L2BlockStreamEvent): Promise<void> {
     switch (event.type) {
       case "blocks-added":
         return this.addBlocks(event.blocks);

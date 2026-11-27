@@ -177,7 +177,7 @@ describe("ChainPublisher after the node replaces published heights", () => {
     x.chain = prefix(main, 9);
 
     failing.add(7);
-    await pass();
+    await expect(pass()).rejects.toThrow("send rejected");
     expect(sent).toEqual(sentOf(main, [6], 9));
     expect((await head()).number).toBe(6);
 

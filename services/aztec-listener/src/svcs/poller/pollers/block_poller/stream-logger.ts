@@ -14,7 +14,7 @@ const line = (msg: string, ...data: unknown[]) =>
 
 /**
  * The SDK block stream's logger, routed to the listener's. The stream reports
- * a handler's failure only here, so it must not go to the SDK's own output.
+ * its own failures only here, so they must not go to the SDK's own output.
  */
 export const streamLogger: SdkLogger = {
   silent: () => undefined,
