@@ -173,6 +173,40 @@ describe("ChainPublisher after the node replaces published heights", () => {
     },
   );
 
+  it.each([
+    {
+      change: "drops blocks 8-10",
+      next: () => Promise.resolve(prefix(main, 7)),
+    },
+    { change: "replaces block 10", next: () => grow(prefix(main, 9), 10) },
+  ])(
+    "sends and stores no batch of a pass whose tip the node no longer holds, after it $change",
+    async ({ next }) => {
+      const x = new FakeNode("x", prefix(main, 5));
+      const { store, sent, pass } = setup({ nodes: [x] });
+      await pass();
+      sent.length = 0;
+      const before = await store.getL2Tips();
+      const after = await next();
+      // The node answers the pass's tips read at block 10, then changes.
+      x.chain = prefix(main, 10);
+      x.chainTipsOverride = () => {
+        const tips = x.tips();
+        x.chain = after;
+        return tips;
+      };
+
+      expect(await pass()).toBe(x.rpc);
+
+      expect(sent).toEqual([]);
+      expect(await store.getL2Tips()).toEqual(before);
+      expect(
+        loggedTimes(logger.warn, "no longer holds this pass's proposed tip 10"),
+      ).toBe(1);
+      expect(loggedTimes(logger.warn, "sits out the block stream")).toBe(0);
+    },
+  );
+
   it("stops the pass at a failed send, and the next pass sends again from that block", async () => {
     const x = new FakeNode("x", prefix(main, 5));
     const { sent, failing, pass, head } = setup({ nodes: [x] });

@@ -126,15 +126,16 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
   }
 
   private async addBlocks(blocks: L2Block[]) {
-    const tip = this.snapshot().proposed.number;
+    const tip = this.snapshot().proposed;
     const rejection = await this.batchFault(blocks);
     if (rejection !== undefined) {
       this.reject(rejection);
     }
+    await this.confirmTip(tip, blocks);
     const sent: L2Block[] = [];
     try {
       for (const block of blocks) {
-        await this.deps.publishBlock(block, tip);
+        await this.deps.publishBlock(block, tip.number);
         sent.push(block);
       }
     } finally {
@@ -192,6 +193,27 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       };
     }
     return undefined;
+  }
+
+  // The stream checks its snapshot's tip only after emitting every batch, yet
+  // the API takes each block's tip as where the listener's chain ends. A node
+  // that moved since its tips were read is not at fault.
+  private async confirmTip(tip: L2BlockId, blocks: L2Block[]) {
+    // Before the read, which unpins a node that has no block at the tip.
+    const name = this.pinnedName();
+    const last = blocks[blocks.length - 1];
+    const held =
+      last.number === tip.number
+        ? last.hash()
+        : this.deps.source
+            .pinnedBlockData(tip.number)
+            .then((data) => data?.header.hash());
+    if ((await held)?.toString() !== tip.hash) {
+      logger.warn(
+        `Node ${name} no longer holds this pass's proposed tip ${tip.number}; the pass ends before sending blocks ${blocks[0].number}-${last.number}`,
+      );
+      throw new PassExit();
+    }
   }
 
   private async prune(event: PruneEvent) {
