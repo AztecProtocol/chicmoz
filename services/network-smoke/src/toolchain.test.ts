@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -67,6 +67,18 @@ describe("toolchain staging directories", () => {
         mkdirSync(join(dir, name));
       }
       expect(stagingDirs(dir, "ns0000000000")).toEqual([join(dir, names[0])]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("finds none where no toolchain directory exists, and fails where it cannot read one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "chicmoz-toolchain-"));
+    try {
+      expect(stagingDirs(join(dir, "missing"), "ns0000000000")).toEqual([]);
+      const file = join(dir, "file");
+      writeFileSync(file, "");
+      expect(() => stagingDirs(file, "ns0000000000")).toThrow("ENOTDIR");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

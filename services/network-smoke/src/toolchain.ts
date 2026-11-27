@@ -80,8 +80,12 @@ export const stagingDirs = (toolchainDir: string, runId: string) => {
   let names: string[];
   try {
     names = readdirSync(toolchainDir);
-  } catch {
-    return [];
+  } catch (e) {
+    // No toolchain directory, so no install ran there to be killed.
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw e;
   }
   return names
     .filter((name) => staging.test(name))

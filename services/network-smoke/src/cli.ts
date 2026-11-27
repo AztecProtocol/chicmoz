@@ -32,6 +32,7 @@ const down = async (runId: string) => {
   }
   const stuck: number[] = [];
   let released = false;
+  let stagingError: Error | undefined;
   try {
     for (const pgid of readPgids(runDir).reverse()) {
       if (!(await stopGroup(pgid, runId))) {
@@ -63,12 +64,24 @@ const down = async (runId: string) => {
     for (const dir of Object.values(tmpDirs(runId, runDir))) {
       removeTmpDir(dir);
     }
-    for (const dir of stagingDirs(readConfig().toolchainDir, runId)) {
-      rmSync(dir, { recursive: true, force: true });
-      process.stdout.write(`removed the toolchain staging directory ${dir}\n`);
+    // A failure here fails `down`, but only once the ports are released.
+    try {
+      for (const dir of stagingDirs(readConfig().toolchainDir, runId)) {
+        rmSync(dir, { recursive: true, force: true });
+        process.stdout.write(
+          `removed the toolchain staging directory ${dir}\n`,
+        );
+      }
+    } catch (e) {
+      stagingError = e as Error;
     }
     // Only once every group stopped: a survivor may still bind a port.
     released = stuck.length === 0 && (await releasePorts(runId));
+  }
+  if (stagingError) {
+    throw new Error(
+      `run ${runId} is not down: its toolchain staging directories were not removed: ${stagingError.message}`,
+    );
   }
   if (stuck.length > 0) {
     throw new Error(
