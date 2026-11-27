@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { type Server, createServer } from "node:http";
+import { type IncomingMessage, type Server, createServer } from "node:http";
 import { type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,7 +12,7 @@ const KEYS = ["usr-5c1e", "pwd-5c1e", "pth-5c1e", "qry-5c1e"];
 const [USER, PASSWORD, PATH, QUERY] = KEYS;
 
 const run = (
-  check: "sample" | "window",
+  check: "sample" | "window" | "reorgs",
   nodeUrl: string,
   apiUrl: string,
   env: Record<string, string> = {},
@@ -43,22 +43,42 @@ const listen = async (server: Server) => {
   return (server.address() as AddressInfo).port;
 };
 
-// Answers every request with a 500 whose body quotes the key it rejects
-// bare: each path segment and query value, not the path or query as sent.
+// Each path segment and query value of a request, bare, as a server echoing
+// the key it rejects would quote it, not the path or query as sent.
+const quotedOf = (req: IncomingMessage) => {
+  const url = new URL(req.url ?? "/", "http://echo");
+  return [
+    ...url.pathname.split("/").filter(Boolean),
+    ...url.searchParams.values(),
+  ].join(" ");
+};
+
 const echo500 = () =>
   createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://echo");
-    const quoted = [
-      ...url.pathname.split("/").filter(Boolean),
-      ...url.searchParams.values(),
-    ];
     res.writeHead(500, { "content-type": "application/json" });
     res.end(
       JSON.stringify({
         jsonrpc: "2.0",
         id: null,
-        error: { code: -32000, message: `rejected ${quoted.join(" ")}` },
+        error: { code: -32000, message: `rejected ${quotedOf(req)}` },
       }),
+    );
+  });
+
+// A 200 whose reorg record holds the quote as its height: Zod's coercion to
+// a BigInt then throws an error that names the value.
+const echo200 = () =>
+  createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify([
+        {
+          orphanedBlockHash: "0x01",
+          height: quotedOf(req),
+          timestamp: 0,
+          nbrOfOrphanedBlocks: 1,
+        },
+      ]),
     );
   });
 
@@ -109,6 +129,30 @@ describe("compare-chain on a failing node or API", () => {
       (await run("window", setups[1].node, setups[1].api)).output,
       "the status, from the SDK's message",
     ).toContain("node getChainTips failed: HTTP 500");
+  }, 60_000);
+
+  it("prints fixed text for a 200 it cannot parse, without the value it echoed", async () => {
+    const ok = echo200();
+    const port = await listen(ok);
+    const node = `http://127.0.0.1:${port}/${PATH}?key=${QUERY}`;
+    const api = `http://127.0.0.1:${port}/${PATH}`;
+    try {
+      for (const [check, failed] of [
+        ["reorgs", "API /l2/reorgs: invalid response"],
+        ["sample", "API /l2/latest-height: invalid response"],
+        ["window", "node getChainTips failed"],
+      ] as const) {
+        const { code, output } = await run(check, node, api);
+        expect.soft(code, `${check}: exit code`).toBe(2);
+        expect.soft(output, `${check}: diagnostic`).toContain(failed);
+        for (const fragment of [PATH, QUERY, "127.0.0.1", `:${port}`]) {
+          expect.soft(output, `${check}: output`).not.toContain(fragment);
+        }
+      }
+    } finally {
+      ok.closeAllConnections();
+      ok.close();
+    }
   }, 60_000);
 
   it("gives up on a node or an API that never answers", async () => {

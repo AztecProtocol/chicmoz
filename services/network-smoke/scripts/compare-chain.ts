@@ -170,6 +170,19 @@ const api = async (path: string): Promise<unknown> => {
   }
 };
 
+/** A parse error can quote what the API sent, which can echo a key. */
+const apiParsed = async <T>(
+  path: string,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+): Promise<T> => {
+  const body = await api(path);
+  try {
+    return schema.parse(body);
+  } catch {
+    throw new Error(`API ${path}: invalid response`);
+  }
+};
+
 type Tips = Awaited<ReturnType<typeof node.getChainTips>>;
 
 const chainTips = () => nodeCall("getChainTips", () => node.getChainTips());
@@ -195,9 +208,10 @@ const apiHashes = async (from: number, to: number, gapMs = 0) => {
       await new Promise((r) => setTimeout(r, gapMs));
     }
     const end = Math.min(start + API_PAGE, to + 1);
-    const blocks = z
-      .array(chicmozL2BlockLightSchema)
-      .parse(await api(`/l2/blocks?from=${start}&to=${end}`));
+    const blocks = await apiParsed(
+      `/l2/blocks?from=${start}&to=${end}`,
+      z.array(chicmozL2BlockLightSchema),
+    );
     for (const b of blocks) {
       const height = Number(b.height);
       hashes.set(height, [...(hashes.get(height) ?? []), b.hash.toLowerCase()]);
@@ -262,11 +276,7 @@ const report = (
   return mismatches.length === 0;
 };
 
-const latestApiHeight = async () =>
-  z
-    .number()
-    .int()
-    .parse(await api("/l2/latest-height"));
+const latestApiHeight = () => apiParsed("/l2/latest-height", z.number().int());
 
 const sample = async () => {
   const top = await latestApiHeight();
@@ -279,7 +289,7 @@ const windowCheck = async () => {
 };
 
 const reorgs = async () => {
-  const records = z.array(chicmozReorgSchema).parse(await api("/l2/reorgs"));
+  const records = await apiParsed("/l2/reorgs", z.array(chicmozReorgSchema));
   const stillOnChain: { height: number; hash: string }[] = [];
   for (const r of records) {
     const height = Number(r.height);
