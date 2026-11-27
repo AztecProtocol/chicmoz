@@ -22,23 +22,27 @@ export const publicCallRequestSchema = z.object({
   functionSelector: z
     .string()
     .nullish()
-    .transform((v) => v ?? undefined),
+    .transform((v) => v ?? undefined)
+    .optional(),
   // Human-readable names resolved from the contract artifact at index time.
   // NULL when the artifact was not yet uploaded when the tx was indexed.
   contractName: z
     .string()
     .nullish()
-    .transform((v) => v ?? undefined),
+    .transform((v) => v ?? undefined)
+    .optional(),
   functionName: z
     .string()
     .nullish()
-    .transform((v) => v ?? undefined),
+    .transform((v) => v ?? undefined)
+    .optional(),
   // Transaction birth timestamp (ms epoch). Joined from tx_effect at query time.
   // Absent when the tx is still pending (not yet in a block).
   timestamp: z
     .number()
     .nullish()
-    .transform((v) => v ?? undefined),
+    .transform((v) => v ?? undefined)
+    .optional(),
 });
 
 // L2-to-L1 message emitted by a pending transaction (plaintext, available pre-execution).
@@ -59,7 +63,10 @@ export const chicmozL2PendingTxSchema = z.object({
   // The outermost initiator of the transaction (msgSender of the first non-revertible
   // public call request — the account contract that kicked off execution).
   // Absent for private-only transactions (no forPublic data).
-  initiator: aztecAddressSchema.nullish().transform((v) => v ?? undefined),
+  initiator: aztecAddressSchema
+    .nullish()
+    .transform((v) => v ?? undefined)
+    .optional(),
   // Expiration
   expirationTimestamp: z.coerce.number().optional(),
   // Gas limits

@@ -18,7 +18,7 @@
     "bson": "6.2.0",
     "drizzle-orm": "0.33.0",
     "pg": "8.11.3",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@aztec-foundation/l1-artifacts": "6.0.0",

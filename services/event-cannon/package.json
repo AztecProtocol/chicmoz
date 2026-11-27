@@ -21,7 +21,8 @@
     "@chicmoz-pkg/types": "workspace:^",
     "@defi-wonderland/aztec-standards-v410": "npm:@defi-wonderland/aztec-standards@4.1.0-rc.4",
     "@defi-wonderland/aztec-standards-v420": "npm:@defi-wonderland/aztec-standards@4.2.0-aztecnr-rc.2",
-    "viem": "2.20.0"
+    "viem": "2.20.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

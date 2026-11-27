@@ -19,7 +19,8 @@ const onError = (name: string) => (e: Error) => {
 
 // A log that fails its schema fails again on every re-read, so it is logged and
 // passed over; a failed L1 read or publish rejects the batch before storeHeight.
-// Any throw from `parse` counts: zod's bigint coercion throws a TypeError.
+// Any throw from `parse` counts, not only a ZodError: a preprocess that calls
+// `BigInt()` on a bad hex string throws a SyntaxError.
 const parseOrSkip = <T>(description: string, parse: () => T): T | undefined => {
   try {
     return parse();

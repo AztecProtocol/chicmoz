@@ -1,4 +1,3 @@
-import { generateSchema } from "@anatine/zod-openapi";
 import {
   ARTIFACT_REFUSED_MESSAGE,
   type InstanceDeploymentVerification,
@@ -40,6 +39,7 @@ import {
   contractInstanceResponseArray,
   dbWrapper,
 } from "./utils/index.js";
+import { toOpenApiSchema } from "./utils/openapi-schema.js";
 import {
   artifactRefusalText,
   readClassWithArtifact,
@@ -64,11 +64,12 @@ const verifyUploadedArtifact = (
     },
   );
 
-const verifyContractRequestBody = generateSchema(
+const verifyContractRequestBody = toOpenApiSchema(
   z.object({
-    ...postVerifiedContractInstanceSchema.schema.shape.body.shape,
-    verifiedDeploymentArguments: verifyInstanceDeploymentPayloadSchema.schema,
+    ...postVerifiedContractInstanceSchema.unwrap().shape.body.shape,
+    verifiedDeploymentArguments: verifyInstanceDeploymentPayloadSchema.unwrap(),
   }),
+  "input",
 );
 
 export const openapi_GET_L2_CONTRACT_INSTANCE: OpenAPIObject["paths"] = {
@@ -374,7 +375,7 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
         const uploadedPublicKeys = PublicKeys.fromString(publicKeysString);
         return (
           uploadedPublicKeys.npkMHash.toString() ===
-          dbPublicKeys.masterNullifierPublicKey.slice(0, 66) &&
+            dbPublicKeys.masterNullifierPublicKey.slice(0, 66) &&
           uploadedPublicKeys.ivpkM.toString() ===
             dbPublicKeys.masterIncomingViewingPublicKey &&
           uploadedPublicKeys.ovpkMHash.toString() ===
@@ -399,7 +400,8 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
       res.status(400).send("Uploaded deployer does not match the DB");
       return;
     }
-    const deploymentContractClassId = dbContractInstance.originalContractClassId;
+    const deploymentContractClassId =
+      dbContractInstance.originalContractClassId;
     const registeredClass = await readClassWithArtifact(
       deploymentContractClassId,
       dbContractInstance.version,
@@ -444,7 +446,6 @@ export const POST_L2_VERIFY_CONTRACT_INSTANCE_DEPLOYMENT = asyncHandler(
 
     let verificationPayload: VerifyInstanceDeploymentPayload;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       verificationPayload = generateVerifyInstancePayload({
         publicKeysString,
         deployer,

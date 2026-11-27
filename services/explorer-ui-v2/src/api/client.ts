@@ -73,16 +73,13 @@ export const validateResponse = <T extends z.ZodType>(
   data: unknown,
 ): z.infer<T> => {
   try {
-    // zod's .parse() is typed as returning `any` on the generic ZodType;
-    // the runtime value is `z.infer<T>` by construction.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return schema.parse(data);
   } catch (error) {
     if (error instanceof ZodError) {
       lastError = {
         date: new Date(),
         path: "response validation",
-        error: new ApiError(400, error.errors[0].message, "Schema"),
+        error: new ApiError(400, error.issues[0].message, "Schema"),
       };
     } else {
       lastError = {
