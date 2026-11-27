@@ -196,7 +196,7 @@ const blockRecordSchema = z.object({
   data: z.object({
     blockNumber: z.number(),
     block: z.string(),
-    ordered: z.object({ tip: z.number() }).optional(),
+    ordered: z.object({ proposedTip: z.number() }).optional(),
   }),
 });
 
@@ -211,7 +211,7 @@ const blockRecord = async (
     offset,
     key: key?.toString(),
     height: event.blockNumber,
-    tip: event.ordered?.tip,
+    proposedTip: event.ordered?.proposedTip,
     hash: (await block.hash()).toString().toLowerCase(),
     sentBeforeKill,
   };

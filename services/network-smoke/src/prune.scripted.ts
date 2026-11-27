@@ -552,14 +552,14 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
     );
     const copy = {
       height: replacing.height,
-      tip: replacing.height,
+      proposedTip: replacing.height,
       hash: replacing.hash.toLowerCase(),
     };
     expect
       .soft(
-        records.map(({ height, tip, hash, sentBeforeKill }) => ({
+        records.map(({ height, proposedTip, hash, sentBeforeKill }) => ({
           height,
-          tip,
+          proposedTip,
           hash,
           sentBeforeKill,
         })),
