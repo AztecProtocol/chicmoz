@@ -44,6 +44,13 @@ export class NodeCheckError extends Error {
   override readonly name = "NodeCheckError";
 }
 
+/**
+ * An intentional end of a block stream pass. It keeps the name `AbortError`,
+ * on which the SDK's stream ends a pass without logging; an AbortError from a
+ * dependency is a failure.
+ */
+export class PassExit extends AbortError {}
+
 export type ElectionStore = Pick<
   L2TipsStoreBase,
   "getL2Tips" | "getL2BlockHash"
@@ -371,7 +378,7 @@ export class StickySource implements L2BlockStreamSource {
         const message = `Node ${pin.node.name} ${fault.reason}; the block stream skips this pass`;
         logger.warn(message);
         this.bench(pin, "cooldown");
-        throw new AbortError(message);
+        throw new PassExit(message);
       }
       this.latestTips = tips;
       return tips;
@@ -399,7 +406,7 @@ export class StickySource implements L2BlockStreamSource {
   ): Promise<Awaited<ReturnType<AztecNode[K]>>> {
     const pin = this.pin;
     if (pin === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     return this.boundedCall(pin, fnName, args);
   }
@@ -504,7 +511,7 @@ export class StickySource implements L2BlockStreamSource {
   ) {
     const pin = this.pin;
     if (pin === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     try {
       return { pin, result: await this.boundedCall(pin, fnName, args) };
@@ -558,7 +565,7 @@ export class StickySource implements L2BlockStreamSource {
     }
     const node = this.pin?.node;
     if (node === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     this.fail(node, `took the block stream past ${bound} ${what} in one pass`);
   }

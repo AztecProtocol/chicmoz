@@ -30,6 +30,7 @@ import { PostgresL2TipsStore } from "../../../database/l2-tips-store.js";
 import { inTransaction } from "../../../database/transaction.js";
 import { openAttestedReader } from "../../network-client/attested-reads.js";
 import {
+  PassExit,
   StickySource,
   readGenesisBlockHash,
 } from "../../network-client/block-stream-source.js";
@@ -211,7 +212,7 @@ export const pollOnce = async (
     await runPass(await chain());
   } catch (e) {
     // A read with no node pinned; the next pass elects one.
-    if ((e as Error).name !== "AbortError") {
+    if (!(e instanceof PassExit)) {
       // A node read's error names the node's URL; inspect() adds the cause.
       logger.error(`🐻 block stream pass failed: ${redactUrls(inspect(e))}`);
     }

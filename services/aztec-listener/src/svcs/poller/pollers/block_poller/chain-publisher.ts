@@ -1,5 +1,4 @@
 import { BlockNumber } from "@aztec-labs/foundation/branded-types";
-import { AbortError } from "@aztec-labs/foundation/error";
 import {
   type L2Block,
   type L2BlockId,
@@ -13,7 +12,10 @@ import {
   AZTEC_STREAM_PREFIX_ALERT_MS,
 } from "../../../../environment.js";
 import { logger } from "../../../../logger.js";
-import { type StickySource } from "../../network-client/block-stream-source.js";
+import {
+  PassExit,
+  type StickySource,
+} from "../../network-client/block-stream-source.js";
 
 type PruneEvent = Extract<L2BlockStreamEvent, { type: "chain-pruned" }>;
 type ProposedEvent = Extract<L2BlockStreamEvent, { type: "chain-proposed" }>;
@@ -95,13 +97,14 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
     try {
       await this.handle(event);
     } catch (e) {
-      if ((e as Error).name === "AbortError") {
+      if (e instanceof PassExit) {
         throw e;
       }
-      // The stream would only log it and end the pass; finishPass() rethrows it.
+      // The stream would log it, or drop it for its AbortError name, and end
+      // the pass; finishPass() rethrows it.
       const error = e instanceof Error ? e : new Error(String(e));
       this.failure ??= error;
-      throw new AbortError(error.message, { cause: error });
+      throw new PassExit(error.message, { cause: error });
     }
   }
 
@@ -176,7 +179,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
     // The store keeps hashes only; the link needs the parent's archive root.
     const parent = await this.deps.source.pinnedBlockData(height);
     if (parent === undefined) {
-      throw new AbortError();
+      throw new PassExit();
     }
     if ((await parent.header.hash()).toString() !== stored) {
       return {
@@ -201,7 +204,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       this.endedOnPrefix = true;
       this.notePrefixWait(target.number, local.proposed.number);
       this.deps.source.endPassOnPrefix();
-      throw new AbortError();
+      throw new PassExit();
     }
     const [atTarget, above] = await Promise.all([
       this.deps.store.getL2BlockHash(target.number),
@@ -231,7 +234,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       logger.error(
         `Node ${this.pinnedName()} asks to prune ${depth} blocks, past AZTEC_MAX_PRUNE_DEPTH ${this.config.maxPruneDepth}; the block stream stores nothing`,
       );
-      throw new AbortError();
+      throw new PassExit();
     }
     const provenBack = event.proven.block.number < local.proven.block.number;
     await this.deps.transaction(async () => {
@@ -257,7 +260,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       logger.warn(
         `Node ${this.pinnedName()} has proposed tip ${event.block.number}, which this pass did not send; the pass ends`,
       );
-      throw new AbortError();
+      throw new PassExit();
     }
   }
 
@@ -302,7 +305,7 @@ export class ChainPublisher implements L2BlockStreamEventHandler {
       logger.error(message);
     }
     this.deps.source.setAsidePinned(message);
-    throw new AbortError(message);
+    throw new PassExit(message);
   }
 
   private notePrefixWait(target: number, stored: number) {

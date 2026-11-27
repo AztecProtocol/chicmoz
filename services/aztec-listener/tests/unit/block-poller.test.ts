@@ -1,3 +1,4 @@
+import { AbortError } from "@aztec-labs/foundation/error";
 import { type BlockHash } from "@aztec-labs/stdlib/block";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHAIN_INFO_POLL_INTERVAL_MS } from "../../src/environment.js";
@@ -27,6 +28,10 @@ const mocks = vi.hoisted(() => {
   const heights = { processedProposedBlockHeight: 0 };
   return {
     heights,
+    sweep: false,
+    openAttestedReader: vi.fn(() =>
+      Promise.resolve({ getBlock: () => Promise.resolve(undefined) }),
+    ),
     publishTipsIfDue: vi.fn(),
     storeProcessedProposedBlockHeight: vi.fn((height: number) => {
       heights.processedProposedBlockHeight = height;
@@ -45,6 +50,24 @@ const logger = vi.hoisted(() => ({
 }));
 
 vi.mock("../../src/logger.js", () => ({ logger }));
+vi.mock("../../src/environment.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/environment.js")>()),
+  get AZTEC_ENABLE_FULL_SWEEP_CATCHUP() {
+    return mocks.sweep;
+  },
+}));
+vi.mock("../../src/svcs/poller/network-client/attested-reads.js", () => ({
+  openAttestedReader: mocks.openAttestedReader,
+}));
+vi.mock(
+  "../../src/svcs/poller/network-client/pool.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("../../src/svcs/poller/network-client/pool.js")
+    >()),
+    getRpcNode: () => ({ name: "pool", url: "http://pool.invalid" }),
+  }),
+);
 vi.mock("../../src/events/emitted/index.js", () => ({
   onCatchupBlock: vi.fn(),
   onChainInfo: vi.fn(),
@@ -104,6 +127,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.heights.processedProposedBlockHeight = 0;
+  mocks.sweep = false;
 });
 
 const chainOver = (
@@ -164,18 +188,38 @@ describe("block poller pass", () => {
     });
   });
 
-  it("fails the pass on a failed send, before any post-pass work", async () => {
-    const x = new FakeNode("x", prefix(main, 3));
-    const { chain } = chainOver([x], () =>
-      Promise.reject(new Error("broker down")),
-    );
+  it.each([
+    { kind: "an error", error: () => new Error("broker down") },
+    { kind: "an AbortError", error: () => new AbortError("broker down") },
+  ])(
+    "fails the pass on a send that rejects with $kind, before any post-pass work, and logs it",
+    async ({ error }) => {
+      const x = new FakeNode("x", prefix(main, 3));
+      const failure = error();
+      let failing = false;
+      const { chain } = chainOver([x], () =>
+        failing ? Promise.reject(failure) : Promise.resolve(),
+      );
+      await runPass(chain);
+      // So that a pass leaving the tip where it was would write the height
+      // and sweep.
+      mocks.heights.processedProposedBlockHeight = 1;
+      mocks.sweep = true;
+      vi.clearAllMocks();
+      x.chain = prefix(main, 5);
+      failing = true;
 
-    await expect(runPass(chain)).rejects.toThrow("broker down");
+      await expect(runPass(chain)).rejects.toBe(failure);
 
-    expect(mocks.publishTipsIfDue).not.toHaveBeenCalled();
-    expect(runProvenSideWork).not.toHaveBeenCalled();
-    expect(logger.error).not.toHaveBeenCalled();
-  });
+      expect(mocks.publishTipsIfDue).not.toHaveBeenCalled();
+      expect(runProvenSideWork).not.toHaveBeenCalled();
+      expect(mocks.storeProcessedProposedBlockHeight).not.toHaveBeenCalled();
+      expect(mocks.openAttestedReader).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+      await pollOnce(() => Promise.resolve(chain));
+      expect(logger.error).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("redacts URLs in a failed pass's log, its error's cause too, and keeps its stack frames", async () => {
     const x = new FakeNode("x", prefix(main, 3));
