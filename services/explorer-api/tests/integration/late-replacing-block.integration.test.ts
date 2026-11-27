@@ -10,6 +10,7 @@ import {
   freshTxHash,
   orderedEvent,
 } from "./support/blocks.js";
+import { loadChainReads } from "./support/chain.js";
 import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
@@ -40,9 +41,11 @@ describe("a replaced block that stays stored on a real database", () => {
   let repairRequestCovers: (height: number) => Promise<boolean>;
   let lastSeenAgo: (height: number, ms: number) => Promise<void>;
   let mismatchOpenAt: (height: number) => Promise<boolean>;
+  let reads: Awaited<ReturnType<typeof loadChainReads>>;
 
   beforeAll(async () => {
     api = await startExplorerApiForTest();
+    reads = await loadChainReads();
     const { blockHandler, catchupHandler } = await import(
       "../../src/events/received/on-block/index.js"
     );
@@ -156,43 +159,43 @@ describe("a replaced block that stays stored on a real database", () => {
     expect(await isDropped(t)).toBe(false);
   });
 
-  it.fails(
-    "still requests a replaced height after the next tips validate at other heights",
-    async () => {
-      const chain: BuiltBlock[] = [];
-      for (let height = 400n; height <= 403n; height++) {
-        chain.push(
-          await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
-        );
-      }
-      const [finalized, proven, checkpointed, replaced] = chain;
-      for (const block of chain) {
-        await store(block);
-      }
-      const replacing = await buildBlock(403n, [freshTxHash()], {
-        parent: checkpointed,
+  it("still requests a replaced height after the next tips validate at other heights", async () => {
+    const chain: BuiltBlock[] = [];
+    for (let height = 400n; height <= 403n; height++) {
+      chain.push(
+        await buildBlock(height, [freshTxHash()], { parent: chain.at(-1) }),
+      );
+    }
+    const [finalized, proven, checkpointed] = chain;
+    for (const block of chain) {
+      await store(block);
+    }
+    const replacing = await buildBlock(403n, [freshTxHash()], {
+      parent: checkpointed,
+    });
+    const next = await buildBlock(404n, [freshTxHash()], {
+      parent: replacing,
+    });
+    const tipsAt = (proposed: BuiltBlock) =>
+      storeTips({
+        proposed: { number: Number(proposed.height), hash: proposed.hash },
+        finalized,
+        proven,
+        checkpointed,
       });
-      const next = await buildBlock(404n, [freshTxHash()], {
-        parent: replacing,
-      });
-      const tipsAt = (proposed: BuiltBlock) =>
-        storeTips({
-          proposed: { number: Number(proposed.height), hash: proposed.hash },
-          finalized,
-          proven,
-          checkpointed,
-        });
 
-      await tipsAt(replacing);
-      expect(await repairRequestCovers(403)).toBe(true);
+    await tipsAt(replacing);
+    expect(await repairRequestCovers(403)).toBe(true);
 
-      await store(next);
-      await tipsAt(next);
+    await store(next);
+    await tipsAt(next);
 
-      expect(await canonicalHash(403n)).toBe(replaced.hash);
-      expect(await repairRequestCovers(403)).toBe(true);
-    },
-  );
+    // The next ordered block names a parent that is not stored, so the
+    // stored block at 403 leaves the chain and its height is asked for.
+    expect(await canonicalHash(403n)).toBeUndefined();
+    expect(await reads.repairOpen(403)).toBe(true);
+    expect(await repairRequestCovers(403)).toBe(true);
+  });
 
   it("resolves a tip mismatch nothing fixed only a day after it was last seen", async () => {
     const chain = await buildChain(500n, 4);
