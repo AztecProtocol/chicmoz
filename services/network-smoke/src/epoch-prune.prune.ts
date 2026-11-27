@@ -8,6 +8,7 @@ import { brokerReads } from "./broker.js";
 import { readPruneEndpoints } from "./endpoints.js";
 import {
   type BlockRef,
+  type ReorgRecord,
   byRoot,
   explorerReads,
   plusReorg,
@@ -375,7 +376,7 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
   let dead: BlockRef[];
   let quiet: WsFrame[];
   let kept: { start: unknown; end: unknown };
-  let baseline: Outcome["reorgs"];
+  let baseline: ReorgRecord[];
   let receipt: Receipt;
   let chain: Map<number, string>;
   let heights: number[];
@@ -399,7 +400,7 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
       beforeTrigger: async (doomed, hashes) => {
         await apiHolds(doomed, hashes);
         await framesArrived(doomed, hashes, provedAt);
-        baseline = await api.reorgs();
+        baseline = await api.reorgList();
       },
     });
     dead = deadOf(prune);

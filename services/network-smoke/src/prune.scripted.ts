@@ -6,6 +6,7 @@ import { z } from "zod";
 import { brokerReads } from "./broker.js";
 import { readScriptedEndpoints } from "./endpoints.js";
 import {
+  type ReorgRecord,
   byRoot,
   explorerReads,
   plusReorg,
@@ -289,7 +290,7 @@ describe("a prune of blocks 7-10, replaced by 7'-12' on block 6", () => {
 
 describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', before 13''-16'", () => {
   let prune: PruneFacts;
-  let baseline: Snapshot["reorgs"];
+  let baseline: ReorgRecord[];
   let seen: Snapshot;
 
   beforeAll(async () => {
@@ -307,7 +308,7 @@ describe("a prune of blocks 13'-16' that serves the shorter chain, tip 12', befo
           ).toEqual(deadHolder && served(deadHolder, false)),
         { timeout: 30_000, interval: 1_000 },
       );
-      baseline = await api.reorgs();
+      baseline = await api.reorgList();
     });
     seen = await settled(
       () => snapshot(prune, prune.dead[0].height),

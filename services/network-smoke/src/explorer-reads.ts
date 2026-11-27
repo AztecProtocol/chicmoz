@@ -18,19 +18,20 @@ export type ReorgRecord = {
 
 type ReorgList = ReorgRecord[] | { status: number };
 
+const sortedByRoot = (records: ReorgRecord[]) =>
+  [...records].sort(
+    (a, b) =>
+      a.height - b.height ||
+      a.orphanedBlockHash.localeCompare(b.orphanedBlockHash),
+  );
+
 /** Sorted by root, so two lists compare as sets; a failed read stays as it is. */
 export const byRoot = (reorgs: ReorgList): ReorgList =>
-  Array.isArray(reorgs)
-    ? [...reorgs].sort(
-        (a, b) =>
-          a.height - b.height ||
-          a.orphanedBlockHash.localeCompare(b.orphanedBlockHash),
-      )
-    : reorgs;
+  Array.isArray(reorgs) ? sortedByRoot(reorgs) : reorgs;
 
-/** `baseline` with `record` added, by root; a failed baseline read stays as it is. */
-export const plusReorg = (baseline: ReorgList, record: ReorgRecord) =>
-  Array.isArray(baseline) ? byRoot([...baseline, record]) : baseline;
+/** `baseline` with `record` added, by root. */
+export const plusReorg = (baseline: ReorgRecord[], record: ReorgRecord) =>
+  sortedByRoot([...baseline, record]);
 
 /** A block as the scenarios compare it: its id, and whether it is served as orphaned. */
 export const served = ({ height, hash }: BlockRef, orphaned: boolean) => ({
@@ -58,6 +59,17 @@ export const explorerReads = (apiUrl: string) => {
     const { status, body } = await get(path);
     return status === 200 ? pick(body) : { status };
   };
+  const reorgs = () =>
+    read("/l2/reorgs", (body) =>
+      z
+        .array(chicmozReorgSchema)
+        .parse(body)
+        .map((r) => ({
+          height: Number(r.height),
+          nbrOfOrphanedBlocks: r.nbrOfOrphanedBlocks,
+          orphanedBlockHash: r.orphanedBlockHash.toLowerCase(),
+        })),
+    );
   return {
     get,
     latestHeight: () =>
@@ -71,17 +83,15 @@ export const explorerReads = (apiUrl: string) => {
           orphaned: block.orphan !== undefined,
         };
       }),
-    reorgs: () =>
-      read("/l2/reorgs", (body) =>
-        z
-          .array(chicmozReorgSchema)
-          .parse(body)
-          .map((r) => ({
-            height: Number(r.height),
-            nbrOfOrphanedBlocks: r.nbrOfOrphanedBlocks,
-            orphanedBlockHash: r.orphanedBlockHash.toLowerCase(),
-          })),
-      ),
+    reorgs,
+    /** The list, or a throw: a baseline that later reads are compared with cannot be a failed read. */
+    reorgList: async (): Promise<ReorgRecord[]> => {
+      const list = await reorgs();
+      if (!Array.isArray(list)) {
+        throw new Error(`/l2/reorgs answered ${list.status}`);
+      }
+      return list;
+    },
     dropped: (txHash: string) =>
       read(`/l2/dropped-txs/${txHash}`, (body) => {
         const { dropReason } = chicmozL2DroppedTxSchema.parse(body);
