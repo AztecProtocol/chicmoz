@@ -139,19 +139,14 @@ export const lockRows = async (
     /**
      * Ends every session named `application`, whatever it is doing, so its
      * open transaction rolls back and no statement it sent runs once the
-     * lock goes; throws if one is left once each had 5 s to end.
+     * lock goes. Each gets 5 s to end; resolves with the ones left.
      */
     endSessions: async (application: string) => {
       for (const other of await sessionsOf(application)) {
         // False, with a warning, for one that ended on its own meanwhile.
         await watcher.query("SELECT pg_terminate_backend($1, 5000)", [other]);
       }
-      const left = await sessionsOf(application);
-      if (left.length > 0) {
-        throw new Error(
-          `sessions of ${application} outlived their termination: ${left.join(", ")}`,
-        );
-      }
+      return sessionsOf(application);
     },
     /** Ends the lock's sessions; a second call does nothing. */
     release: async () => {

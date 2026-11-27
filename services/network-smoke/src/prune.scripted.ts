@@ -157,6 +157,16 @@ const stepPrune = (prune: PruneFacts, hooks: PruneHooks) =>
     times: STEP_TIMES,
   });
 
+// Once a stop keeps its lock (`stopHold`), a crash scenario after it would
+// only run into its timeouts, so it fails at once.
+const stops: { kept: () => string | undefined }[] = [];
+const noLockKept = () => {
+  const kept = stops.map((s) => s.kept()).find((why) => why !== undefined);
+  if (kept !== undefined) {
+    throw new Error(`an earlier crash scenario keeps its lock held: ${kept}`);
+  }
+};
+
 const COMPARE_CHAIN = fileURLToPath(
   new URL("../scripts/compare-chain.ts", import.meta.url),
 );
@@ -484,6 +494,7 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
   let seen: Snapshot;
 
   beforeAll(async () => {
+    noLockKept();
     script = await control.status();
     prune = script.prunes[2];
     replacing = prune.final[prune.dead[0].height - 1];
@@ -494,6 +505,7 @@ describe("a prune of 17''-18'' replaced by 17''' at once, with the listener kill
       blockTopic: endpoints.broker.blockTopic,
       services,
     });
+    stops.push(stop);
     await stepPrune(prune, {
       beforePrune: async () => {
         await apiHoldsDead(prune, "blocks 17''-18'' before the prune");
@@ -579,6 +591,7 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
   let seen: Snapshot;
 
   beforeAll(async () => {
+    noLockKept();
     script = await control.status();
     prune = script.prunes[3];
     stop = apiStop({
@@ -589,6 +602,7 @@ describe("a prune of 20'''-21''' replaced by 20'''' at once, with the API killed
       blockTopic: endpoints.broker.blockTopic,
       services,
     });
+    stops.push(stop);
     await stepPrune(prune, {
       beforePrune: async () => {
         await apiHoldsDead(prune, "blocks 20'''-21''' before the prune");

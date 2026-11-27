@@ -94,8 +94,59 @@ const until = async <T>(
   return value;
 };
 
+/**
+ * `lock` as a crash stop holds it. `kill` kills the stopped service, then
+ * ends every Postgres session it opened, by the name the run gives them: a
+ * session never sees its client go, so a statement it had sent, waiting on
+ * the lock or not yet, would run once the lock goes, and an autocommit one
+ * would commit. Once the kill is sent, a failure or a session left makes
+ * `kill` throw and `release` keep the lock held for the rest of the suite,
+ * rather than let such a write land in what later scenarios read; `kept`
+ * says why.
+ */
+export const stopHold = (lock: RowLock) => {
+  let kept: string | undefined;
+  const keep = (why: string) => {
+    kept = why;
+    return new Error(`${why}; the lock stays held`);
+  };
+  const orKeep = async <T>(what: string, run: () => Promise<T>) => {
+    try {
+      return await run();
+    } catch (e) {
+      throw keep(`${what} failed: ${(e as Error).message}`);
+    }
+  };
+  return {
+    waiters: lock.waiters,
+    kill: async (name: string, kill: () => Promise<void>) => {
+      await orKeep(`killing ${name}`, kill);
+      const left = await orKeep(`ending the sessions of ${name}`, () =>
+        lock.endSessions(name),
+      );
+      if (left.length > 0) {
+        throw keep(
+          `sessions of ${name} outlived their termination: ${left.join(", ")}`,
+        );
+      }
+    },
+    release: async () => {
+      if (kept === undefined) {
+        await lock.release();
+      }
+    },
+    kept: () => kept,
+  };
+};
+
+type StopHold = ReturnType<typeof stopHold>;
+
 /** The sessions of service `name` whose `write` waits on `lock`. */
-const writesWaiting = async (lock: RowLock, name: string, write: RegExp) =>
+const writesWaiting = async (
+  lock: Pick<RowLock, "waiters">,
+  name: string,
+  write: RegExp,
+) =>
   (await lock.waiters()).filter(
     (w) =>
       w.application === name &&
@@ -114,7 +165,7 @@ const caughtWrite = ({
 });
 
 const missedStop = async (
-  lock: RowLock,
+  lock: Pick<RowLock, "waiters">,
   writer: string,
   withinMs: number,
   more = {},
@@ -122,15 +173,12 @@ const missedStop = async (
   `the lock held up no write of the ${writer} within ${withinMs / 1000} s (${JSON.stringify({ waiting: await lock.waiters(), ...more })})`;
 
 /**
- * Kills service `name`, then ends every Postgres session it opened, by the
- * name the run gives them: a session never sees its client go, and a
- * statement it had sent, waiting on the lock or not yet, would run once the
- * lock is released, and an autocommit one would commit. Past the stop's
+ * Kills service `name` and ends its sessions (`stopHold`). Past the stop's
  * `deadline` it kills nothing and resolves with why: a hook that timed out
  * runs on, and its kill would land in a later scenario.
  */
 export const killService = async (
-  lock: Pick<RowLock, "endSessions">,
+  lock: Pick<StopHold, "kill">,
   services: Pick<Services, "kill">,
   name: string,
   deadline: number,
@@ -139,8 +187,7 @@ export const killService = async (
   if (late > 0) {
     return `the stop was proven ${late} ms past its ${STOP_WAIT_MS / 1000} s deadline, so ${name} was not killed`;
   }
-  await services.kill(name);
-  await lock.endSessions(name);
+  await lock.kill(name, () => services.kill(name));
   return undefined;
 };
 
@@ -208,7 +255,7 @@ export const listenerStop = ({
 }) => {
   const result: ListenerStop = {};
   let armed:
-    | { lock: RowLock; before: Map<number, number>; first: BlockId }
+    | { lock: StopHold; before: Map<number, number>; first: BlockId }
     | undefined;
   const store = async (height: number) => {
     const [row] = await queryRows<{
@@ -246,11 +293,13 @@ export const listenerStop = ({
       }
       const before = await broker.endOffsets(blockTopic);
       armed = {
-        lock: await lockRows(
-          pg,
-          database,
-          "SELECT 1 FROM l2_block_stream_hash WHERE block_number = $1 FOR UPDATE",
-          [first.height],
+        lock: stopHold(
+          await lockRows(
+            pg,
+            database,
+            "SELECT 1 FROM l2_block_stream_hash WHERE block_number = $1 FOR UPDATE",
+            [first.height],
+          ),
         ),
         before,
         first,
@@ -336,10 +385,12 @@ export const listenerStop = ({
         await lock.release();
       }
     },
-    /** Releases the lock `arm` took, if `fire` has not. */
+    /** Releases the lock `arm` took, if `fire` has not and a kill's cleanup did not keep it. */
     release: async () => {
       await armed?.lock.release();
     },
+    /** Why the lock stays held, if it does (`stopHold`). */
+    kept: () => armed?.lock.kept(),
   };
 };
 
@@ -422,7 +473,7 @@ export const apiStop = ({
   services: Services;
 }) => {
   const result: ApiStop = {};
-  let armed: { lock: RowLock; before: Map<number, number> } | undefined;
+  let armed: { lock: StopHold; before: Map<number, number> } | undefined;
   const canonical = async (hash: string) => {
     const [row] = await queryRows<{ canonical: boolean }>(
       pg,
@@ -452,7 +503,7 @@ export const apiStop = ({
    * none of them is missed.
    */
   const blockHandlerHeldUp = async (
-    lock: RowLock,
+    lock: Pick<RowLock, "waiters">,
     timeoutMs: number,
   ): Promise<{ held?: HeldUp; othersBehind: string[] }> => {
     let othersBehind: string[] = [];
@@ -482,10 +533,12 @@ export const apiStop = ({
       await broker.apiConsumedThrough(30_000);
       const before = await broker.endOffsets(blockTopic);
       armed = {
-        lock: await lockRows(
-          pg,
-          database,
-          "SELECT 1 FROM l2_rollup_version_observation FOR UPDATE",
+        lock: stopHold(
+          await lockRows(
+            pg,
+            database,
+            "SELECT 1 FROM l2_rollup_version_observation FOR UPDATE",
+          ),
         ),
         before,
       };
@@ -567,9 +620,11 @@ export const apiStop = ({
         await lock.release();
       }
     },
-    /** Releases the lock `arm` took, if `fire` has not. */
+    /** Releases the lock `arm` took, if `fire` has not and a kill's cleanup did not keep it. */
     release: async () => {
       await armed?.lock.release();
     },
+    /** Why the lock stays held, if it does (`stopHold`). */
+    kept: () => armed?.lock.kept(),
   };
 };
