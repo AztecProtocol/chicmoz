@@ -26,6 +26,13 @@ export type NewBlockEvent = BlockEvent & {
   ordered?: { proposedTip: number };
 };
 
+/**
+ * The deepest prune the listener follows and the longest chain walk the API
+ * takes: a prune within it leaves no more canonical blocks above the next
+ * ordered block's tip than the API demotes.
+ */
+export const CHAIN_WALK_BOUND = 10_000;
+
 export type PendingTxsEvent = {
   txs: ChicmozL2PendingTx[];
 };

@@ -1,3 +1,4 @@
+import { CHAIN_WALK_BOUND } from "@chicmoz-pkg/message-registry";
 import {
   l2NetworkIdSchema,
   rpcNodePoolSchema,
@@ -72,7 +73,8 @@ export const AZTEC_MAX_PRUNE_DEPTH = z.coerce
   .number()
   .int()
   .positive()
-  .default(10_000)
+  .max(CHAIN_WALK_BOUND)
+  .default(CHAIN_WALK_BOUND)
   .parse(process.env.AZTEC_MAX_PRUNE_DEPTH);
 export const AZTEC_STREAM_STALL_ALERT_MS = z.coerce
   .number()
