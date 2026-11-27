@@ -2,7 +2,12 @@ import { type L2TipsEvent } from "@chicmoz-pkg/message-registry";
 import { type HexString } from "@chicmoz-pkg/types";
 import { deliver } from "@chicmoz/test-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type BuiltBlock, buildBlock, freshTxHash } from "./support/blocks.js";
+import {
+  type BuiltBlock,
+  buildBlock,
+  freshTxHash,
+  orderedEvent,
+} from "./support/blocks.js";
 import {
   type ExplorerApiForTest,
   startExplorerApiForTest,
@@ -43,7 +48,11 @@ describe("reads scoped to the current rollup version on a real database", () => 
   let storedTips: () => Promise<{ degradedReason?: string; proposed: { number: number } } | null>;
   let current: BuiltBlock[];
   let old: BuiltBlock[];
-  let store: (height: bigint, version: number) => Promise<BuiltBlock>;
+  let store: (
+    height: bigint,
+    version: number,
+    parent?: BuiltBlock,
+  ) => Promise<BuiltBlock>;
   let orphanOf: (
     hash: HexString,
   ) => Promise<{ hasOrphanedParent: boolean } | "active" | "absent">;
@@ -128,25 +137,25 @@ describe("reads scoped to the current rollup version on a real database", () => 
       },
     });
 
-    store = async (height, version) => {
-      const block = await buildBlock(height, [freshTxHash()], { version });
-      await deliver(blockHandler, {
-        block: block.hex,
-        blockNumber: Number(block.height),
-        statusHint: "proposed",
+    store = async (height, version, parent) => {
+      const block = await buildBlock(height, [freshTxHash()], {
+        version,
+        parent,
       });
+      await deliver(blockHandler, orderedEvent(block));
       return block;
     };
     // Stored first, so a lookup at height 1 that ignores the version meets it
     // before the current block.
     old = [await store(1n, OLD)];
-    current = [await store(1n, CURRENT), await store(2n, CURRENT)];
-    const replaced = await store(3n, CURRENT);
-    current.push(await store(3n, CURRENT));
+    current = [await store(1n, CURRENT)];
+    current.push(await store(2n, CURRENT, current[0]));
+    const replaced = await store(3n, CURRENT, current[1]);
+    current.push(await store(3n, CURRENT, current[1]));
     // Old blocks arriving after current ones at the same heights, as a
     // replayed backlog would, are not a reorg of the current chain.
     for (const height of [2n, 3n, 4n, 5n]) {
-      old.push(await store(height, OLD));
+      old.push(await store(height, OLD, old[old.length - 1]));
     }
     expect((await getBlock(replaced.hash))?.orphan).toBeDefined();
     orphanOf = async (hash) => {
@@ -318,10 +327,10 @@ describe("reads scoped to the current rollup version on a real database", () => 
 
   // The two reorg cases change the seed, so they run last.
   it("orphans only current-version blocks on a reorg of the current chain", async () => {
-    const [, block2, block3] = current;
+    const [block1, block2, block3] = current;
     const oldAbove = old.filter((b) => b.height > 2n);
 
-    await store(2n, CURRENT);
+    await store(2n, CURRENT, block1);
 
     expect(await orphanOf(block2.hash)).toEqual({ hasOrphanedParent: false });
     expect(await orphanOf(block3.hash)).toEqual({ hasOrphanedParent: true });

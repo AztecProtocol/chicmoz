@@ -1,3 +1,4 @@
+import { type Heartbeat } from "@chicmoz-pkg/message-bus";
 import { getDb as db } from "@chicmoz-pkg/postgres-helper";
 import {
   ChicmozL2ContractInstanceUpdatedEvent,
@@ -23,22 +24,23 @@ import {
   selectorMapValueToFunctionName,
 } from "../../../../utils/resolve-artifact-names.js";
 import { logger } from "../../../../logger.js";
+import { type DbTx } from "../utils.js";
 
 export const storeContractInstanceDeployed = async (
   instance: ChicmozL2ContractInstanceDeployedEvent,
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
   const { publicKeys, ...rest } = instance;
-  await db()
+  await executor
     .insert(l2ContractInstanceDeployed)
     .values({ ...publicKeys, ...rest });
 };
 
 export const storeContractInstanceUpdated = async (
   instance: ChicmozL2ContractInstanceUpdatedEvent,
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  await db()
-    .insert(l2ContractInstanceUpdate)
-    .values({ ...instance });
+  await executor.insert(l2ContractInstanceUpdate).values({ ...instance });
 };
 
 export const storeContractInstanceVerifiedDeploymentArguments = async (
@@ -60,12 +62,65 @@ export const storeContractInstanceVerifiedDeploymentArguments = async (
 
 export const storeContractClass = async (
   contractClass: ChicmozL2ContractClassRegisteredEvent,
+  executor: ReturnType<typeof db> = db(),
 ): Promise<void> => {
-  await db()
-    .insert(l2ContractClassRegistered)
-    .values({
-      ...contractClass,
-    });
+  await executor.insert(l2ContractClassRegistered).values({
+    ...contractClass,
+  });
+};
+
+export type BlockContracts = {
+  classes: ChicmozL2ContractClassRegisteredEvent[];
+  instancesDeployed: ChicmozL2ContractInstanceDeployedEvent[];
+  instancesUpdated: ChicmozL2ContractInstanceUpdatedEvent[];
+};
+
+/**
+ * Stores a block's contract rows inside its transaction, each in a savepoint:
+ * a row that fails (a duplicate, or an instance whose class was never
+ * stored) is logged and skipped without aborting the block; a failed
+ * heartbeat, taken before each row, aborts it.
+ */
+export const storeBlockContracts = async (
+  dbTx: DbTx,
+  { classes, instancesDeployed, instancesUpdated }: BlockContracts,
+  heartbeat: Heartbeat,
+): Promise<void> => {
+  const each = async <T>(
+    rows: T[],
+    label: (row: T) => string,
+    write: (row: T, executor: DbTx) => Promise<void>,
+  ) => {
+    for (const row of rows) {
+      await heartbeat();
+      try {
+        await dbTx.transaction((savepoint) => write(row, savepoint));
+      } catch (e) {
+        if ((e as { code?: string }).code === "23505") {
+          logger.warn(`DB Duplicate: ${label(row)}`);
+        } else {
+          logger.error(
+            `Failed to store ${label(row)}: ${(e as Error).stack ?? String(e)}`,
+          );
+        }
+      }
+    }
+  };
+  await each(
+    classes,
+    (c) => `contractClass ${c.contractClassId}`,
+    storeContractClass,
+  );
+  await each(
+    instancesDeployed,
+    (i) => `contractInstanceDeployed ${i.address}`,
+    storeContractInstanceDeployed,
+  );
+  await each(
+    instancesUpdated,
+    (i) => `contractInstanceUpdated ${i.address}`,
+    storeContractInstanceUpdated,
+  );
 };
 
 export const addArtifactData = async ({

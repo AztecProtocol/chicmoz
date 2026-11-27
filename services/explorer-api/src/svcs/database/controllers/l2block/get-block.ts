@@ -6,15 +6,16 @@ import {
 } from "@chicmoz-pkg/types";
 import {
   and,
-  count,
   desc,
   eq,
   getTableColumns,
   isNotNull,
   isNull,
+  or,
   sql,
 } from "drizzle-orm";
-import { DB_MAX_BLOCKS } from "../../../../environment.js";
+import { DB_MAX_BLOCKS, L2_NETWORK_ID } from "../../../../environment.js";
+import { l2ReorgBlockTable, l2ReorgTable } from "../../schema/l2/reorg.js";
 import { getCurrentRollupVersionNumber } from "../l2/chain-info/rollup-version-cache.js";
 import { deriveNativeStatus, getTips } from "../l2/tips.js";
 import { getLatestBlockRollupVersion } from "./get-latest.js";
@@ -387,62 +388,63 @@ export const getOrphanedBlocks = async (
   return blocks;
 };
 
+type Reorg = {
+  orphanedBlockHash: HexString;
+  height: bigint;
+  timestamp: Date;
+  nbrOfOrphanedBlocks: number;
+};
+
 /**
- * Get information about reorgs
- * @returns Array of reorg events with details about orphaned blocks
+ * Active reorg records, newest first, each shown by its listed blocks still
+ * off the chain (a block no longer stored counts as off). A block counts
+ * only for the newest record that lists it, so a block that died again
+ * shows once.
  */
-export const getReorgs = async (): Promise<
-  {
-    orphanedBlockHash: HexString;
-    height: bigint;
-    timestamp: Date;
-    nbrOfOrphanedBlocks: number;
-  }[]
-> => {
-  // Get all root orphaned blocks (those with hasOrphanedParent = false)
-  const rootOrphanedBlocks = await db()
+export const getReorgs = async (): Promise<Reorg[]> => {
+  const rows = await db()
     .select({
-      hash: l2Block.hash,
-      height: l2Block.height,
-      timestamp: l2Block.orphan_timestamp,
+      id: l2ReorgTable.id,
+      observedAt: l2ReorgTable.observedAt,
+      hash: l2ReorgBlockTable.hash,
+      height: l2ReorgBlockTable.height,
     })
-    .from(l2Block)
+    .from(l2ReorgTable)
+    .innerJoin(
+      l2ReorgBlockTable,
+      eq(l2ReorgBlockTable.reorgId, l2ReorgTable.id),
+    )
+    .leftJoin(l2Block, eq(l2Block.hash, l2ReorgBlockTable.hash))
     .where(
       and(
-        isNotNull(l2Block.orphan_timestamp),
-        eq(l2Block.orphan_hasOrphanedParent, false),
+        eq(l2ReorgTable.l2NetworkId, L2_NETWORK_ID),
+        isNull(l2ReorgTable.revivedAt),
+        or(isNull(l2Block.hash), isNotNull(l2Block.orphan_timestamp)),
+        sql`NOT EXISTS (SELECT 1 FROM ${l2ReorgBlockTable} AS newer WHERE newer."hash" = ${l2ReorgBlockTable.hash} AND newer."reorg_id" > ${l2ReorgTable.id})`,
       ),
     )
-    .orderBy(desc(l2Block.orphan_timestamp))
-    .execute();
+    .orderBy(desc(l2ReorgTable.observedAt), desc(l2ReorgTable.id));
 
-  const result = [];
-
-  // For each root orphaned block, count how many children it has
-  for (const rootBlock of rootOrphanedBlocks) {
-    if (!rootBlock.timestamp) {
+  const reorgs = new Map<number, Reorg>();
+  for (const row of rows) {
+    const reorg = reorgs.get(row.id);
+    if (!reorg) {
+      reorgs.set(row.id, {
+        orphanedBlockHash: row.hash,
+        height: row.height,
+        timestamp: row.observedAt,
+        nbrOfOrphanedBlocks: 1,
+      });
       continue;
     }
-
-    // Count orphaned blocks with the same timestamp (these are all part of the same re-org)
-    const childCount = await db()
-      .select({ count: count() })
-      .from(l2Block)
-      .where(
-        and(
-          eq(l2Block.orphan_timestamp, rootBlock.timestamp),
-          eq(l2Block.orphan_hasOrphanedParent, true),
-        ),
-      )
-      .execute();
-
-    result.push({
-      orphanedBlockHash: rootBlock.hash,
-      height: rootBlock.height,
-      timestamp: new Date(rootBlock.timestamp),
-      nbrOfOrphanedBlocks: (childCount[0]?.count || 0) + 1, // +1 for the root block itself
-    });
+    reorg.nbrOfOrphanedBlocks++;
+    if (
+      row.height < reorg.height ||
+      (row.height === reorg.height && row.hash < reorg.orphanedBlockHash)
+    ) {
+      reorg.orphanedBlockHash = row.hash;
+      reorg.height = row.height;
+    }
   }
-
-  return result;
+  return [...reorgs.values()];
 };

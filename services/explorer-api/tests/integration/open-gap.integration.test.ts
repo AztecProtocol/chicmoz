@@ -35,6 +35,8 @@ describe("open gap scheduling on a real database", () => {
   let blocks: (heights: number[], version?: number) => Promise<void>;
   let arrive: (height: number) => Promise<void>;
   let orphan: (height: number) => Promise<void>;
+  let repair: (height: number) => Promise<void>;
+  let fulfil: (height: number) => Promise<void>;
   let seedGaps: (rows: SeededGap[]) => Promise<void>;
   let elapse: (ms: number) => Promise<void>;
   let openGaps: () => Promise<Range[]>;
@@ -57,10 +59,14 @@ describe("open gap scheduling on a real database", () => {
     const { l2Block } = await import(
       "../../src/svcs/database/schema/l2block/index.js"
     );
-    const { buildMissingBlockRangeRequest, markOpenGapsFulfilledByHeight } =
-      await import(
-        "../../src/svcs/database/controllers/l2block/missing-ranges.js"
-      );
+    const {
+      buildMissingBlockRangeRequest,
+      fulfilRepairHeight,
+      markOpenGapsFulfilledByHeight,
+      recordRepairHeights,
+    } = await import(
+      "../../src/svcs/database/controllers/l2block/missing-ranges.js"
+    );
     const { observeRollupVersion } = await import(
       "../../src/svcs/database/controllers/l2/chain-info/rollup-version-cache.js"
     );
@@ -102,6 +108,9 @@ describe("open gap scheduling on a real database", () => {
         .set({ orphan_timestamp: Date.now(), orphan_hasOrphanedParent: false })
         .where(eq(l2Block.hash, hashOf(height, CURRENT)));
     };
+    repair = (height) => recordRepairHeights(db, [BigInt(height)]);
+    // What a block message's change does when it makes its block canonical.
+    fulfil = (height) => fulfilRepairHeight(db, BigInt(height));
     seedGaps = async (rows) => {
       const now = Date.now();
       await db.insert(l2OpenGapTable).values(
@@ -195,6 +204,15 @@ describe("open gap scheduling on a real database", () => {
     // One request since reopening, so one doubling.
     await elapse(2 * CADENCE_MS);
     expect(await tick()).toEqual([[90, 90]]);
+  });
+
+  it("requests a repair row while its block is present, until a block message there fulfils it", async () => {
+    await blocks(span(1, 100));
+    await repair(50);
+
+    expect(await tick()).toEqual([[50, 50]]);
+    await fulfil(50);
+    expect(await openGaps()).toEqual([]);
   });
 
   it("selects due rows before the candidate limit, with the backoff capped at an hour", async () => {

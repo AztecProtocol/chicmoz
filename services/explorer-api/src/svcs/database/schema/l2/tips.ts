@@ -1,6 +1,15 @@
 import { ChicmozL2Tips, HexString, L2NetworkId } from "@chicmoz-pkg/types";
-import { bigint, integer, pgTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
-import { l2NetworkIdDbEnum } from "../utils.js";
+import { sql } from "drizzle-orm";
+import {
+  bigint,
+  index,
+  integer,
+  pgTable,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
+import { generateBoundedIntegerColumn, l2NetworkIdDbEnum } from "../utils.js";
 
 const blockNumber = (name: string) => bigint(name, { mode: "number" });
 
@@ -63,6 +72,7 @@ export const l2TipBoundaryMismatchTable = pgTable(
     lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
     occurrenceCount: integer("occurrence_count").notNull().default(1),
     resolvedAt: timestamp("resolved_at"),
+    rollupVersion: generateBoundedIntegerColumn("rollup_version"),
   },
   (table) => ({
     l2TipBoundaryMismatchKey: uniqueIndex("l2_tip_boundary_mismatch_key").on(
@@ -72,6 +82,9 @@ export const l2TipBoundaryMismatchTable = pgTable(
       table.expectedHash,
       table.observedDbHash,
     ),
+    unresolvedIdx: index("l2_tip_boundary_mismatch_unresolved_idx")
+      .on(table.l2NetworkId, table.height)
+      .where(sql`${table.resolvedAt} IS NULL`),
   }),
 );
 

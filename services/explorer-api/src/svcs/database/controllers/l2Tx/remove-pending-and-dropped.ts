@@ -1,46 +1,51 @@
-import { getDb as db } from "@chicmoz-pkg/postgres-helper";
-import { type ChicmozL2TxEffect } from "@chicmoz-pkg/types";
-import { eq } from "drizzle-orm";
+import { type Heartbeat } from "@chicmoz-pkg/message-bus";
+import { type HexString } from "@chicmoz-pkg/types";
+import { eq, inArray } from "drizzle-orm";
 import { logger } from "../../../../logger.js";
-import { l2Tx } from "../../../database/schema/l2tx/index.js";
+import { droppedTx } from "../../../database/schema/dropped-tx/index.js";
 import { txEffect } from "../../../database/schema/l2block/body.js";
-import { removeDroppedTxByHash } from "../../controllers/dropped-tx/remove.js";
+import { l2Tx } from "../../../database/schema/l2tx/index.js";
+import { type DbTx } from "../utils.js";
 
+/**
+ * For txs now mined on the canonical chain: deletes their pending rows,
+ * copying each pending tx's fee and identity fields onto its tx effect, and
+ * their dropped rows, whether or not a pending row existed.
+ */
 export const removePendingAndDroppedTx = async (
-  txEffects: ChicmozL2TxEffect[],
+  dbTx: DbTx,
+  txHashes: HexString[],
+  heartbeat: Heartbeat,
 ): Promise<void> => {
-  return await db().transaction(async (dbTx) => {
-    for (const txEffectRow of Object.values(txEffects)) {
-      const deleted = await dbTx
-        .delete(l2Tx)
-        .where(eq(l2Tx.txHash, txEffectRow.txHash))
-        .returning();
-
-      if (!deleted || deleted.length === 0) {
-        continue;
-      }
-
-      logger.info(`🕐🔥 deleted pending tx ${txEffectRow.txHash}`);
-
-      const pendingTx = deleted[0];
-
-      // Copy fee/identity fields from the deleted pending tx onto the mined tx effect row.
-      await dbTx
-        .update(txEffect)
-        .set({
-          feePayer: pendingTx.feePayer ?? null,
-          feePaymentMethod: pendingTx.feePaymentMethod ?? null,
-          initiator: pendingTx.initiator ?? null,
-        })
-        .where(eq(txEffect.txHash, txEffectRow.txHash));
-
-      try {
-        await removeDroppedTxByHash(txEffectRow.txHash);
-      } catch (e) {
-        logger.error(
-          `Error removing dropped tx ${txEffectRow.txHash}: ${(e as Error).stack}`,
-        );
-      }
-    }
-  });
+  if (txHashes.length === 0) {
+    return;
+  }
+  const pending = await dbTx
+    .delete(l2Tx)
+    .where(inArray(l2Tx.txHash, txHashes))
+    .returning({
+      txHash: l2Tx.txHash,
+      feePayer: l2Tx.feePayer,
+      feePaymentMethod: l2Tx.feePaymentMethod,
+      initiator: l2Tx.initiator,
+    });
+  for (const pendingTx of pending) {
+    logger.info(`🕐🔥 deleted pending tx ${pendingTx.txHash}`);
+    await heartbeat();
+    await dbTx
+      .update(txEffect)
+      .set({
+        feePayer: pendingTx.feePayer ?? null,
+        feePaymentMethod: pendingTx.feePaymentMethod ?? null,
+        initiator: pendingTx.initiator ?? null,
+      })
+      .where(eq(txEffect.txHash, pendingTx.txHash));
+  }
+  const dropped = await dbTx
+    .delete(droppedTx)
+    .where(inArray(droppedTx.txHash, txHashes))
+    .returning({ txHash: droppedTx.txHash });
+  for (const { txHash } of dropped) {
+    logger.info(`🗑️🔥 removed dropped tx ${txHash}`);
+  }
 };

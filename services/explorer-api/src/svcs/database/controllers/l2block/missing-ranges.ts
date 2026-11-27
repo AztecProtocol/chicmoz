@@ -92,42 +92,54 @@ const upsertOpenGaps = async ({
   resetOnReopen?: boolean;
   executor?: ReturnType<typeof db>;
 }) => {
-  for (const range of ranges) {
-    const values = {
-      id: gapId({ ...range, reason }),
-      l2NetworkId: L2_NETWORK_ID,
-      fromHeight: range.from,
-      toHeight: range.to,
-      reason,
-      statusHint: range.statusHint,
-      status: "open" as const,
-      lastSeenAt: new Date(),
-      fulfilledAt: null,
-      lastError: null,
-    };
-
-    await executor
-      .insert(l2OpenGapTable)
-      .values(values)
-      .onConflictDoUpdate({
-        target: l2OpenGapTable.id,
-        set: {
-          status: "open",
-          lastSeenAt: values.lastSeenAt,
-          statusHint: values.statusHint,
-          fulfilledAt: null,
-          lastError: null,
-          // A row reopened after being fulfilled is a new gap: its earlier
-          // requests say nothing about it, so its backoff starts over.
-          ...(resetOnReopen
-            ? {
-                requestCount: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then 0 else ${l2OpenGapTable.requestCount} end`,
-                lastRequestedAt: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then null else ${l2OpenGapTable.lastRequestedAt} end`,
-              }
-            : {}),
-        },
-      });
+  const lastSeenAt = new Date();
+  // One row per id: a statement cannot update the same row twice.
+  const rows = [
+    ...new Map(
+      ranges.map((range) => {
+        const id = gapId({ ...range, reason });
+        return [
+          id,
+          {
+            id,
+            l2NetworkId: L2_NETWORK_ID,
+            fromHeight: range.from,
+            toHeight: range.to,
+            reason,
+            statusHint: range.statusHint,
+            status: "open" as const,
+            lastSeenAt,
+            fulfilledAt: null,
+            lastError: null,
+          },
+        ] as const;
+      }),
+    ).values(),
+  ];
+  if (rows.length === 0) {
+    return;
   }
+  await executor
+    .insert(l2OpenGapTable)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: l2OpenGapTable.id,
+      set: {
+        status: "open",
+        lastSeenAt,
+        statusHint: sql`excluded.status_hint`,
+        fulfilledAt: null,
+        lastError: null,
+        // A row reopened after being fulfilled is a new gap: its earlier
+        // requests say nothing about it, so its backoff starts over.
+        ...(resetOnReopen
+          ? {
+              requestCount: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then 0 else ${l2OpenGapTable.requestCount} end`,
+              lastRequestedAt: sql`case when ${l2OpenGapTable.status} = 'fulfilled' then null else ${l2OpenGapTable.lastRequestedAt} end`,
+            }
+          : {}),
+      },
+    });
 };
 
 // Backoff after a gap's Nth request: interval * 2^min(N, 8), capped at 1h.
@@ -141,6 +153,49 @@ const MAX_GAP_BACKOFF_MS = 60 * 60 * 1000;
 // requested first.
 const CANDIDATE_GAP_LIMIT = 50;
 const TIP_BOUNDARY_REASON: L2BlockRangeRequestReason = "tip_boundary_mismatch";
+// One height whose block message must come back: the canonical block there
+// lacks it, or the height was cleared under a block whose parent is missing.
+// Requested whole, present or not, until a block message makes the block at
+// that height canonical (fulfilRepairHeight, inside that change).
+const REPAIR_REASON: L2BlockRangeRequestReason = "reorg_repair";
+
+export const recordRepairHeights = async (
+  executor: ReturnType<typeof db>,
+  heights: Iterable<bigint>,
+) => {
+  await upsertOpenGaps({
+    ranges: [...heights].map((height) => ({
+      from: Number(height),
+      to: Number(height),
+      statusHint: "proposed" as const,
+    })),
+    reason: REPAIR_REASON,
+    executor,
+  });
+};
+
+/**
+ * Closes the repair of `height`, in the transaction whose block message made
+ * the block there canonical. Repair rows carry no rollup version, so any
+ * version's block at the height closes it.
+ */
+export const fulfilRepairHeight = async (
+  executor: ReturnType<typeof db>,
+  height: bigint,
+) => {
+  await executor
+    .update(l2OpenGapTable)
+    .set({ status: "fulfilled", fulfilledAt: new Date(), lastError: null })
+    .where(
+      and(
+        eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
+        eq(l2OpenGapTable.reason, REPAIR_REASON),
+        eq(l2OpenGapTable.status, "open"),
+        eq(l2OpenGapTable.fromHeight, Number(height)),
+        eq(l2OpenGapTable.toHeight, Number(height)),
+      ),
+    );
+};
 
 /**
  * Whether a gap may be requested again at `now` (epoch ms): never requested,
@@ -364,7 +419,7 @@ const selectGapRequest = async ({
     const upper = Math.min(gap.toHeight, chainTip);
     const missing: number[] = [];
     for (let height = gap.fromHeight; height <= upper; height++) {
-      if (!present.has(height)) {
+      if (gap.reason === REPAIR_REASON || !present.has(height)) {
         missing.push(height);
       }
     }
@@ -591,6 +646,7 @@ export const markOpenGapsFulfilledByHeight = async (height: bigint) => {
       and(
         eq(l2OpenGapTable.l2NetworkId, L2_NETWORK_ID),
         eq(l2OpenGapTable.status, "open"),
+        ne(l2OpenGapTable.reason, REPAIR_REASON),
         lte(l2OpenGapTable.fromHeight, Number(height)),
         gte(l2OpenGapTable.toHeight, Number(height)),
       ),

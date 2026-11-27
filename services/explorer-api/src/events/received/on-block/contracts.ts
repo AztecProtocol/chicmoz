@@ -11,13 +11,10 @@ import {
   chicmozL2ContractInstanceUpdatedEventSchema,
   type ChicmozL2ContractClassRegisteredEvent,
   type ChicmozL2ContractInstanceDeployedEvent,
-  type ChicmozL2PrivateFunctionBroadcastedEvent,
-  type ChicmozL2UtilityFunctionBroadcastedEvent,
 } from "@chicmoz-pkg/types";
 import { z } from "zod";
 import { logger } from "../../../logger.js";
-import { controllers } from "../../../svcs/database/index.js";
-import { handleDuplicateError } from "../utils.js";
+import { type BlockContracts } from "../../../svcs/database/controllers/l2contract/store.js";
 
 const AZTEC_CONTRACT_CLASS_VERSION = 1;
 
@@ -45,22 +42,11 @@ const parseObjs = <ParsedType, AztecType>(
   return parsedObjs;
 };
 
-const storeObj = async <T>(
-  objs: T[],
-  storeFn: (obj: T) => Promise<void>,
-  objType: string,
-  objId: keyof T,
-) => {
-  for (const obj of objs) {
-    await storeFn(obj).catch((e) => {
-      const duplicateErrorId = obj[objId] as string;
-      handleDuplicateError(e as Error, `${objType} ${duplicateErrorId}`);
-    });
-  }
-};
-
 // NOTE: reference for parsing in aztec-packages: yarn-project/archiver/src/archiver/archiver.ts
-export const storeContracts = async (b: L2Block, blockHash: string) => {
+export const parseBlockContracts = async (
+  b: L2Block,
+  blockHash: string,
+): Promise<BlockContracts> => {
   const privateLogs = b.body.txEffects.flatMap(
     (txEffect) => txEffect.privateLogs,
   );
@@ -99,9 +85,6 @@ export const storeContracts = async (b: L2Block, blockHash: string) => {
     contractClassRegisteredEvents.map((e) => e.toContractClassPublic()),
   );
 
-  const privateFnEvents: unknown[] = [];
-  const utilityFnEvents: unknown[] = [];
-
   if (contractClasses.length > 0) {
     logger.info(
       `📜 Parsing and storing ${contractClasses.length} contract classes`,
@@ -115,16 +98,6 @@ export const storeContracts = async (b: L2Block, blockHash: string) => {
   if (contractInstanceUpdated.length > 0) {
     logger.info(
       `⬆️ Parsing and storing ${contractInstanceUpdated.length} contract instances updated`,
-    );
-  }
-  if (privateFnEvents.length > 0) {
-    logger.info(
-      `🔒 Parsing and storing ${privateFnEvents.length} private function events`,
-    );
-  }
-  if (utilityFnEvents.length > 0) {
-    logger.info(
-      `💪 Parsing and storing ${utilityFnEvents.length} utility function events`,
     );
   }
 
@@ -189,37 +162,9 @@ export const storeContracts = async (b: L2Block, blockHash: string) => {
         newContractClassId: contractInstance.newContractClassId.toString(),
       } as ChicmozL2ContractInstanceUpdatedEvent),
     );
-  const parsedPrivateFnEvents: ChicmozL2PrivateFunctionBroadcastedEvent[] = [];
-  const parsedUtilityFnEvents: ChicmozL2UtilityFunctionBroadcastedEvent[] = [];
-
-  await storeObj(
-    parsedContractClasses,
-    controllers.l2Contract.storeContractClass,
-    "contractClass",
-    "contractClassId",
-  );
-  await storeObj(
-    parsedContractInstancesDeployed,
-    controllers.l2Contract.storeContractInstanceDeployed,
-    "contractInstanceDeployed",
-    "address",
-  );
-  await storeObj(
-    parsedContractInstanceUpdate,
-    controllers.l2Contract.storeContractInstanceUpdated,
-    "contractInstanceUpdated",
-    "address",
-  );
-  await storeObj(
-    parsedPrivateFnEvents,
-    controllers.l2Contract.storePrivateFunction,
-    "privateFunction",
-    "artifactMetadataHash",
-  );
-  await storeObj(
-    parsedUtilityFnEvents,
-    controllers.l2Contract.storeUtilityFunction,
-    "utilityFunction",
-    "artifactMetadataHash",
-  );
+  return {
+    classes: parsedContractClasses,
+    instancesDeployed: parsedContractInstancesDeployed,
+    instancesUpdated: parsedContractInstanceUpdate,
+  };
 };
