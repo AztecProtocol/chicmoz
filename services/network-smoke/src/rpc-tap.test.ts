@@ -108,21 +108,54 @@ describe("rpc tap", () => {
     ]);
   });
 
-  it("names the state of a prune that the client read first, from its reads after the warp", () => {
-    const read = (at: number, proposed: number): TipRead => ({
+  describe("the state of a prune that the client read first", () => {
+    const read = (at: number, proposed: number, hash?: string): TipRead => ({
       at,
-      method: "getBlockNumber",
+      method: hash === undefined ? "getBlockNumber" : "getChainTips",
       proposed,
+      ...(hash === undefined ? {} : { hash }),
     });
-    // Target 6, dead tip 8; the tip also sat at 6 before the doomed blocks.
-    const before = [read(50, 6), read(150, 8)];
-    const window = { since: 100, target: 6, replacedAt: 300 };
-    expect(
-      pruneOrder([...before, read(200, 6), read(400, 7)], window).order,
-    ).toBe("shorter-chain-first");
-    expect(pruneOrder([...before, read(400, 7)], window).order).toBe(
-      "replacement-first",
-    );
-    expect(pruneOrder(before, window).order).toBe("unseen");
+    // Target 6, doomed 7 and 8; the tip also sat at 6 before they were built.
+    const window = {
+      since: 100,
+      target: 6,
+      before: new Map([
+        [6, "0x06"],
+        [7, "0x07"],
+        [8, "0x08"],
+      ]),
+    };
+    const early = [read(50, 6), read(90, 8)];
+
+    it("goes by the earliest answer that shows the shorter chain or the replacement", () => {
+      expect(
+        pruneOrder([...early, read(200, 6), read(400, 7)], window).order,
+      ).toBe("shorter-chain-first");
+      expect(pruneOrder([...early, read(400, 7)], window).order).toBe(
+        "replacement-first",
+      );
+      expect(pruneOrder(early, window).order).toBe("unseen");
+    });
+
+    it("keeps a replacement read first when a target reply arrives after it", () => {
+      // The target reply's request went out first, so it is recorded first.
+      const reads = [...early, read(450, 6), read(300, 7)];
+      const order = pruneOrder(reads, window);
+      expect(order.order).toBe("replacement-first");
+      expect(order.decisiveRead).toMatchObject({
+        proposed: 7,
+        afterWarpMs: 200,
+      });
+    });
+
+    it("reads the old tip as neither state, unless a hash shows another block", () => {
+      expect(
+        pruneOrder([read(200, 8), read(250, 8, "0x08")], window).order,
+      ).toBe("unseen");
+      expect(
+        pruneOrder([read(200, 8), read(250, 8, "0x8f"), read(300, 6)], window)
+          .order,
+      ).toBe("replacement-first");
+    });
   });
 });

@@ -245,31 +245,43 @@ export const readTipReads = (file: string): TipRead[] =>
 export type PruneOrder = "shorter-chain-first" | "replacement-first" | "unseen";
 
 /**
- * Which state of a prune to `target` the client read first: the shorter
- * chain (the tip at `target`) or the replacement. Reads before `since` (the
- * warp) are left out, since the tip sat at `target` before the doomed blocks
- * were built too; `unseen` means no read came after `replacedAt`.
+ * Which state of a prune to `target` the client read first, by the earliest
+ * answer that shows one, whatever order the requests went out in. `before`
+ * is the node's chain just before the warp, `since`; earlier answers are
+ * left out, since the tip also sat at `target` before the doomed blocks were
+ * built. The tip at `target` shows the shorter chain. A tip above it shows
+ * the replacement when its hash is not `before`'s there or, without a hash,
+ * when it is not the old tip's height; the old tip's height alone shows
+ * neither.
  */
 export const pruneOrder = (
   reads: TipRead[],
   {
     since,
     target,
-    replacedAt,
-  }: { since: number; target: number; replacedAt?: number },
+    before,
+  }: { since: number; target: number; before: Map<number, string> },
 ) => {
-  const after = reads.filter((r) => r.at >= since);
-  const atTarget = after.find((r) => r.proposed === target);
-  const replaced =
-    replacedAt === undefined
-      ? undefined
-      : after.find((r) => r.proposed !== undefined && r.at >= replacedAt);
-  const order: PruneOrder = atTarget
-    ? "shorter-chain-first"
-    : replaced
-      ? "replacement-first"
-      : "unseen";
-  const decisive = atTarget ?? replaced;
+  const oldTip = Math.max(...before.keys());
+  const stateOf = ({ proposed, hash }: TipRead) => {
+    if (proposed === undefined || proposed < target) {
+      return undefined;
+    }
+    const old =
+      hash === undefined
+        ? undefined
+        : hash.toLowerCase() === before.get(proposed);
+    if (proposed === target) {
+      return old === false ? undefined : "shorter-chain-first";
+    }
+    if (old === undefined) {
+      return proposed === oldTip ? undefined : "replacement-first";
+    }
+    return old ? undefined : "replacement-first";
+  };
+  const after = reads.filter((r) => r.at >= since).sort((a, b) => a.at - b.at);
+  const decisive = after.find((r) => stateOf(r) !== undefined);
+  const order: PruneOrder = (decisive && stateOf(decisive)) ?? "unseen";
   const count = (method: TipMethod) =>
     after.filter((r) => r.method === method && r.proposed !== undefined).length;
   return {
@@ -277,6 +289,7 @@ export const pruneOrder = (
     decisiveRead: decisive && {
       method: decisive.method,
       proposed: decisive.proposed,
+      hash: decisive.hash,
       afterWarpMs: decisive.at - since,
     },
     readsAfterWarp: {

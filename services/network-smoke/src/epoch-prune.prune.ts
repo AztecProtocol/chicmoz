@@ -178,11 +178,11 @@ const summary = (prune: ForcedPrune) => ({
 });
 
 /** What the listener itself read of the prune, from its own node reads. */
-const listenerOrder = (prune: ForcedPrune, replacedAt: number | undefined) =>
+const listenerOrder = (prune: ForcedPrune) =>
   pruneOrder(readTipReads(endpoints.rpcTapFile), {
     since: prune.at.warp,
     target: prune.target,
-    replacedAt,
+    before: prune.before,
   });
 
 let sender: Sender;
@@ -276,7 +276,7 @@ describe("a prune of blocks with txs, which the node mines again at once in a re
             .header.lastArchive.root.toLowerCase()
         : { status: first.status };
     chain = await readNodeChain(node);
-    const listener = listenerOrder(prune, prune.at.replacement);
+    const listener = listenerOrder(prune);
     log(`replaced at once: listener order: ${listener.order}`);
     log(
       `replaced at once: end ${JSON.stringify({
@@ -445,11 +445,10 @@ describe("a prune of empty blocks, which leaves the node on the shorter chain un
 
     const tx = await sender.deploy();
     receipt = (await minedOnChain([tx])).get(tx.txHash) ?? { status: "" };
-    const minedAt = Date.now();
     heights = range(prune.target + 1, Math.max(...prune.before.keys()) + 1);
     seen = await settled({ heights, txs: [tx], dead });
     chain = await readNodeChain(node);
-    const listener = listenerOrder(prune, minedAt);
+    const listener = listenerOrder(prune);
     log(`shorter chain: listener order: ${listener.order}`);
     log(
       `shorter chain: end ${JSON.stringify({
